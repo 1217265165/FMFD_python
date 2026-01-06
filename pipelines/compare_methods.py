@@ -1,474 +1,735 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""统一对比本文方法与 5 种 BRB 类方法的轻量评估脚本。
+"""Comprehensive method comparison pipeline with unified training/testing interface.
 
-该版本移除了对 numpy/pandas/sklearn/matplotlib 的依赖，便于在受限
-环境下直接运行并生成 comparison_summary.txt。
+This module implements the complete experimental validation framework for comparing
+the proposed method against 7 baseline methods. All methods implement the MethodAdapter
+interface with fit/predict methods.
+
+Key features:
+- Automatic dataset discovery and loading
+- Stratified train/val/test split with fixed seeds
+- Unified evaluation metrics (system + module level)
+- Complexity analysis (rules, params, features)
+- Small-sample adaptability experiments
+- Comprehensive output generation (CSV tables + plots)
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
-import math
 import random
 import sys
 import time
+import warnings
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+
+# Suppress warnings for cleaner output
+warnings.filterwarnings('ignore')
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-
-from methods import (
-    AIBRBMethod,
-    AIFDMethod,
-    BRBMUMethod,
-    BRBPMethod,
-    DBRBMethod,
-    HCFMethod,
-    OursMethod,
-)
-
-# ------------ 数据准备 ------------
-
-def _ensure_output_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
+    sys.path.insert(0, str(ROOT))
 
 
-def _severity_factor(entry: dict) -> float:
-    severity = None
-    if entry.get("faults"):
-        severity = entry["faults"][0].get("severity")
-    if severity == "light":
-        return 0.7
-    if severity == "medium":
-        return 1.0
-    if severity == "heavy":
-        return 1.4
-    return 0.9
-
-
-def _synthesize_features(entry_id: str, entry: dict, rng: random.Random) -> Dict[str, float]:
-    base = rng.random() * 0.03
-    sev = _severity_factor(entry)
-    feat = {
-        "bias": base * sev,
-        "ripple_var": base * 0.2 * sev,
-        "res_slope": base * 1e-10 * (0.5 + sev),
-        "df": base * 2e6 * sev,
-        "scale_consistency": base * (1 + 0.4 * sev),
-        "measurement_uncertainty": 0.05 + 0.15 * rng.random(),
-    }
-
-    fault_cls = entry.get("system_fault_class")
-    if entry.get("type") == "fault":
-        if fault_cls == "amp_error":
-            feat["bias"] = 0.35 * sev
-            feat["ripple_var"] = 0.06 * sev
-            feat["res_slope"] = 2e-11 * sev
-        elif fault_cls == "freq_error":
-            feat["df"] = 1.2e7 * sev
-            feat["res_slope"] = 3e-10 * sev
-        elif fault_cls == "ref_error":
-            feat["ripple_var"] = 0.04 * sev
-            feat["scale_consistency"] = 0.28 * sev
-    # 为 BRB/system_brb 的多名字兼容
-    feat["X1"] = feat.get("bias", 0.0)
-    feat["X2"] = feat.get("ripple_var", 0.0)
-    feat["X3"] = feat.get("res_slope", 0.0)
-    feat["X4"] = feat.get("df", 0.0)
-    feat["X5"] = feat.get("scale_consistency", 0.0)
-    feat["id"] = entry_id
-    feat["truth"] = _truth_label(entry)
-    return feat
-
-
-def _truth_label(entry: dict) -> str:
-    if entry.get("type") == "normal":
-        return "正常"
-    fault_cls = entry.get("system_fault_class")
-    mapping = {
-        "amp_error": "幅度失准",
-        "freq_error": "频率失准",
-        "ref_error": "参考电平失准",
-    }
-    return mapping.get(fault_cls, "正常")
-
-
-# ------------ 评估指标 ------------
-
-def _accuracy(truth: List[str], pred: List[str]) -> float:
-    hit = sum(t == p for t, p in zip(truth, pred))
-    return hit / len(truth) if truth else 0.0
-
-
-def _precision_recall_f1(truth: List[str], pred: List[str]) -> Tuple[float, float, float]:
-    labels = sorted(set(truth) | set(pred))
-    prec_list: List[float] = []
-    rec_list: List[float] = []
-    f1_list: List[float] = []
-    for lab in labels:
-        tp = sum((t == lab) and (p == lab) for t, p in zip(truth, pred))
-        fp = sum((t != lab) and (p == lab) for t, p in zip(truth, pred))
-        fn = sum((t == lab) and (p != lab) for t, p in zip(truth, pred))
-        prec = tp / (tp + fp) if (tp + fp) else 0.0
-        rec = tp / (tp + fn) if (tp + fn) else 0.0
-        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
-        prec_list.append(prec)
-        rec_list.append(rec)
-        f1_list.append(f1)
-    macro_prec = sum(prec_list) / len(prec_list) if prec_list else 0.0
-    macro_rec = sum(rec_list) / len(rec_list) if rec_list else 0.0
-    macro_f1 = sum(f1_list) / len(f1_list) if f1_list else 0.0
-    return macro_prec, macro_rec, macro_f1
-
-
-def _write_csv(path: Path, rows: List[Dict[str, object]], fieldnames: List[str]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-
-
-# ------------ 可视化 ------------
-
-METHOD_META = {
-    "ours": {"rules": 45, "params": 38, "feat_dim": 4},
-    "hcf": {"rules": 90, "params": 130, "feat_dim": 6},
-    "brb_p": {"rules": 81, "params": 571, "feat_dim": 15},
-    "brb_mu": {"rules": 72, "params": 110, "feat_dim": 6},
-    "dbrb": {"rules": 60, "params": 90, "feat_dim": 5},
-    "a_ibrb": {"rules": 50, "params": 65, "feat_dim": 5},
-}
-
-
-def _save_plot(out_dir: Path, rows: List[Dict[str, object]]) -> None:
+def set_global_seed(seed: int = 42):
+    """Set random seeds for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
     try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except Exception:
-        print("matplotlib 未安装，跳过 comparison_plot.png 生成")
-        return
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    for row in rows:
-        method = row["method"]
-        acc = float(row["accuracy"])
-        meta = METHOD_META.get(method, {})
-        rules = meta.get("rules", 0)
-        ax.scatter(rules, acc, label=method, s=60)
-        ax.text(rules, acc + 0.002, method, fontsize=9, ha="center")
-
-    ax.set_xlabel("规则数")
-    ax.set_ylabel("准确率")
-    ax.set_title("方法对比：准确率 vs. 规则数")
-    ax.grid(True, linestyle="--", alpha=0.5)
-    ax.legend()
-    out_path = out_dir / "comparison_plot.png"
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
-    plt.close(fig)
+        import sklearn
+        # sklearn doesn't have global seed, but individual estimators do
+    except ImportError:
+        pass
 
 
-# ------------ 主流程 ------------
+# ============================================================================
+# Data Loading and Preparation
+# ============================================================================
 
-def _read_curve(path: Path) -> Tuple[List[float], List[float]]:
-    for enc in ("utf-8-sig", "gbk"):
-        try:
-            with path.open("r", encoding=enc) as f:
-                reader = csv.reader(f)
-                rows = list(reader)
-            break
-        except Exception:
-            rows = []
-            continue
-    if not rows:
-        return [], []
-
-    # 跳过表头
-    if rows and rows[0] and not rows[0][0].replace(".", "", 1).isdigit():
-        rows = rows[1:]
-
-    freq: List[float] = []
-    amp: List[float] = []
-    for row in rows:
-        if len(row) < 2:
-            continue
-        try:
-            freq.append(float(row[0]))
-            amp.append(float(row[1]))
-        except Exception:
-            continue
-    return freq, amp
-
-
-def _curve_features(path: Path) -> Dict[str, float]:
-    freq, amp = _read_curve(path)
-    if not freq or not amp:
-        return {
-            "bias": 0.0,
-            "ripple_var": 0.0,
-            "res_slope": 0.0,
-            "df": 0.0,
-            "scale_consistency": 0.0,
-            "measurement_uncertainty": 0.1,
-        }
-
-    n = len(amp)
-    mean_amp = sum(amp) / n
-    ripple = sum((a - mean_amp) ** 2 for a in amp) / max(1, n)
-
-    anchor_idx = max(0, n // 4)
-    freq_span = freq[-1] - freq[anchor_idx]
-    res_slope = (amp[-1] - amp[anchor_idx]) / freq_span if freq_span else 0.0
-
-    steps = [freq[i + 1] - freq[i] for i in range(len(freq) - 1) if freq[i + 1] > freq[i]]
-    mean_step = sum(steps) / len(steps) if steps else 0.0
-    df = sum(abs(s - mean_step) for s in steps) / len(steps) if steps else 0.0
-
-    amp_range = max(amp) - min(amp) if amp else 0.0
-    scale_consistency = amp_range / (abs(mean_amp) + 1e-6)
-
-    return {
-        "bias": mean_amp,
-        "ripple_var": ripple,
-        "res_slope": res_slope,
-        "df": df,
-        "scale_consistency": scale_consistency,
-        "measurement_uncertainty": min(0.2, 0.05 + ripple / (abs(mean_amp) + 1.0)),
-    }
+def discover_dataset_files(data_dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
+    """Auto-discover features and labels files in data directory.
+    
+    Priority:
+    1. features_brb.csv / labels.json
+    2. First file containing 'features' / 'labels'
+    3. Single CSV with label columns
+    
+    Returns:
+        (features_path, labels_path) or (None, None) if not found
+    """
+    # Try standard names first
+    features_path = data_dir / "features_brb.csv"
+    labels_path = data_dir / "labels.json"
+    
+    if features_path.exists() and labels_path.exists():
+        return features_path, labels_path
+    
+    # Search for pattern matches
+    all_files = list(data_dir.glob("*.csv")) + list(data_dir.glob("*.json"))
+    
+    feat_file = None
+    label_file = None
+    
+    for f in all_files:
+        fname_lower = f.name.lower()
+        if 'feature' in fname_lower and f.suffix == '.csv' and feat_file is None:
+            feat_file = f
+        if 'label' in fname_lower and label_file is None:
+            label_file = f
+    
+    return feat_file, label_file
 
 
-def load_dataset(
-    labels_path: Path, features_path: Path | None = None, raw_dir: Path | None = None
-) -> List[Dict[str, object]]:
-    rng = random.Random(42)
-    try:
-        text = labels_path.read_text(encoding="utf-8-sig")
-    except UnicodeDecodeError:
-        text = labels_path.read_text(encoding="gbk", errors="ignore")
-    data = json.loads(text)
-
-    feature_map: Dict[str, Dict[str, float]] = {}
-    if features_path and features_path.exists():
-        with features_path.open("r", encoding="utf-8-sig") as f:
+def load_labels(labels_path: Path) -> Dict:
+    """Load labels from JSON or CSV file."""
+    if labels_path.suffix == '.json':
+        with open(labels_path, 'r', encoding='utf-8-sig') as f:
+            return json.load(f)
+    elif labels_path.suffix == '.csv':
+        # Parse CSV labels
+        labels_dict = {}
+        with open(labels_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                sample_id = row.get("sample_id") or row.get("id")
-                if not sample_id:
-                    continue
-                feature_map[sample_id] = {k: _safe_float(v) for k, v in row.items() if k != "sample_id"}
+                sample_id = row.get('sample_id') or row.get('id')
+                if sample_id:
+                    labels_dict[sample_id] = row
+        return labels_dict
+    else:
+        raise ValueError(f"Unsupported label file format: {labels_path.suffix}")
 
-    raw_dir = raw_dir if raw_dir and raw_dir.exists() else None
-    raw_cache: Dict[str, Dict[str, float]] = {}
 
-    feats: List[Dict[str, object]] = []
-    for k, v in sorted(data.items()):
-        truth = _truth_label(v)
+def load_features_csv(features_path: Path) -> Dict[str, Dict[str, float]]:
+    """Load features from CSV file."""
+    features_dict = {}
+    with open(features_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            sample_id = row.get('sample_id') or row.get('id')
+            if sample_id:
+                # Convert all values to float, skip non-numeric columns
+                feat_row = {}
+                for k, v in row.items():
+                    if k not in ['sample_id', 'id']:
+                        try:
+                            feat_row[k] = float(v)
+                        except (ValueError, TypeError):
+                            pass
+                features_dict[sample_id] = feat_row
+    return features_dict
 
-        kd_feats = None
-        base = feature_map.get(k)
-        if base:
-            kd_feats = base.copy()
-            kd_feats.setdefault("X1", kd_feats.get("bias", 0.0))
-            kd_feats.setdefault("X2", kd_feats.get("ripple_var", 0.0))
-            kd_feats.setdefault("X3", kd_feats.get("res_slope", 0.0))
-            kd_feats.setdefault("X4", kd_feats.get("df", 0.0))
-            kd_feats.setdefault("X5", kd_feats.get("scale_consistency", 0.0))
 
-        raw_feats = None
-        if raw_dir:
-            curve_path = raw_dir / f"{k}.csv"
-            curve_feats = raw_cache.get(k)
-            if curve_feats is None:
-                curve_feats = _curve_features(curve_path)
-                raw_cache[k] = curve_feats
-            raw_feats = {
-                **curve_feats,
-                "X1": curve_feats.get("bias", 0.0),
-                "X2": curve_feats.get("ripple_var", 0.0),
-                "X3": curve_feats.get("res_slope", 0.0),
-                "X4": curve_feats.get("df", 0.0),
-                "X5": curve_feats.get("scale_consistency", 0.0),
-            }
+def extract_system_label(entry: Dict) -> str:
+    """Extract system-level label from entry.
+    
+    Supports:
+    - entry['type'] = 'normal'/'fault' + entry['system_fault_class']
+    - entry['system_label'] or entry['y_sys']
+    
+    Returns normalized label: '正常', '幅度失准', '频率失准', '参考电平失准'
+    """
+    # Check direct label fields
+    if 'system_label' in entry:
+        return str(entry['system_label'])
+    if 'y_sys' in entry:
+        label_val = entry['y_sys']
+        if isinstance(label_val, (int, float)):
+            # Map numeric to string
+            mapping = {0: '正常', 1: '幅度失准', 2: '频率失准', 3: '参考电平失准'}
+            return mapping.get(int(label_val), '正常')
+        return str(label_val)
+    
+    # Parse from type + fault_class
+    if entry.get('type') == 'normal':
+        return '正常'
+    elif entry.get('type') == 'fault':
+        fault_cls = entry.get('system_fault_class', '')
+        mapping = {
+            'amp_error': '幅度失准',
+            'freq_error': '频率失准',
+            'ref_error': '参考电平失准',
+        }
+        return mapping.get(fault_cls, '正常')
+    
+    return '正常'
 
-        synth_feats = None
-        if kd_feats is None and raw_feats is None:
-            synth_feats = _synthesize_features(k, v, rng)
 
-        feats.append(
-            {
-                "id": k,
-                "truth": truth,
-                "kd_features": kd_feats,
-                "raw_features": raw_feats,
-                "synth_features": synth_feats,
-            }
+def extract_module_label(entry: Dict) -> Optional[int]:
+    """Extract module-level label (single-label for now).
+    
+    Returns module ID (1-21) or None if not available.
+    """
+    if 'module_id' in entry:
+        return int(entry['module_id'])
+    if 'y_mod' in entry:
+        mod_val = entry['y_mod']
+        if isinstance(mod_val, (int, float)):
+            return int(mod_val)
+    if 'module' in entry:
+        # Map module name to ID (simplified - would need full mapping)
+        # For now, return None if it's a string
+        if isinstance(entry['module'], (int, float)):
+            return int(entry['module'])
+    return None
+
+
+def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], List[str], List[str]]:
+    """Load and prepare dataset with features and labels.
+    
+    Args:
+        data_dir: Directory containing dataset files
+        use_pool_features: If True, use/generate pool features for broader feature set
+        
+    Returns:
+        (X, y_sys, y_mod, feature_names, sample_ids)
+    """
+    # Discover files
+    features_path, labels_path = discover_dataset_files(data_dir)
+    
+    if not features_path or not labels_path:
+        raise FileNotFoundError(
+            f"Could not find features or labels in {data_dir}. "
+            f"Expected features_brb.csv and labels.json"
         )
-    return feats
+    
+    print(f"Loading features from: {features_path}")
+    print(f"Loading labels from: {labels_path}")
+    
+    # Load data
+    labels_dict = load_labels(labels_path)
+    features_dict = load_features_csv(features_path)
+    
+    # If using pool features and raw curves available, augment features
+    if use_pool_features:
+        raw_curves_dir = data_dir / "raw_curves"
+        if raw_curves_dir.exists():
+            from features.feature_pool import augment_features_with_pool
+            for sample_id, feats in features_dict.items():
+                curve_path = raw_curves_dir / f"{sample_id}.csv"
+                features_dict[sample_id] = augment_features_with_pool(feats, curve_path)
+        else:
+            # Synthesize pool features from existing features
+            from features.feature_pool import _synthesize_pool_from_base
+            for sample_id, feats in features_dict.items():
+                pool_feats = _synthesize_pool_from_base(feats)
+                features_dict[sample_id] = {**feats, **pool_feats}
+    
+    # Align samples (only use samples with both features and labels)
+    common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
+    
+    if not common_ids:
+        raise ValueError("No common samples found between features and labels")
+    
+    print(f"Found {len(common_ids)} samples with both features and labels")
+    
+    # Build feature matrix and label vectors
+    # First, determine feature names from first sample
+    feature_names = list(features_dict[common_ids[0]].keys())
+    n_features = len(feature_names)
+    n_samples = len(common_ids)
+    
+    X = np.zeros((n_samples, n_features))
+    y_sys_list = []
+    y_mod_list = []
+    
+    for i, sample_id in enumerate(common_ids):
+        # Features
+        feat_dict = features_dict[sample_id]
+        for j, fname in enumerate(feature_names):
+            X[i, j] = feat_dict.get(fname, 0.0)
+        
+        # Labels
+        label_entry = labels_dict[sample_id]
+        y_sys_list.append(extract_system_label(label_entry))
+        y_mod_val = extract_module_label(label_entry)
+        y_mod_list.append(y_mod_val if y_mod_val is not None else -1)
+    
+    # Convert system labels to numeric
+    unique_sys_labels = sorted(set(y_sys_list))
+    sys_label_to_idx = {label: idx for idx, label in enumerate(unique_sys_labels)}
+    y_sys = np.array([sys_label_to_idx[label] for label in y_sys_list])
+    
+    # Module labels (may have -1 for missing)
+    y_mod = np.array(y_mod_list)
+    if np.all(y_mod == -1):
+        y_mod = None  # No module labels available
+    
+    print(f"Feature matrix shape: {X.shape}")
+    print(f"System labels: {unique_sys_labels}")
+    print(f"System label distribution: {np.bincount(y_sys)}")
+    if y_mod is not None:
+        print(f"Module labels available: {np.sum(y_mod >= 0)} samples")
+    
+    return X, y_sys, y_mod, feature_names, common_ids
 
 
-def _safe_float(val: str) -> float:
-    try:
-        return float(val)
-    except Exception:
-        return 0.0
-
-
-def _method_bias(name: str, probs: Dict[str, float], features: Dict[str, float]) -> Dict[str, float]:
-    tweaked = probs.copy()
-    if name == "brb_mu":
-        boost = min(0.1, 0.3 * features.get("measurement_uncertainty", 0.1))
-        tweaked["频率失准"] = tweaked.get("频率失准", 0.0) + boost
-    elif name == "dbrb":
-        tweaked["幅度失准"] = tweaked.get("幅度失准", 0.0) + 0.2 * features.get("bias", 0.0) / 0.35
-    elif name == "aifd":
-        tweaked["参考电平失准"] = tweaked.get("参考电平失准", 0.0) + 0.08 * features.get("ripple_var", 0.0) / 0.06
-    elif name == "a_ibrb":
-        flatten = sum(tweaked.values()) + 1e-9
-        tweaked = {k: v / flatten * 0.5 + 0.15 for k, v in tweaked.items()}
-    elif name == "brb_p":
-        tweaked["正常"] = tweaked.get("正常", 0.0) + 0.05
-    return tweaked
-
-
-def _heuristic_label(features: Dict[str, float]) -> str:
-    """基于特征量的兜底决策，避免全部方法输出一致的低分。"""
-
-    bias = features.get("bias", features.get("X1", 0.0))
-    ripple = features.get("ripple_var", features.get("X2", 0.0))
-    slope = features.get("res_slope", features.get("X3", 0.0))
-    df = features.get("df", features.get("X4", 0.0))
-    scale = features.get("scale_consistency", features.get("X5", 0.0))
-
-    amp_score = 1.2 * bias + 1.6 * ripple + 0.8 * max(0.0, slope)
-    freq_score = (df / 1e7) + 0.5 * (slope * 1e10)
-    ref_score = 1.4 * scale + 0.6 * ripple
-
-    scores = {
-        "幅度失准": amp_score,
-        "频率失准": freq_score,
-        "参考电平失准": ref_score,
-    }
-    top_lab, top_score = max(scores.items(), key=lambda x: x[1])
-    if top_score < 0.05:
-        return "正常"
-    # 间隔拉开，防止边界特征导致随机抖动
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    if len(sorted_scores) > 1 and (sorted_scores[0][1] - sorted_scores[1][1]) < 0.02:
-        return "正常"
-    return top_lab
-
-
-def evaluate(methods: List, dataset: List[Dict[str, float]], out_dir: Path) -> None:
-    results_rows = []
-    perf_rows = []
-    summary_lines = ["方法对比概览", "================"]
-
-    truth_labels = [item["truth"] for item in dataset]
-
-    for method in methods:
-        preds: List[str] = []
-        start = time.time()
-        for sample in dataset:
-            if method.name == "ours":
-                feats = sample.get("kd_features") or sample.get("raw_features") or sample.get("synth_features") or {}
-            else:
-                feats = sample.get("raw_features") or sample.get("kd_features") or sample.get("synth_features") or {}
-            feats = feats.copy()
-
-            sys_res = method.infer_system(feats)
-            probs = sys_res.get("probabilities", {})
-            probs = _method_bias(method.name, probs, feats)
-            decision_th = sys_res.get("decision_threshold", 0.33)
-            if method.name == "brb_mu":
-                decision_th = max(decision_th, 0.45)
-            elif method.name == "dbrb":
-                decision_th = 0.1
-            sorted_faults = sorted(
-                [(k, v) for k, v in probs.items() if k != "正常"], key=lambda x: x[1], reverse=True
-            )
-            top_label, top_prob = (sorted_faults[0] if sorted_faults else ("正常", 0.0))
-            if top_prob < decision_th:
-                pred = _heuristic_label(feats)
-            else:
-                pred = top_label
-            preds.append(pred)
-        elapsed_ms = (time.time() - start) * 1000
-        acc = _accuracy(truth_labels, preds)
-        prec, rec, f1 = _precision_recall_f1(truth_labels, preds)
-
-        meta = METHOD_META.get(method.name, {})
-
-        results_rows.append(
-            {
-                "method": method.name,
-                "accuracy": f"{acc:.4f}",
-                "macro_f1": f"{f1:.4f}",
-                "precision": f"{prec:.4f}",
-                "recall": f"{rec:.4f}",
-                "time_ms": f"{elapsed_ms:.2f}",
-                "rules": meta.get("rules", ""),
-                "params": meta.get("params", ""),
-                "feature_dim": meta.get("feat_dim", ""),
-            }
-        )
-        perf_rows.append({"method": method.name, "predictions": "|".join(preds)})
-        summary_lines.append(
-            f"{method.name}: 准确率={acc:.4f}, macro-F1={f1:.4f}, 样本数={len(dataset)}"
-        )
-
-    _ensure_output_dir(out_dir)
-    _write_csv(
-        out_dir / "comparison_table.csv",
-        [
-            {
-                **row,
-                "rules": METHOD_META.get(row["method"], {}).get("rules", ""),
-                "params": METHOD_META.get(row["method"], {}).get("params", ""),
-                "feature_dim": METHOD_META.get(row["method"], {}).get("feat_dim", ""),
-            }
-            for row in results_rows
-        ],
-        ["method", "accuracy", "macro_f1", "precision", "recall", "time_ms", "rules", "params", "feature_dim"],
+def stratified_split(X: np.ndarray, y: np.ndarray, 
+                     train_size: float = 0.6, val_size: float = 0.2,
+                     random_state: int = 42) -> Tuple[np.ndarray, ...]:
+    """Stratified train/val/test split.
+    
+    Returns:
+        (X_train, X_val, X_test, y_train, y_val, y_test, train_idx, val_idx, test_idx)
+    """
+    n_samples = len(X)
+    n_classes = len(np.unique(y))
+    
+    # Create stratified splits
+    indices = np.arange(n_samples)
+    train_indices = []
+    val_indices = []
+    test_indices = []
+    
+    for class_label in np.unique(y):
+        class_indices = indices[y == class_label]
+        n_class = len(class_indices)
+        
+        # Shuffle class indices
+        rng = np.random.RandomState(random_state)
+        rng.shuffle(class_indices)
+        
+        # Split
+        n_train = max(1, int(n_class * train_size))
+        n_val = max(1, int(n_class * val_size))
+        
+        train_indices.extend(class_indices[:n_train])
+        val_indices.extend(class_indices[n_train:n_train+n_val])
+        test_indices.extend(class_indices[n_train+n_val:])
+    
+    # Convert to arrays and shuffle
+    train_indices = np.array(train_indices)
+    val_indices = np.array(val_indices)
+    test_indices = np.array(test_indices)
+    
+    rng = np.random.RandomState(random_state)
+    rng.shuffle(train_indices)
+    rng.shuffle(val_indices)
+    rng.shuffle(test_indices)
+    
+    return (
+        X[train_indices], X[val_indices], X[test_indices],
+        y[train_indices], y[val_indices], y[test_indices],
+        train_indices, val_indices, test_indices
     )
-    _write_csv(out_dir / "performance_table.csv", perf_rows, ["method", "predictions"])
-    (out_dir / "comparison_summary.txt").write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
-    _save_plot(out_dir, results_rows)
+
+
+# ============================================================================
+# Metrics Calculation
+# ============================================================================
+
+def calculate_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Calculate accuracy."""
+    return float(np.mean(y_true == y_pred))
+
+
+def calculate_macro_f1(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> float:
+    """Calculate macro F1 score."""
+    f1_scores = []
+    for c in range(n_classes):
+        tp = np.sum((y_true == c) & (y_pred == c))
+        fp = np.sum((y_true != c) & (y_pred == c))
+        fn = np.sum((y_true == c) & (y_pred != c))
+        
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        f1_scores.append(f1)
+    
+    return float(np.mean(f1_scores))
+
+
+def calculate_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> np.ndarray:
+    """Calculate confusion matrix."""
+    cm = np.zeros((n_classes, n_classes), dtype=int)
+    for i in range(len(y_true)):
+        cm[y_true[i], y_pred[i]] += 1
+    return cm
+
+
+# ============================================================================
+# Visualization
+# ============================================================================
+
+def plot_confusion_matrix(cm: np.ndarray, class_names: List[str], 
+                         output_path: Path, title: str):
+    """Plot and save confusion matrix."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+        ax.figure.colorbar(im, ax=ax)
+        
+        ax.set(xticks=np.arange(cm.shape[1]),
+               yticks=np.arange(cm.shape[0]),
+               xticklabels=class_names,
+               yticklabels=class_names,
+               title=title,
+               ylabel='True label',
+               xlabel='Predicted label')
+        
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+        
+        # Add text annotations
+        thresh = cm.max() / 2.
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                ax.text(j, i, format(cm[i, j], 'd'),
+                       ha="center", va="center",
+                       color="white" if cm[i, j] > thresh else "black")
+        
+        fig.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Saved confusion matrix to: {output_path}")
+    except ImportError:
+        print("matplotlib not available, skipping confusion matrix plot")
+
+
+def plot_comparison_bar(results: List[Dict], output_dir: Path):
+    """Plot comparison bar charts for rules, params, and inference time."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        methods = [r['method'] for r in results]
+        rules = [r.get('n_rules', 0) for r in results]
+        params = [r.get('n_params', 0) for r in results]
+        infer_ms = [r.get('infer_ms_per_sample', 0) for r in results]
+        
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+        
+        # Rules
+        axes[0].bar(methods, rules, color='skyblue')
+        axes[0].set_ylabel('Number of Rules')
+        axes[0].set_title('Model Complexity: Rules')
+        axes[0].tick_params(axis='x', rotation=45)
+        
+        # Params
+        axes[1].bar(methods, params, color='lightcoral')
+        axes[1].set_ylabel('Number of Parameters')
+        axes[1].set_title('Model Complexity: Parameters')
+        axes[1].tick_params(axis='x', rotation=45)
+        
+        # Inference time
+        axes[2].bar(methods, infer_ms, color='lightgreen')
+        axes[2].set_ylabel('Inference Time (ms/sample)')
+        axes[2].set_title('Inference Efficiency')
+        axes[2].tick_params(axis='x', rotation=45)
+        
+        plt.tight_layout()
+        output_path = output_dir / "compare_barplot.png"
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Saved comparison bar plot to: {output_path}")
+    except ImportError:
+        print("matplotlib not available, skipping bar plot")
+
+
+def plot_small_sample_curve(small_sample_results: List[Dict], output_dir: Path):
+    """Plot small-sample learning curves."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        # Group by method
+        methods_data = {}
+        for entry in small_sample_results:
+            method = entry['method']
+            if method not in methods_data:
+                methods_data[method] = {'sizes': [], 'means': [], 'stds': []}
+            methods_data[method]['sizes'].append(entry['train_size'])
+            methods_data[method]['means'].append(entry['mean_acc'])
+            methods_data[method]['stds'].append(entry['std_acc'])
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        for method, data in methods_data.items():
+            sizes = np.array(data['sizes'])
+            means = np.array(data['means'])
+            stds = np.array(data['stds'])
+            
+            ax.plot(sizes, means, marker='o', label=method)
+            ax.fill_between(sizes, means - stds, means + stds, alpha=0.2)
+        
+        ax.set_xlabel('Training Set Size')
+        ax.set_ylabel('Accuracy')
+        ax.set_title('Small-Sample Adaptability')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        output_path = output_dir / "small_sample_curve.png"
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Saved small-sample curve to: {output_path}")
+    except ImportError:
+        print("matplotlib not available, skipping small-sample curve plot")
+
+
+# ============================================================================
+# Main Evaluation Pipeline
+# ============================================================================
+
+def evaluate_method(method, X_train, y_sys_train, y_mod_train, 
+                   X_test, y_sys_test, y_mod_test, 
+                   feature_names, n_sys_classes):
+    """Evaluate a single method."""
+    print(f"\n{'='*60}")
+    print(f"Evaluating method: {method.name}")
+    print(f"{'='*60}")
+    
+    # Fit
+    start_fit = time.time()
+    meta_train = {'feature_names': feature_names}
+    method.fit(X_train, y_sys_train, y_mod_train, meta_train)
+    fit_time = time.time() - start_fit
+    
+    # Predict
+    start_infer = time.time()
+    predictions = method.predict(X_test, meta={'feature_names': feature_names})
+    infer_time_total = time.time() - start_infer
+    infer_time_per_sample = (infer_time_total / len(X_test)) * 1000  # ms
+    
+    # Extract predictions
+    y_sys_pred = predictions['system_pred']
+    y_mod_pred = predictions.get('module_pred', None)
+    
+    # System-level metrics
+    sys_acc = calculate_accuracy(y_sys_test, y_sys_pred)
+    sys_f1 = calculate_macro_f1(y_sys_test, y_sys_pred, n_sys_classes)
+    sys_cm = calculate_confusion_matrix(y_sys_test, y_sys_pred, n_sys_classes)
+    
+    # Module-level metrics (if available)
+    mod_acc = None
+    if y_mod_pred is not None and y_mod_test is not None:
+        valid_mask = y_mod_test >= 0
+        if np.sum(valid_mask) > 0:
+            mod_acc = calculate_accuracy(y_mod_test[valid_mask], y_mod_pred[valid_mask])
+    
+    # Complexity metrics
+    complexity = method.complexity()
+    
+    # Combine all results
+    results = {
+        'method': method.name,
+        'sys_accuracy': sys_acc,
+        'sys_macro_f1': sys_f1,
+        'mod_top1_accuracy': mod_acc if mod_acc is not None else 0.0,
+        'fit_time_sec': fit_time,
+        'infer_ms_per_sample': infer_time_per_sample,
+        'n_rules': complexity.get('n_rules', 0),
+        'n_params': complexity.get('n_params', 0),
+        'n_features_used': complexity.get('n_features_used', 0),
+        'confusion_matrix': sys_cm,
+    }
+    
+    # Update with method metadata
+    if 'meta' in predictions:
+        pred_meta = predictions['meta']
+        results['features_used'] = pred_meta.get('features_used', [])
+    
+    print(f"System Accuracy: {sys_acc:.4f}")
+    print(f"System Macro-F1: {sys_f1:.4f}")
+    if mod_acc is not None:
+        print(f"Module Top-1 Accuracy: {mod_acc:.4f}")
+    print(f"Fit Time: {fit_time:.2f} sec")
+    print(f"Inference Time: {infer_time_per_sample:.4f} ms/sample")
+    print(f"Rules: {results['n_rules']}, Params: {results['n_params']}, Features: {results['n_features_used']}")
+    
+    return results
 
 
 def main():
-    parser = argparse.ArgumentParser(description="对比各 BRB 方法")
-    parser.add_argument("--data_dir", default="Output/sim_spectrum", help="仿真产物所在目录")
+    parser = argparse.ArgumentParser(description="Comprehensive method comparison")
+    parser.add_argument('--data_dir', default='Output/sim_spectrum', 
+                       help='Directory containing dataset')
+    parser.add_argument('--output_dir', default='Output/sim_spectrum',
+                       help='Output directory for results')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--train_size', type=float, default=0.6, help='Training set ratio')
+    parser.add_argument('--val_size', type=float, default=0.2, help='Validation set ratio')
+    parser.add_argument('--small_sample', action='store_true', 
+                       help='Run small-sample adaptability experiments')
     args = parser.parse_args()
-
-    data_dir_raw = Path(args.data_dir)
-    data_dir = data_dir_raw if data_dir_raw.is_absolute() else ROOT / data_dir_raw
-    labels_path = data_dir / "labels.json"
-    features_path = data_dir / "features_brb.csv"
-    if not labels_path.exists():
-        raise SystemExit(f"labels.json 缺失，请先运行仿真或提供标签文件: {labels_path}")
-    raw_dir = data_dir / "raw_curves"
-    dataset = load_dataset(labels_path, features_path, raw_dir)
-
+    
+    # Setup
+    set_global_seed(args.seed)
+    data_dir = Path(args.data_dir) if Path(args.data_dir).is_absolute() else ROOT / args.data_dir
+    output_dir = Path(args.output_dir) if Path(args.output_dir).is_absolute() else ROOT / args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Data directory: {data_dir}")
+    print(f"Output directory: {output_dir}")
+    
+    # Load dataset
+    print("\n" + "="*60)
+    print("Loading dataset...")
+    print("="*60)
+    X, y_sys, y_mod, feature_names, sample_ids = prepare_dataset(data_dir, use_pool_features=True)
+    
+    n_sys_classes = len(np.unique(y_sys))
+    
+    # Split dataset
+    print("\n" + "="*60)
+    print("Splitting dataset...")
+    print("="*60)
+    X_train, X_val, X_test, y_sys_train, y_sys_val, y_sys_test, train_idx, val_idx, test_idx = \
+        stratified_split(X, y_sys, args.train_size, args.val_size, args.seed)
+    
+    y_mod_train = y_mod[train_idx] if y_mod is not None else None
+    y_mod_val = y_mod[val_idx] if y_mod is not None else None
+    y_mod_test = y_mod[test_idx] if y_mod is not None else None
+    
+    print(f"Train set: {len(X_train)} samples")
+    print(f"Val set: {len(X_val)} samples")
+    print(f"Test set: {len(X_test)} samples")
+    
+    # Import methods (will be implemented)
+    print("\n" + "="*60)
+    print("Importing methods...")
+    print("="*60)
+    
+    # For now, create placeholder - will implement actual methods
+    from methods.ours_adapter import OursAdapter
+    from methods.hcf_adapter import HCFAdapter
+    from methods.aifd_adapter import AIFDAdapter
+    from methods.brb_p_adapter import BRBPAdapter
+    from methods.brb_mu_adapter import BRBMUAdapter
+    from methods.dbrb_adapter import DBRBAdapter
+    from methods.a_ibrb_adapter import AIBRBAdapter
+    from methods.fast_brb_adapter import FastBRBAdapter
+    
     methods = [
-        OursMethod(),
-        HCFMethod(),
-        BRBPMethod(),
-        BRBMUMethod(),
-        DBRBMethod(),
-        AIBRBMethod(),
+        OursAdapter(),
+        HCFAdapter(),
+        AIFDAdapter(),
+        BRBPAdapter(),
+        BRBMUAdapter(),
+        DBRBAdapter(),
+        AIBRBAdapter(),
+        FastBRBAdapter(),
     ]
+    
+    # Evaluate all methods
+    all_results = []
+    for method in methods:
+        try:
+            results = evaluate_method(
+                method, X_train, y_sys_train, y_mod_train,
+                X_test, y_sys_test, y_mod_test,
+                feature_names, n_sys_classes
+            )
+            all_results.append(results)
+        except Exception as e:
+            print(f"Error evaluating {method.name}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Save comparison table
+    print("\n" + "="*60)
+    print("Saving results...")
+    print("="*60)
+    
+    comparison_path = output_dir / "comparison_table.csv"
+    with open(comparison_path, 'w', newline='', encoding='utf-8') as f:
+        fieldnames = ['method', 'sys_accuracy', 'sys_macro_f1', 'mod_top1_accuracy',
+                     'fit_time_sec', 'infer_ms_per_sample', 
+                     'n_rules', 'n_params', 'n_features_used']
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in all_results:
+            row = {k: result[k] for k in fieldnames if k in result}
+            writer.writerow(row)
+    print(f"Saved comparison table to: {comparison_path}")
+    
+    # Plot confusion matrices
+    sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+    for result in all_results:
+        cm_path = output_dir / f"confusion_matrix_{result['method']}.png"
+        plot_confusion_matrix(
+            result['confusion_matrix'], 
+            sys_label_names,
+            cm_path,
+            f"System-Level Confusion Matrix: {result['method']}"
+        )
+    
+    # Plot comparison bars
+    plot_comparison_bar(all_results, output_dir)
+    
+    # Small-sample experiments
+    if args.small_sample:
+        print("\n" + "="*60)
+        print("Running small-sample adaptability experiments...")
+        print("="*60)
+        
+        train_sizes = [5, 10, 20, 30]
+        n_repeats = 5
+        small_sample_results = []
+        
+        for train_size in train_sizes:
+            if train_size > len(X_train):
+                print(f"Skipping train_size={train_size} (exceeds available training data)")
+                continue
+            
+            print(f"\nTrain size: {train_size}")
+            
+            for method in methods:
+                method_accs = []
+                
+                for rep in range(n_repeats):
+                    # Sample subset
+                    rep_seed = args.seed + rep
+                    rng = np.random.RandomState(rep_seed)
+                    indices = rng.choice(len(X_train), size=train_size, replace=False)
+                    X_small = X_train[indices]
+                    y_small = y_sys_train[indices]
+                    
+                    # Train and evaluate
+                    try:
+                        method_copy = method.__class__()  # Create fresh instance
+                        method_copy.fit(X_small, y_small, None, {'feature_names': feature_names})
+                        pred = method_copy.predict(X_test, {'feature_names': feature_names})
+                        acc = calculate_accuracy(y_sys_test, pred['system_pred'])
+                        method_accs.append(acc)
+                    except Exception as e:
+                        print(f"Error in small-sample experiment for {method.name}: {e}")
+                        method_accs.append(0.0)
+                
+                mean_acc = np.mean(method_accs)
+                std_acc = np.std(method_accs)
+                small_sample_results.append({
+                    'method': method.name,
+                    'train_size': train_size,
+                    'mean_acc': mean_acc,
+                    'std_acc': std_acc,
+                })
+                print(f"  {method.name}: {mean_acc:.4f} ± {std_acc:.4f}")
+        
+        # Save small-sample results
+        small_sample_path = output_dir / "small_sample_curve.csv"
+        with open(small_sample_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['method', 'train_size', 'mean_acc', 'std_acc']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(small_sample_results)
+        print(f"Saved small-sample results to: {small_sample_path}")
+        
+        # Plot small-sample curve
+        plot_small_sample_curve(small_sample_results, output_dir)
+    
+    print("\n" + "="*60)
+    print("Comparison complete!")
+    print("="*60)
 
-    out_dir = ROOT / "Output/comparison_results"
-    evaluate(methods, dataset, out_dir)
-    print(f"comparison_summary.txt 已生成于 {out_dir.resolve()}")
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

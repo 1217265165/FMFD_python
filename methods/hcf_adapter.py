@@ -108,8 +108,12 @@ class HCFAdapter(MethodAdapter):
         X_encoded = np.hstack(encoded_features)
         
         # ========== Level-c: Data Climate Cognitive (classification) ==========
-        self.classifier = LogisticRegression(random_state=42, max_iter=200, 
-                                            multi_class='multinomial', solver='lbfgs')
+        try:
+            self.classifier = LogisticRegression(random_state=42, max_iter=200, 
+                                                multi_class='multinomial', solver='lbfgs')
+        except TypeError:
+            # Older sklearn version
+            self.classifier = LogisticRegression(random_state=42, max_iter=200, solver='lbfgs')
         self.classifier.fit(X_encoded, y_sys_train)
     
     def predict(self, X_test: np.ndarray, meta: Optional[Dict] = None) -> Dict:
