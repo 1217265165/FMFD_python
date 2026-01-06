@@ -1,0 +1,18 @@
+[
+    {
+        "end_freq": 13002998356.835684,
+        "start_freq": 13002998356.835684,
+        "step_mean": 0.0,
+        "step_std": 0.0,
+        "tolerance": 0.2,
+        "is_within_tolerance": true
+    },
+    {
+        "end_freq": 45999253054.305435,
+        "start_freq": 45999253054.305435,
+        "step_mean": 0.0,
+        "step_std": 0.0,
+        "tolerance": 0.2,
+        "is_within_tolerance": true
+    }
+]

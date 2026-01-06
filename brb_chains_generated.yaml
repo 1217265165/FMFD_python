@@ -1,0 +1,2463 @@
+alpha_uncertainty: 0.85
+modules_order:
+- 输入衰减器
+- 前置放大器
+- YTF
+- 低通滤波器
+- 第一混频器
+- 本振合成器
+- 中频放大器
+- ADC
+- DDC
+- 数字滤波器
+- 数字检波器
+- 参考时钟
+- 校准数据
+- 电源（各类输出）
+- 未定义/其他
+rules:
+  自动链_1:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 主参考时钟振荡器
+    - 时钟合成与同步网络
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_10:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - DSP/FPGA
+    - 显示
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_11:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - DSP/FPGA
+    - 外部接口
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_12:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 校准信号
+    - RF板
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_13:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 内部校准源
+    - 校准信号路由开关
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_14:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 校准信号路由开关
+    - 校准信号
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_15:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 本振PLL电路
+    - 本振组件
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_16:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 本振多路
+    - RF板
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_17:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 本振组件
+    - 本振多路
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_18:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 标准存储器
+    - CPU
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_19:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - RF输入
+    - 输入保护
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_2:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 时钟合成与同步网络
+    - 采样时钟
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_20:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 输入保护
+    - RF板
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_21:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - RF板
+    - 中频放大器
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_22:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 主参考时钟振荡器
+    - 时钟合成与同步网络
+    - 采样时钟
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_23:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 主参考时钟振荡器
+    - 时钟合成与同步网络
+    - 处理时钟
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_24:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 主参考时钟振荡器
+    - 时钟合成与同步网络
+    - 本振PLL电路
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_25:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 时钟合成与同步网络
+    - 采样时钟
+    - ADC
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_26:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 时钟合成与同步网络
+    - 处理时钟
+    - DSP/FPGA
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_27:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 时钟合成与同步网络
+    - 本振PLL电路
+    - 本振组件
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_28:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 采样时钟
+    - ADC
+    - DSP/FPGA
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_29:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 处理时钟
+    - DSP/FPGA
+    - 标准存储器
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_3:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 时钟合成与同步网络
+    - 处理时钟
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_30:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 处理时钟
+    - DSP/FPGA
+    - 显示
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_31:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 处理时钟
+    - DSP/FPGA
+    - 外部接口
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_32:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 中频放大器
+    - ADC
+    - DSP/FPGA
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_33:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - ADC
+    - DSP/FPGA
+    - 标准存储器
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_34:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - ADC
+    - DSP/FPGA
+    - 显示
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_35:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - ADC
+    - DSP/FPGA
+    - 外部接口
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_36:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - DSP/FPGA
+    - 标准存储器
+    - CPU
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_37:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 校准信号
+    - RF板
+    - 中频放大器
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_38:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 内部校准源
+    - 校准信号路由开关
+    - 校准信号
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_39:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 校准信号路由开关
+    - 校准信号
+    - RF板
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_4:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 时钟合成与同步网络
+    - 本振PLL电路
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_40:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 本振PLL电路
+    - 本振组件
+    - 本振多路
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_41:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 本振多路
+    - RF板
+    - 中频放大器
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_42:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 本振组件
+    - 本振多路
+    - RF板
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_43:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - RF输入
+    - 输入保护
+    - RF板
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_44:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - 输入保护
+    - RF板
+    - 中频放大器
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_45:
+    _meta_edge_types:
+    - signal
+    - signal
+    _meta_path:
+    - RF板
+    - 中频放大器
+    - ADC
+    _meta_score: 0.8333333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8333333333333334
+  自动链_46:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 主参考时钟振荡器
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_47:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 时钟合成与同步网络
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_48:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 中频放大器
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_49:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 内部校准源
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_5:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 采样时钟
+    - ADC
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_50:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 校准信号路由开关
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_51:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 控制与交互模块
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_52:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - RF板
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_53:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 显示
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_54:
+    _meta_edge_types:
+    - power
+    _meta_path:
+    - 电源模块
+    - 外部接口
+    _meta_score: 0.8
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.8
+  自动链_55:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 主参考时钟振荡器
+    - 时钟合成与同步网络
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_56:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 时钟合成与同步网络
+    - 采样时钟
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_57:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 时钟合成与同步网络
+    - 处理时钟
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_58:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 时钟合成与同步网络
+    - 本振PLL电路
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_59:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 中频放大器
+    - ADC
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_6:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 处理时钟
+    - DSP/FPGA
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_60:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 内部校准源
+    - 校准信号路由开关
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_61:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - 校准信号路由开关
+    - 校准信号
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_62:
+    _meta_edge_types:
+    - power
+    - signal
+    _meta_path:
+    - 电源模块
+    - RF板
+    - 中频放大器
+    _meta_score: 0.75
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.75
+  自动链_63:
+    _meta_edge_types:
+    - control
+    - signal
+    _meta_path:
+    - 控制与交互模块
+    - 标准存储器
+    - CPU
+    _meta_score: 0.6666666666666667
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6666666666666667
+  自动链_64:
+    _meta_edge_types:
+    - signal
+    - control
+    _meta_path:
+    - 标准存储器
+    - CPU
+    - 控制总线
+    _meta_score: 0.6666666666666667
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6666666666666667
+  自动链_65:
+    _meta_edge_types:
+    - control
+    - signal
+    _meta_path:
+    - 控制总线
+    - 中频放大器
+    - ADC
+    _meta_score: 0.6666666666666667
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6666666666666667
+  自动链_66:
+    _meta_edge_types:
+    - control
+    - signal
+    _meta_path:
+    - 控制总线
+    - 校准信号路由开关
+    - 校准信号
+    _meta_score: 0.6666666666666667
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6666666666666667
+  自动链_67:
+    _meta_edge_types:
+    - control
+    - signal
+    _meta_path:
+    - 控制总线
+    - RF板
+    - 中频放大器
+    _meta_score: 0.6666666666666667
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6666666666666667
+  自动链_68:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制与交互模块
+    - CPU
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_69:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制与交互模块
+    - 标准存储器
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_7:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - 中频放大器
+    - ADC
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_70:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_71:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制总线
+    - 控制与交互模块
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_72:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制总线
+    - 中频放大器
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_73:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制总线
+    - 校准信号路由开关
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_74:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制总线
+    - RF板
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_75:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制总线
+    - 显示
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_76:
+    _meta_edge_types:
+    - control
+    _meta_path:
+    - 控制总线
+    - 外部接口
+    _meta_score: 0.6
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.6
+  自动链_77:
+    _meta_edge_types:
+    - power
+    - control
+    _meta_path:
+    - 电源模块
+    - 控制与交互模块
+    - CPU
+    _meta_score: 0.5833333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5833333333333334
+  自动链_78:
+    _meta_edge_types:
+    - power
+    - control
+    _meta_path:
+    - 电源模块
+    - 控制与交互模块
+    - 标准存储器
+    _meta_score: 0.5833333333333334
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5833333333333334
+  自动链_79:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - 控制与交互模块
+    - CPU
+    - 控制总线
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_8:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - ADC
+    - DSP/FPGA
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
+  自动链_80:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    - 控制与交互模块
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_81:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    - 中频放大器
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.4444444444444445
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.5555555555555556
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_82:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    - 校准信号路由开关
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_83:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    - RF板
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_84:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    - 显示
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_85:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - CPU
+    - 控制总线
+    - 外部接口
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_86:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - 控制总线
+    - 控制与交互模块
+    - CPU
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_87:
+    _meta_edge_types:
+    - control
+    - control
+    _meta_path:
+    - 控制总线
+    - 控制与交互模块
+    - 标准存储器
+    _meta_score: 0.5
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 0.5
+  自动链_9:
+    _meta_edge_types:
+    - signal
+    _meta_path:
+    - DSP/FPGA
+    - 标准存储器
+    _meta_score: 1.0
+    attr_weight: 1.0
+    belief_vector:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    direction: higher
+    ref_value: 1.0
+    rule_weight: 1.0
