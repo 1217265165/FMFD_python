@@ -25,6 +25,9 @@ import time
 import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+import matplotlib.pyplot as plt
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 
 import numpy as np
 

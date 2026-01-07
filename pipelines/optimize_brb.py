@@ -17,7 +17,7 @@ import pandas as pd
 import cma
 from sklearn.metrics import log_loss, accuracy_score
 
-from FMFD.BRB.system_brb import system_level_infer
+from BRB.system_brb import system_level_infer
 
 # ------- 与 module_brb 一致的 labels 列表 -------
 LABELS = [

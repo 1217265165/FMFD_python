@@ -6,15 +6,15 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from FMFD.baseline.baseline import load_and_align, compute_rrs_bounds, detect_switch_steps
-from FMFD.baseline.config import (
+from baseline.baseline import load_and_align, compute_rrs_bounds, detect_switch_steps
+from baseline.config import (
     BAND_RANGES, K_LIST, SWITCH_TOL,
     BASELINE_ARTIFACTS, BASELINE_META,
     NORMAL_FEATURE_STATS, SWITCH_CSV, SWITCH_JSON, PLOT_PATH,
     OUTPUT_DIR,
 )
-from FMFD.baseline.viz import plot_rrs_envelope_switch
-from FMFD.features.extract import extract_system_features
+from baseline.viz import plot_rrs_envelope_switch
+from features.extract import extract_system_features
 
 
 def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
