@@ -386,7 +386,15 @@ def run_simulation(args: argparse.Namespace):
                 )
                 idx += 1
     else:
-        # Original random generation
+        # Realistic distribution generation (default)
+        print(f"Generating realistic distribution with {args.n_samples} samples")
+        print("Expected distribution (based on module diversity):")
+        print("  Amplitude faults (8 modules): ~58%")
+        print("  Frequency faults (3 modules): ~20%")
+        print("  Reference faults (2 modules): ~14%")
+        print("  Normal state: ~8%")
+        print()
+        
         for idx in range(args.n_samples):
             sample_id = f"sim_{idx:05d}"
             curve, label_sys, label_mod = simulate_curve(freq, rrs, band_ranges, traces, rng)
@@ -451,10 +459,10 @@ def build_argparser():
     parser.add_argument("--n_samples", type=int, default=200, 
                        help="总样本数（建议4的倍数以便完美平衡）")
     parser.add_argument("--seed", type=int, default=2024)
-    parser.add_argument("--balanced", action="store_true", default=True,
-                       help="生成各类故障均衡的样本（默认开启）")
-    parser.add_argument("--no-balanced", dest="balanced", action="store_false",
-                       help="使用原始随机概率生成样本")
+    parser.add_argument("--balanced", action="store_true", default=False,
+                       help="生成各类故障均衡的样本（每类相同数量）")
+    parser.add_argument("--realistic", dest="balanced", action="store_false",
+                       help="使用真实概率分布（默认，反映模块多样性：幅度58%%,频率20%%,参考14%%,正常8%%）")
     return parser
 
 
