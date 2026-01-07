@@ -269,6 +269,52 @@ def system_level_infer_simple(features: Dict[str, float], config: SystemBRBConfi
     return _system_level_infer_er(features, simple_cfg)
 
 
+def system_level_infer_sub_brb(features: Dict[str, float], config: SystemBRBConfig | None = None) -> Dict[str, float]:
+    """使用子BRB架构的系统级推理（优化版本）。
+    
+    对应小论文分层推理架构：
+    - 将系统级推理拆分为三个子BRB（幅度、频率、参考电平）
+    - 使用特征分流，每个子BRB只接收相关特征
+    - 聚合子BRB结果，输出最终诊断
+    
+    Parameters
+    ----------
+    features : dict
+        输入特征字典。
+    config : SystemBRBConfig, optional
+        配置参数。
+        
+    Returns
+    -------
+    dict
+        推理结果，格式与 system_level_infer_er 兼容。
+    """
+    cfg = config or SystemBRBConfig()
+    
+    try:
+        from .aggregator import system_level_infer_with_sub_brbs
+        
+        result = system_level_infer_with_sub_brbs(
+            features,
+            alpha=cfg.alpha,
+            overall_threshold=cfg.overall_threshold,
+            max_prob_threshold=cfg.max_prob_threshold,
+            use_feature_routing=True
+        )
+        
+        # 转换为兼容格式
+        return {
+            "probabilities": result["probabilities"],
+            "max_prob": result["max_prob"],
+            "is_normal": result["is_normal"],
+            "uncertainty": result["uncertainty"],
+            "overall_score": result["overall_score"],
+        }
+    except ImportError:
+        # 如果无法导入聚合器，回退到原始实现
+        return system_level_infer_er(features, config=config)
+
+
 def system_level_infer(
     features: Dict[str, float],
     config: SystemBRBConfig | None = None,
@@ -286,10 +332,11 @@ def system_level_infer(
     config : SystemBRBConfig, optional
         Hyper-parameters controlling softmax temperature, thresholds and
         weights. Defaults to values suggested in ACCURACY_IMPROVEMENT.md.
-    mode : {"er", "simple"}, optional
-        Compatibility flag. ``mode="er"`` (default) uses the full
-        enhanced ER fusion with正常回退；``mode="simple"`` disables the
-        normal-state fallback to mimic旧脚本。其他值会抛出 ValueError。
+    mode : {"er", "simple", "sub_brb"}, optional
+        Compatibility flag:
+        - ``mode="er"`` (default): 使用增强ER融合与正常状态回退
+        - ``mode="simple"``: 禁用正常状态回退
+        - ``mode="sub_brb"``: 使用子BRB架构（推荐，准确率更高）
 
     Returns
     -------
@@ -303,5 +350,7 @@ def system_level_infer(
         return system_level_infer_er(features, config=config)
     if selected == "simple":
         return system_level_infer_simple(features, config=config)
-    raise ValueError(f"Unsupported mode '{mode}', expected 'er' or 'simple'.")
+    if selected == "sub_brb":
+        return system_level_infer_sub_brb(features, config=config)
+    raise ValueError(f"Unsupported mode '{mode}', expected 'er', 'simple', or 'sub_brb'.")
 

@@ -84,6 +84,63 @@ def robust_stats(arr):
     )
 
 
+def robust_z_score_normalize(value: float, median: float, iqr: float, epsilon: float = 1e-6) -> float:
+    """使用robust z-score对单个特征值进行归一化。
+    
+    对应小论文归一化策略：
+    normalized_value = (x - median) / (IQR + epsilon)
+    
+    该方法对异常值不敏感，适用于噪声数据。
+    
+    Parameters
+    ----------
+    value : float
+        原始特征值。
+    median : float
+        特征的中位数（从训练数据计算）。
+    iqr : float
+        特征的四分位差（Q75 - Q25）。
+    epsilon : float
+        防止除零的小常数。
+        
+    Returns
+    -------
+    float
+        归一化后的特征值。
+    """
+    if iqr < epsilon:
+        iqr = epsilon
+    return (float(value) - median) / (iqr + epsilon)
+
+
+def quantile_normalize(value: float, min_val: float, max_val: float, epsilon: float = 1e-6) -> float:
+    """使用分位数归一化，将特征值映射到[0, 1]范围。
+    
+    normalized_value = (x - min) / (max - min)
+    
+    Parameters
+    ----------
+    value : float
+        原始特征值。
+    min_val : float
+        特征的最小值。
+    max_val : float
+        特征的最大值。
+    epsilon : float
+        防止除零的小常数。
+        
+    Returns
+    -------
+    float
+        归一化后的特征值，范围[0, 1]。
+    """
+    range_val = max_val - min_val
+    if range_val < epsilon:
+        range_val = epsilon
+    norm_val = (float(value) - min_val) / (range_val + epsilon)
+    return max(0.0, min(1.0, norm_val))
+
+
 def linear_trend(x, y):
     try:
         x = np.array(x).reshape(-1, 1)
