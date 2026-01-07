@@ -475,6 +475,115 @@ def plot_small_sample_curve(small_sample_results: List[Dict], output_dir: Path):
         print("matplotlib not available, skipping small-sample curve plot")
 
 
+def plot_comprehensive_comparison(all_results: List[Dict], output_dir: Path):
+    """Plot comprehensive comparison visualization combining multiple metrics."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        methods = [r['method'] for r in all_results]
+        accuracies = [r['sys_accuracy'] * 100 for r in all_results]  # Convert to percentage
+        f1_scores = [r['sys_macro_f1'] * 100 for r in all_results]
+        n_rules = [r['n_rules'] for r in all_results]
+        n_params = [r['n_params'] for r in all_results]
+        infer_ms = [r['infer_ms_per_sample'] for r in all_results]
+        
+        fig = plt.figure(figsize=(16, 10))
+        
+        # Create 2x3 grid
+        gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.3)
+        
+        # 1. Accuracy comparison
+        ax1 = fig.add_subplot(gs[0, 0])
+        bars1 = ax1.bar(methods, accuracies, color='steelblue', alpha=0.8)
+        ax1.set_ylabel('System Accuracy (%)', fontsize=11)
+        ax1.set_title('(a) Classification Accuracy', fontsize=12, fontweight='bold')
+        ax1.tick_params(axis='x', rotation=45)
+        ax1.grid(axis='y', alpha=0.3)
+        # Add value labels on bars
+        for bar, val in zip(bars1, accuracies):
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val:.1f}%', ha='center', va='bottom', fontsize=9)
+        
+        # 2. F1-score comparison
+        ax2 = fig.add_subplot(gs[0, 1])
+        bars2 = ax2.bar(methods, f1_scores, color='coral', alpha=0.8)
+        ax2.set_ylabel('Macro F1-Score (%)', fontsize=11)
+        ax2.set_title('(b) F1-Score Performance', fontsize=12, fontweight='bold')
+        ax2.tick_params(axis='x', rotation=45)
+        ax2.grid(axis='y', alpha=0.3)
+        for bar, val in zip(bars2, f1_scores):
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val:.1f}%', ha='center', va='bottom', fontsize=9)
+        
+        # 3. Rules count
+        ax3 = fig.add_subplot(gs[0, 2])
+        bars3 = ax3.bar(methods, n_rules, color='mediumseagreen', alpha=0.8)
+        ax3.set_ylabel('Number of Rules', fontsize=11)
+        ax3.set_title('(c) Model Complexity (Rules)', fontsize=12, fontweight='bold')
+        ax3.tick_params(axis='x', rotation=45)
+        ax3.grid(axis='y', alpha=0.3)
+        for bar, val in zip(bars3, n_rules):
+            height = bar.get_height()
+            ax3.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val}', ha='center', va='bottom', fontsize=9)
+        
+        # 4. Parameters count
+        ax4 = fig.add_subplot(gs[1, 0])
+        bars4 = ax4.bar(methods, n_params, color='mediumpurple', alpha=0.8)
+        ax4.set_ylabel('Number of Parameters', fontsize=11)
+        ax4.set_title('(d) Parameter Count', fontsize=12, fontweight='bold')
+        ax4.tick_params(axis='x', rotation=45)
+        ax4.grid(axis='y', alpha=0.3)
+        for bar, val in zip(bars4, n_params):
+            height = bar.get_height()
+            ax4.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val}', ha='center', va='bottom', fontsize=9)
+        
+        # 5. Inference time
+        ax5 = fig.add_subplot(gs[1, 1])
+        bars5 = ax5.bar(methods, infer_ms, color='lightgreen', alpha=0.8)
+        ax5.set_ylabel('Inference Time (ms/sample)', fontsize=11)
+        ax5.set_title('(e) Inference Efficiency', fontsize=12, fontweight='bold')
+        ax5.tick_params(axis='x', rotation=45)
+        ax5.grid(axis='y', alpha=0.3)
+        for bar, val in zip(bars5, infer_ms):
+            height = bar.get_height()
+            ax5.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val:.3f}', ha='center', va='bottom', fontsize=9)
+        
+        # 6. Accuracy vs Complexity scatter
+        ax6 = fig.add_subplot(gs[1, 2])
+        scatter = ax6.scatter(n_rules, accuracies, s=100, c=infer_ms, 
+                             cmap='viridis', alpha=0.7, edgecolors='black', linewidth=1)
+        ax6.set_xlabel('Number of Rules', fontsize=11)
+        ax6.set_ylabel('Accuracy (%)', fontsize=11)
+        ax6.set_title('(f) Accuracy vs Complexity', fontsize=12, fontweight='bold')
+        ax6.grid(True, alpha=0.3)
+        # Add method labels
+        for i, method in enumerate(methods):
+            ax6.annotate(method, (n_rules[i], accuracies[i]), 
+                        xytext=(5, 5), textcoords='offset points', fontsize=8)
+        # Add colorbar for inference time
+        cbar = plt.colorbar(scatter, ax=ax6)
+        cbar.set_label('Infer Time (ms)', fontsize=9)
+        
+        plt.suptitle('Comprehensive Method Comparison Results', 
+                    fontsize=14, fontweight='bold', y=0.98)
+        
+        output_path = output_dir / "comparison_results.png"
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Saved comprehensive comparison plot to: {output_path}")
+    except ImportError as e:
+        print(f"matplotlib not available, skipping comprehensive plot: {e}")
+    except Exception as e:
+        print(f"Error creating comprehensive plot: {e}")
+
+
 # ============================================================================
 # Main Evaluation Pipeline
 # ============================================================================
@@ -664,6 +773,9 @@ def main():
     
     # Plot comparison bars
     plot_comparison_bar(all_results, output_dir)
+    
+    # Plot comprehensive comparison
+    plot_comprehensive_comparison(all_results, output_dir)
     
     # Small-sample experiments
     if args.small_sample:

@@ -74,11 +74,23 @@ class OursAdapter(MethodAdapter):
             sys_result = system_level_infer(features, self.config)
             probs = sys_result.get('probabilities', {})
             
-            # Map to probability array
-            sys_proba[i, 0] = probs.get('正常', 0.25)
-            sys_proba[i, 1] = probs.get('幅度失准', 0.25)
-            sys_proba[i, 2] = probs.get('频率失准', 0.25)
-            sys_proba[i, 3] = probs.get('参考电平失准', 0.25)
+            # Map to probability array with better fallback handling
+            # Order: 正常(0), 幅度失准(1), 频率失准(2), 参考电平失准(3)
+            total_prob = sum(probs.values()) if probs else 0.0
+            
+            if total_prob > 0.01:  # Valid probabilities
+                sys_proba[i, 0] = probs.get('正常', 0.0)
+                sys_proba[i, 1] = probs.get('幅度失准', 0.0)
+                sys_proba[i, 2] = probs.get('频率失准', 0.0)
+                sys_proba[i, 3] = probs.get('参考电平失准', 0.0)
+                
+                # Normalize if needed
+                row_sum = np.sum(sys_proba[i])
+                if row_sum > 0:
+                    sys_proba[i] /= row_sum
+            else:
+                # Fallback: use uniform distribution
+                sys_proba[i] = np.ones(n_sys_classes) / n_sys_classes
             
             sys_pred[i] = np.argmax(sys_proba[i])
             

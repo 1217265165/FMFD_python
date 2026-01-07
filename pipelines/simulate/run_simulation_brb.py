@@ -197,42 +197,59 @@ def simulate_curve(
     """
     curve = _pick_base_trace(rrs, traces, rng).copy()
     
-    # Define fault kinds grouped by system-level class
-    amp_faults = ["amp", "preamp", "lpf", "mixer", "ytf", "adc", "vbw", "power"]
-    freq_faults = ["freq", "clock", "lo"]
-    ref_faults = ["rl", "att"]
-    
-    # If target class specified, select from that class only
-    if target_class == "amp_error":
-        fault_kind = rng.choice(amp_faults)
-    elif target_class == "freq_error":
-        fault_kind = rng.choice(freq_faults)
-    elif target_class == "ref_error":
-        fault_kind = rng.choice(ref_faults)
-    elif target_class == "normal":
-        fault_kind = "normal"
-    else:
-        # Random selection with balanced probabilities
+    # More realistic probability distribution based on actual fault complexity
+    # Amplitude faults have more module types (8) so naturally more common
+    # Frequency faults have fewer modules (3) so less common
+    # Reference level faults have specific modules (2)
+    if target_class is None:
+        # Realistic distribution reflecting module diversity
         kind_probs = {
-            "amp": 0.12,
-            "freq": 0.12,
-            "rl": 0.12,
-            "att": 0.08,
-            "preamp": 0.08,
-            "lpf": 0.06,
-            "mixer": 0.06,
-            "ytf": 0.06,
-            "clock": 0.06,
-            "lo": 0.06,
-            "adc": 0.06,
-            "vbw": 0.06,
-            "power": 0.06,
-            "normal": 0.1,
+            # Amplitude-related (多种模块, 概率较高)
+            "amp": 0.10,      # Calibration source
+            "preamp": 0.08,   # Preamplifier
+            "lpf": 0.07,      # Low-pass filter
+            "mixer": 0.07,    # Mixer
+            "ytf": 0.07,      # YTF filter
+            "adc": 0.07,      # ADC
+            "vbw": 0.06,      # Digital detector
+            "power": 0.06,    # Power supply
+            # Frequency-related (少量模块, 概率较低)
+            "freq": 0.08,     # Frequency calibration
+            "clock": 0.06,    # Clock synthesis
+            "lo": 0.06,       # Local oscillator
+            # Reference level (特定模块)
+            "rl": 0.08,       # Reference level
+            "att": 0.06,      # Attenuator
+            # Normal
+            "normal": 0.08,   # Normal state
         }
-        kinds = list(kind_probs.keys())
-        probs = np.array(list(kind_probs.values()), dtype=float)
-        probs = probs / probs.sum()
-        fault_kind = rng.choice(kinds, p=probs)
+    elif target_class == "amp_error":
+        # Select from amplitude fault modules with realistic weights
+        kind_probs = {
+            "amp": 0.15, "preamp": 0.13, "lpf": 0.13, "mixer": 0.13,
+            "ytf": 0.13, "adc": 0.13, "vbw": 0.10, "power": 0.10
+        }
+    elif target_class == "freq_error":
+        # Select from frequency fault modules
+        kind_probs = {"freq": 0.40, "clock": 0.30, "lo": 0.30}
+    elif target_class == "ref_error":
+        # Select from reference level modules
+        kind_probs = {"rl": 0.60, "att": 0.40}
+    elif target_class == "normal":
+        kind_probs = {"normal": 1.0}
+    else:
+        # Fallback to original distribution
+        kind_probs = {
+            "amp": 0.12, "freq": 0.12, "rl": 0.12, "att": 0.08,
+            "preamp": 0.08, "lpf": 0.06, "mixer": 0.06, "ytf": 0.06,
+            "clock": 0.06, "lo": 0.06, "adc": 0.06, "vbw": 0.06,
+            "power": 0.06, "normal": 0.1,
+        }
+    
+    kinds = list(kind_probs.keys())
+    probs = np.array(list(kind_probs.values()), dtype=float)
+    probs = probs / probs.sum()
+    fault_kind = rng.choice(kinds, p=probs)
     
     label_sys = "normal"
     label_mod = "none"
