@@ -43,39 +43,95 @@ def _mean(values: Iterable[float]) -> float:
     return float(statistics.mean(arr)) if arr else 0.0
 
 
-def _aggregate_module_score(features: Dict[str, float]) -> float:
-    """Aggregate module-level symptom scores with normalization.
+def _aggregate_module_score(features: Dict[str, float], anomaly_type: str = None) -> float:
+    """Aggregate module-level symptom scores with feature streaming.
 
-    对应文中模块层虚拟属性 V 构建思路：将步进误差、分辨率斜率、
-    纹波、频标偏移、限制超差率以及增益/偏置统一归一化后求平均。
+    对应文中模块层虚拟属性 V 构建思路：根据系统层异常类型，选择性使用相关特征。
+    
+    Parameters
+    ----------
+    features : dict
+        模块层特征字典，包含传统字段和X6-X22扩展字段。
+    anomaly_type : str, optional
+        系统层检测到的异常类型（"幅度失准", "频率失准", "参考电平失准"），
+        用于特征分流。如果为None，使用全部特征。
+    
+    Returns
+    -------
+    float
+        聚合后的模块层异常分数(0-1)。
     """
 
+    # 传统特征
     md_step_raw = max(
         features.get("step_score", 0.0),
         features.get("switch_step_err_max", 0.0),
         features.get("nonswitch_step_max", 0.0),
+        features.get("X7", 0.0),  # 增益非线性
     )
     md_step = normalize_feature(md_step_raw, 0.2, 1.5)
     md_slope = normalize_feature(abs(features.get("res_slope", 0.0)), 1e-12, 1e-10)
-    md_ripple = normalize_feature(features.get("ripple_var", 0.0), 0.001, 0.02)
+    md_ripple = normalize_feature(features.get("ripple_var", features.get("X6", 0.0)), 0.001, 0.02)
     md_df = normalize_feature(abs(features.get("df", 0.0)), 1e6, 5e7)
-    md_viol = normalize_feature(features.get("viol_rate", 0.0), 0.02, 0.2)
+    md_viol = normalize_feature(features.get("viol_rate", features.get("X11", 0.0)), 0.02, 0.2)
     md_gain_bias = max(
         normalize_feature(abs(features.get("bias", 0.0)), 0.1, 1.0),
         normalize_feature(abs(features.get("gain", 1.0) - 1.0), 0.02, 0.2),
     )
-    return _mean([md_step, md_slope, md_ripple, md_df, md_viol, md_gain_bias])
+
+    # 特征分流：根据异常类型选择相关特征
+    if anomaly_type == "幅度失准":
+        # 幅度模块：使用幅度相关特征X1,X2,X5,X11-X13,X19-X22
+        amp_features = [
+            md_step,
+            md_ripple,
+            md_gain_bias,
+            normalize_feature(features.get("X11", 0.0), 0.01, 0.3),  # 包络超出率
+            normalize_feature(features.get("X12", 0.0), 0.5, 5.0),  # 最大违规
+            normalize_feature(features.get("X13", 0.0), 0.1, 10.0),  # 违规能量
+            normalize_feature(abs(features.get("X19", 0.0)), 1e-12, 1e-10),  # 低频斜率
+            normalize_feature(abs(features.get("X20", 0.0)), 0.5, 5.0),  # 峰度
+            normalize_feature(features.get("X21", 0.0), 1, 20),  # 峰值数
+            normalize_feature(features.get("X22", 0.0), 0.1, 0.8),  # 主频占比
+        ]
+        return _mean(amp_features)
+    
+    elif anomaly_type == "频率失准":
+        # 频率模块：使用频率相关特征X4,X14-X15,X16-X18
+        freq_features = [
+            md_df,
+            normalize_feature(features.get("X14", 0.0), 0.01, 1.0),  # 低频残差
+            normalize_feature(features.get("X15", 0.0), 0.01, 0.5),  # 高频残差
+            normalize_feature(abs(features.get("X16", 0.0)), 0.001, 0.1),  # 频移
+            normalize_feature(abs(features.get("X17", 0.0)), 0.001, 0.05),  # 缩放
+            normalize_feature(abs(features.get("X18", 0.0)), 0.001, 0.05),  # 平移
+        ]
+        return _mean(freq_features)
+    
+    elif anomaly_type == "参考电平失准":
+        # 参考电平模块：使用参考相关特征X1,X3,X5,X11-X13
+        ref_features = [
+            md_slope,
+            md_gain_bias,
+            normalize_feature(features.get("X11", 0.0), 0.01, 0.3),  # 包络超出率
+            normalize_feature(features.get("X12", 0.0), 0.5, 5.0),  # 最大违规
+            normalize_feature(features.get("X13", 0.0), 0.1, 10.0),  # 违规能量
+        ]
+        return _mean(ref_features)
+    
+    else:
+        # 默认：使用所有传统特征
+        return _mean([md_step, md_slope, md_ripple, md_df, md_viol, md_gain_bias])
 
 
 def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) -> Dict[str, float]:
-    """Perform compressed module-level BRB inference.
+    """Perform compressed module-level BRB inference with feature streaming.
 
     Parameters
     ----------
     features : dict
         模块层特征，至少包含 step_score、res_slope、ripple_var、df、
-        viol_rate、gain、bias，可额外提供 switch_step_err_max、
-        nonswitch_step_max（对应式 (3) 中的症状属性）。
+        viol_rate、gain、bias，可额外提供 X6-X22扩展特征用于特征分流。
     sys_probs : dict
         系统级诊断概率分布，作为虚拟先验属性 V 对规则进行加权。
         既支持直接传入概率字典，也支持 system_level_infer 的完整
@@ -87,12 +143,22 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
         21 个模块的概率分布，顺序与 ``MODULE_LABELS`` 对齐。
     """
 
-    md = _aggregate_module_score(features)
-
     probs = sys_probs.get("probabilities", sys_probs)
     amp_prior = probs.get("幅度失准", 0.3)
     freq_prior = probs.get("频率失准", 0.3)
     ref_prior = probs.get("参考电平失准", 0.3)
+
+    # 确定主导异常类型，用于特征分流
+    max_prob_val = max(amp_prior, freq_prior, ref_prior)
+    if amp_prior == max_prob_val:
+        anomaly_type = "幅度失准"
+    elif freq_prior == max_prob_val:
+        anomaly_type = "频率失准"
+    else:
+        anomaly_type = "参考电平失准"
+
+    # 使用特征分流计算模块层分数
+    md = _aggregate_module_score(features, anomaly_type)
 
     rules = [
         BRBRule(

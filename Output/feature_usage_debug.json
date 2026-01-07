@@ -1,0 +1,122 @@
+{
+  "summary": {
+    "total_features_available": 22,
+    "system_layer_features": 17,
+    "module_layer_amp_features": 16,
+    "module_layer_freq_features": 8,
+    "module_layer_ref_features": 9,
+    "extended_features_enabled": true
+  },
+  "system_used": [
+    "X1",
+    "X2",
+    "X3",
+    "X4",
+    "X5",
+    "X11",
+    "X12",
+    "X13",
+    "X14",
+    "X15",
+    "X16",
+    "X17",
+    "X18",
+    "X19",
+    "X20",
+    "X21",
+    "X22"
+  ],
+  "module_used_by_anomaly": {
+    "amp_error": [
+      "X1",
+      "X2",
+      "X5",
+      "X6",
+      "X7",
+      "X11",
+      "X12",
+      "X13",
+      "X19",
+      "X20",
+      "X21",
+      "X22",
+      "step_score",
+      "ripple_var",
+      "bias",
+      "gain"
+    ],
+    "freq_error": [
+      "X4",
+      "X14",
+      "X15",
+      "X16",
+      "X17",
+      "X18",
+      "df",
+      "step_score"
+    ],
+    "ref_error": [
+      "X1",
+      "X3",
+      "X5",
+      "X11",
+      "X12",
+      "X13",
+      "res_slope",
+      "bias",
+      "gain"
+    ]
+  },
+  "module_used_common": [
+    "step_score",
+    "res_slope",
+    "ripple_var",
+    "df",
+    "viol_rate",
+    "bias",
+    "gain"
+  ],
+  "feature_descriptions": {
+    "X1": "整体幅度偏移 (amplitude offset)",
+    "X2": "带内平坦度 (inband flatness / ripple variance)",
+    "X3": "高频段衰减斜率 (HF attenuation slope)",
+    "X4": "频率标度非线性度 (frequency scale nonlinearity)",
+    "X5": "幅度缩放一致性 (amplitude scale consistency)",
+    "X6": "纹波方差 (ripple variance)",
+    "X7": "增益非线性 (gain nonlinearity / max step)",
+    "X8": "本振泄漏 (LO leakage)",
+    "X9": "调谐线性度残差 (tuning linearity residual)",
+    "X10": "频段幅度一致性 (band amplitude consistency)",
+    "X11": "超出动态包络点占比 (envelope overrun rate)",
+    "X12": "最大包络违规幅度 (max envelope violation)",
+    "X13": "包络违规能量 (envelope violation energy)",
+    "X14": "低频段残差均值 (low band residual mean)",
+    "X15": "高频段残差方差 (high band residual std)",
+    "X16": "互相关滞后 (correlation shift / frequency shift proxy)",
+    "X17": "频轴缩放因子 (frequency axis warp scale)",
+    "X18": "频轴平移因子 (frequency axis warp bias)",
+    "X19": "低频段斜率 (low frequency slope)",
+    "X20": "去趋势残差峰度 (detrended residual kurtosis)",
+    "X21": "残差峰值数量 (residual peak count)",
+    "X22": "残差主频能量占比 (dominant frequency energy ratio)"
+  },
+  "configuration": {
+    "alpha": 2.5,
+    "overall_threshold": 0.15,
+    "max_prob_threshold": 0.28,
+    "attribute_weights_length": 22,
+    "rule_weights": [
+      1.2,
+      1.0,
+      1.1
+    ]
+  },
+  "notes": [
+    "系统层使用X1-X5基础特征 + X11-X22扩展特征（共17个）",
+    "模块层根据系统层检测到的异常类型进行特征分流：",
+    "  - 幅度异常模块：使用幅度相关特征（X1,X2,X5,X6,X7,X11-X13,X19-X22）",
+    "  - 频率异常模块：使用频率相关特征（X4,X14-X18）",
+    "  - 参考异常模块：使用参考相关特征（X1,X3,X5,X11-X13）",
+    "所有模块层还使用传统特征：step_score, res_slope, ripple_var, df, viol_rate, bias, gain"
+  ]
+}

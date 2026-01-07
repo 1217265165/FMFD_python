@@ -34,25 +34,34 @@ class SystemBRBConfig:
         Maximum belief threshold; if the highest class probability is
         below the value, output will fall back to "正常" with explicit
         uncertainty.
-    attribute_weights : Tuple[float, float, float, float, float]
-        Relative importance of X1~X5 when computing the aggregated
-        anomaly score and rule activation strength.
+    attribute_weights : Tuple[float, ...]
+        Relative importance of features when computing the aggregated
+        anomaly score. Extended to support X1-X22 (22 features).
+        Grouped as: [X1-X5基础, X6-X10模块, X11-X15包络, X16-X18频率, X19-X22幅度]
     rule_weights : Tuple[float, float, float]
         Weights for amplitude/frequency/reference rule groups to mimic
         knowledge-driven rule compression.
+    use_extended_features : bool
+        If True, use X1-X22; if False, use only X1-X5 (backward compatibility).
     """
 
-    alpha: float = 2.0
-    overall_threshold: float = 0.18
-    max_prob_threshold: float = 0.3
-    attribute_weights: Tuple[float, float, float, float, float] = (
-        0.26,
-        0.22,
-        0.18,
-        0.17,
-        0.17,
+    alpha: float = 2.5  # 提高温度以增强区分度
+    overall_threshold: float = 0.15  # 降低阈值使正常识别更严格
+    max_prob_threshold: float = 0.28  # 降低阈值要求更高置信度
+    attribute_weights: Tuple[float, ...] = (
+        # X1-X5: 基础特征权重
+        0.20, 0.18, 0.15, 0.14, 0.13,
+        # X6-X10: 模块症状特征权重（较低，主要供模块层使用）
+        0.05, 0.05, 0.04, 0.04, 0.04,
+        # X11-X15: 包络/残差特征权重（系统层重要）
+        0.12, 0.10, 0.08, 0.07, 0.07,
+        # X16-X18: 频率特征权重（频率失准识别）
+        0.10, 0.10, 0.10,
+        # X19-X22: 幅度细粒度特征权重（幅度/参考识别）
+        0.08, 0.07, 0.06, 0.05,
     )
-    rule_weights: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+    rule_weights: Tuple[float, float, float] = (1.2, 1.0, 1.1)  # amp/freq/ref权重调整
+    use_extended_features: bool = True  # 默认启用扩展特征
 
 
 def _triangular_membership(value: float, low: float, center: float, high: float) -> Tuple[float, float, float]:
@@ -83,24 +92,72 @@ def _normalize_feature(value: float, lower: float, upper: float) -> float:
 
 
 def _compute_attribute_scores(features: Dict[str, float]) -> Dict[str, float]:
-    """Compute normalized attribute scores for X1~X5.
+    """Compute normalized attribute scores for X1~X22 (扩展版).
 
     The function is robust to different key names and accepts either
-    X1~X5 or descriptive names used in the baseline scripts.
+    X1~X22 or descriptive names used in the baseline scripts.
     """
 
+    # X1-X5: 基础系统级特征
     x1_raw = abs(_get_feature(features, "X1", "amplitude_offset", "bias"))
     x2_raw = _get_feature(features, "X2", "inband_flatness", "ripple_var")
     x3_raw = abs(_get_feature(features, "X3", "hf_attenuation_slope", "res_slope"))
     x4_raw = abs(_get_feature(features, "X4", "freq_scale_nonlinearity", "df"))
     x5_raw = abs(_get_feature(features, "X5", "scale_consistency", "amp_scale_consistency", "gain_consistency"))
 
+    # X6-X10: 模块级症状（系统层可选使用）
+    x6_raw = _get_feature(features, "X6", "ripple_variance")
+    x7_raw = _get_feature(features, "X7", "gain_nonlinearity", "step_score")
+    x8_raw = _get_feature(features, "X8", "lo_leakage")
+    x9_raw = _get_feature(features, "X9", "tuning_linearity_residual")
+    x10_raw = _get_feature(features, "X10", "band_amplitude_consistency")
+
+    # X11-X15: 包络/残差特征（系统层使用）
+    x11_raw = _get_feature(features, "X11", "env_overrun_rate", "viol_rate")
+    x12_raw = _get_feature(features, "X12", "env_overrun_max")
+    x13_raw = _get_feature(features, "X13", "env_violation_energy")
+    x14_raw = _get_feature(features, "X14", "band_residual_low")
+    x15_raw = _get_feature(features, "X15", "band_residual_high_std")
+
+    # X16-X18: 频率对齐/形变（频率失准识别）
+    x16_raw = abs(_get_feature(features, "X16", "corr_shift_bins"))
+    x17_raw = abs(_get_feature(features, "X17", "warp_scale"))
+    x18_raw = abs(_get_feature(features, "X18", "warp_bias"))
+
+    # X19-X22: 幅度链路细粒度（幅度/参考异常识别）
+    x19_raw = abs(_get_feature(features, "X19", "slope_low"))
+    x20_raw = abs(_get_feature(features, "X20", "kurtosis_detrended"))
+    x21_raw = _get_feature(features, "X21", "peak_count_residual")
+    x22_raw = _get_feature(features, "X22", "ripple_dom_freq_energy")
+
     scores = {
+        # 基础特征归一化
         "X1": _normalize_feature(x1_raw, 0.02, 0.5),
         "X2": _normalize_feature(x2_raw, 0.002, 0.05),
         "X3": _normalize_feature(x3_raw, 1e-12, 1e-9),
         "X4": _normalize_feature(x4_raw, 5e5, 3e7),
         "X5": _normalize_feature(x5_raw, 0.01, 0.35),
+        # 模块症状归一化
+        "X6": _normalize_feature(x6_raw, 0.001, 0.03),
+        "X7": _normalize_feature(x7_raw, 0.05, 2.0),
+        "X8": _normalize_feature(x8_raw, 0.01, 1.0),
+        "X9": _normalize_feature(x9_raw, 1e3, 1e5),
+        "X10": _normalize_feature(x10_raw, 0.02, 0.5),
+        # 包络/残差特征归一化
+        "X11": _normalize_feature(x11_raw, 0.01, 0.3),
+        "X12": _normalize_feature(x12_raw, 0.5, 5.0),
+        "X13": _normalize_feature(x13_raw, 0.1, 10.0),
+        "X14": _normalize_feature(x14_raw, 0.01, 1.0),
+        "X15": _normalize_feature(x15_raw, 0.01, 0.5),
+        # 频率对齐特征归一化
+        "X16": _normalize_feature(x16_raw, 0.001, 0.1),
+        "X17": _normalize_feature(x17_raw, 0.001, 0.05),
+        "X18": _normalize_feature(x18_raw, 0.001, 0.05),
+        # 幅度细粒度特征归一化
+        "X19": _normalize_feature(x19_raw, 1e-12, 1e-10),
+        "X20": _normalize_feature(x20_raw, 0.5, 5.0),
+        "X21": _normalize_feature(x21_raw, 1, 20),
+        "X22": _normalize_feature(x22_raw, 0.1, 0.8),
     }
     return scores
 
@@ -109,22 +166,54 @@ def _attribute_match_degrees(scores: Dict[str, float]) -> Dict[str, Tuple[float,
     return {name: _triangular_membership(value, 0.15, 0.35, 0.7) for name, value in scores.items()}
 
 
-def _aggregate_score(scores: Dict[str, float], weights: Tuple[float, float, float, float, float]) -> float:
-    weighted = [scores[key] * w for key, w in zip(["X1", "X2", "X3", "X4", "X5"], weights)]
-    return sum(weighted) / (sum(weights) + 1e-12)
+def _aggregate_score(scores: Dict[str, float], weights: Tuple[float, ...], use_extended: bool = True) -> float:
+    """Aggregate scores with weights, supporting both X1-X5 and X1-X22."""
+    if use_extended and len(weights) >= 22:
+        # 使用全部22个特征
+        keys = [f"X{i}" for i in range(1, 23)]
+        valid_keys = [k for k in keys if k in scores]
+        weighted = [scores[k] * weights[i] for i, k in enumerate(valid_keys)]
+        return sum(weighted) / (sum(weights[:len(valid_keys)]) + 1e-12)
+    else:
+        # 向后兼容：仅使用X1-X5
+        keys = ["X1", "X2", "X3", "X4", "X5"]
+        weighted = [scores.get(key, 0.0) * w for key, w in zip(keys, weights[:5])]
+        return sum(weighted) / (sum(weights[:5]) + 1e-12)
 
 
 def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> Dict[str, float]:
-    """核心 ER 版系统级推理实现，供不同接口复用。"""
+    """核心 ER 版系统级推理实现，支持扩展特征。"""
     scores = _compute_attribute_scores(features)
     match = _attribute_match_degrees(scores)
 
-    # Rule compression: one dominant rule per fault family
-    amp_activation = cfg.rule_weights[0] * max(match["X1"][2], match["X2"][2], match["X5"][2])
-    freq_activation = cfg.rule_weights[1] * match["X4"][2]
-    ref_activation = cfg.rule_weights[2] * max(match["X2"][0], match["X3"][2], match["X5"][0])
+    # Rule compression with extended features support
+    if cfg.use_extended_features:
+        # 幅度失准：使用X1,X2,X5(基础)+X11,X12,X13(包络)+X19,X20,X21,X22(幅度细粒度)
+        amp_activation = cfg.rule_weights[0] * max(
+            match["X1"][2], match["X2"][2], match["X5"][2],
+            match["X11"][2], match["X12"][2], match["X13"][2],
+            match["X19"][2], match["X20"][2], match["X21"][2], match["X22"][2]
+        )
+        
+        # 频率失准：使用X4(基础)+X14,X15(残差)+X16,X17,X18(频率对齐)
+        freq_activation = cfg.rule_weights[1] * max(
+            match["X4"][2],
+            match["X14"][2], match["X15"][2],
+            match["X16"][2], match["X17"][2], match["X18"][2]
+        )
+        
+        # 参考电平失准：使用X1,X3,X5(基础)+X11,X12,X13(包络)
+        ref_activation = cfg.rule_weights[2] * max(
+            match["X1"][2], match["X3"][2], match["X5"][2],
+            match["X11"][2], match["X12"][2], match["X13"][0]  # 低包络违规
+        )
+    else:
+        # 向后兼容：仅使用X1-X5
+        amp_activation = cfg.rule_weights[0] * max(match["X1"][2], match["X2"][2], match["X5"][2])
+        freq_activation = cfg.rule_weights[1] * match["X4"][2]
+        ref_activation = cfg.rule_weights[2] * max(match["X2"][0], match["X3"][2], match["X5"][0])
 
-    overall_score = _aggregate_score(scores, cfg.attribute_weights)
+    overall_score = _aggregate_score(scores, cfg.attribute_weights, cfg.use_extended_features)
     activations = [amp_activation, freq_activation, ref_activation]
 
     es = [math.exp(cfg.alpha * a) for a in activations]
