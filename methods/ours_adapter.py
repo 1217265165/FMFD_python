@@ -8,7 +8,7 @@ import numpy as np
 
 from methods.base import MethodAdapter
 from BRB.system_brb import system_level_infer, SystemBRBConfig
-from BRB.module_brb import module_level_infer
+from BRB.module_brb import module_level_infer, module_level_infer_with_activation
 
 
 class OursAdapter(MethodAdapter):
@@ -18,11 +18,12 @@ class OursAdapter(MethodAdapter):
     - Two-layer inference: System BRB -> Module BRB
     - System result gating: only activate physically-related module subset
     - Knowledge mapping: modules use relevant frequency bands/features only
+    - Sub-BRB architecture: separate BRBs for amp/freq/ref faults
     
     Enhanced with X1-X22 features for improved accuracy while maintaining framework.
     
     Complexity:
-    - Rules: system layer + module layer (configured rules only)
+    - Rules: system layer (3 sub-BRBs) + module layer (configured rules only)
     - Params: attribute weights + rule weights + belief degrees (增加扩展特征权重)
     """
     
@@ -31,10 +32,11 @@ class OursAdapter(MethodAdapter):
     def __init__(self):
         self.config = SystemBRBConfig()  # 默认启用扩展特征
         self.feature_names = None
-        self.n_system_rules = 12  # Configured in brb_rules.yaml
+        self.n_system_rules = 15  # 3 sub-BRBs with 5 rules each
         self.n_module_rules = 33  # Configured per-module rules
-        self.n_params = 58  # 增加：22个特征权重 + 3个规则权重 + 33个belief参数
+        self.n_params = 68  # 增加：22个特征权重 + 3个规则权重 + 33个belief参数 + 10个子BRB参数
         self.kd_features = [f'X{i}' for i in range(1, 23)]  # X1-X22
+        self.use_sub_brb = True  # 启用子BRB架构以提高准确率
         # 添加别名映射
         self.kd_features_aliases = {
             'bias': 'X1', 'ripple_var': 'X2', 'res_slope': 'X3', 
@@ -66,7 +68,7 @@ class OursAdapter(MethodAdapter):
         pass
     
     def predict(self, X_test: np.ndarray, meta: Optional[Dict] = None) -> Dict:
-        """Predict on test data using hierarchical BRB with extended features."""
+        """Predict on test data using hierarchical BRB with extended features and sub-BRB architecture."""
         n_test = len(X_test)
         n_sys_classes = 4  # Normal, Amp, Freq, Ref
         
@@ -81,12 +83,15 @@ class OursAdapter(MethodAdapter):
         
         start_time = time.time()
         
+        # 选择推理模式：使用sub_brb架构以提高准确率
+        inference_mode = 'sub_brb' if self.use_sub_brb else 'er'
+        
         for i in range(n_test):
             # Convert sample to feature dict (支持X1-X22)
             features = self._array_to_dict(X_test[i])
             
-            # System-level inference
-            sys_result = system_level_infer(features, self.config)
+            # System-level inference - 使用sub_brb模式
+            sys_result = system_level_infer(features, self.config, mode=inference_mode)
             probs = sys_result.get('probabilities', {})
             
             # Map to probability array with better fallback handling
@@ -109,8 +114,8 @@ class OursAdapter(MethodAdapter):
             
             sys_pred[i] = np.argmax(sys_proba[i])
             
-            # Module-level inference (knowledge-driven gating with feature streaming)
-            mod_probs_dict = module_level_infer(features, probs)
+            # Module-level inference - 使用module_level_infer_with_activation以激活相关模块组
+            mod_probs_dict = module_level_infer_with_activation(features, sys_result, only_activate_relevant=True)
             
             # Convert to array (assume module IDs 1-21)
             for mod_id_str, prob in mod_probs_dict.items():
