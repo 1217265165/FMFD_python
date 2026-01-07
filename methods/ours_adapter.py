@@ -90,14 +90,15 @@ class OursAdapter(MethodAdapter):
             probs = sys_result.get('probabilities', {})
             
             # Map to probability array with better fallback handling
-            # Order: 正常(0), 幅度失准(1), 频率失准(2), 参考电平失准(3)
+            # The label encoding from prepare_dataset is sorted alphabetically:
+            # 0 = 参考电平失准, 1 = 幅度失准, 2 = 正常, 3 = 频率失准
             total_prob = sum(probs.values()) if probs else 0.0
             
             if total_prob > 0.01:  # Valid probabilities
-                sys_proba[i, 0] = probs.get('正常', 0.0)
-                sys_proba[i, 1] = probs.get('幅度失准', 0.0)
-                sys_proba[i, 2] = probs.get('频率失准', 0.0)
-                sys_proba[i, 3] = probs.get('参考电平失准', 0.0)
+                sys_proba[i, 0] = probs.get('参考电平失准', 0.0)  # class 0
+                sys_proba[i, 1] = probs.get('幅度失准', 0.0)      # class 1
+                sys_proba[i, 2] = probs.get('正常', 0.0)          # class 2
+                sys_proba[i, 3] = probs.get('频率失准', 0.0)      # class 3
                 
                 # Normalize if needed
                 row_sum = np.sum(sys_proba[i])
