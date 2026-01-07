@@ -297,7 +297,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None, 
             try:
                 corr = np.correlate(arr - np.mean(arr), baseline - np.mean(baseline), mode='same')
                 lag = np.argmax(corr) - len(arr) // 2
-            x16 = float(lag / len(arr))  # 归一化滞后
+                x16 = float(lag / len(arr))  # 归一化滞后
             except Exception:
                 x16 = 0.0
             
