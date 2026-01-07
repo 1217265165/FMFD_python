@@ -14,6 +14,7 @@ Core design principles:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple
 
@@ -21,6 +22,13 @@ from .aggregator import aggregate_system_results
 from .system_brb_amp import infer_amp_brb
 from .system_brb_freq import infer_freq_brb
 from .system_brb_ref import infer_ref_brb
+
+# Detection threshold constants for rule-based classification
+FREQ_EXTREME_RIPPLE_THRESHOLD = 1000  # Extreme ripple_var for freq_error
+FREQ_EXTREME_RANGE_THRESHOLD = 100     # Extreme amp_range for freq_error
+FREQ_MODERATE_X5_THRESHOLD = 60        # Moderate X5 for freq_error
+FREQ_MODERATE_RANGE_THRESHOLD = 55     # Moderate amp_range for freq_error
+NORMAL_INDICATOR_MIN_COUNT = 5         # Minimum indicators required for normal classification
 
 
 @dataclass
@@ -256,15 +264,15 @@ def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> 
     freq_score = 0.0
     
     # Extreme indicators (very strong signal)
-    if x2_raw > 1000:
+    if x2_raw > FREQ_EXTREME_RIPPLE_THRESHOLD:
         freq_score += 0.6
-    if amp_range > 100:
+    if amp_range > FREQ_EXTREME_RANGE_THRESHOLD:
         freq_score += 0.5
     
     # Moderate indicators
-    if x5_raw > 60:  # Several freq samples have X5 > 60
+    if x5_raw > FREQ_MODERATE_X5_THRESHOLD:  # Several freq samples have X5 > 60
         freq_score += 0.3
-    if amp_range > 55:  # Moderate elevated amp_range
+    if amp_range > FREQ_MODERATE_RANGE_THRESHOLD:  # Moderate elevated amp_range
         freq_score += 0.3
     if amp_std > 1.25:  # Some freq samples have slightly higher amp_std
         freq_score += 0.15
@@ -302,8 +310,8 @@ def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> 
     if 0.075 < switching_rate < 0.084:
         normal_indicators += 1
     
-    # 如果至少5个指标满足，认为是normal
-    is_normal = (normal_indicators >= 5)
+    # 如果至少达到指标数量阈值，认为是normal
+    is_normal = (normal_indicators >= NORMAL_INDICATOR_MIN_COUNT)
     if is_normal:
         normal_score = 0.8
     
@@ -341,7 +349,6 @@ def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> 
     activations = [r["activation"] for r in results]
     
     # 使用softmax计算概率
-    import math
     alpha = cfg.alpha
     exp_vals = [math.exp(alpha * a) for a in activations]
     total_exp = sum(exp_vals) + 1e-12

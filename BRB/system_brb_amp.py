@@ -4,14 +4,6 @@ from __future__ import annotations
 from typing import Dict, Tuple
 
 
-def _get_raw_feature(features: Dict[str, float], *names) -> float:
-    """Get raw feature value from dict."""
-    for name in names:
-        if name in features:
-            return features[name]
-    return 0.0
-
-
 def infer_amp_brb(scores: Dict[str, float], match: Dict[str, Tuple[float, float, float]], rule_weight: float) -> Dict[str, float]:
     """Infer amplitude-related anomaly activation.
 
