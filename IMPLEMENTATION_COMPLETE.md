@@ -188,15 +188,37 @@ FMFD_python/
 
 ## 🚀 使用指南
 
+### 生成均衡的仿真数据
+
+**新增功能**：支持生成类别均衡的样本，使混淆矩阵更美观
+
+```bash
+# 生成200个样本，4类故障各50个（均衡分布，默认）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 200 --balanced
+
+# 自定义样本数（建议4的倍数）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 400 --balanced
+
+# 使用原始随机概率（不均衡）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 200 --no-balanced
+```
+
+**样本分布对比**：
+- `--balanced`（默认）：amp_error=50, freq_error=50, ref_error=50, normal=50
+- `--no-balanced`：amp_error≈111, freq_error≈43, ref_error≈30, normal≈16（不均衡）
+
 ### 基础运行
 ```bash
 # 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. 生成特征（如果features_brb.csv不存在）
+# 2. 生成仿真数据（可选，如已有数据则跳过）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 200 --balanced
+
+# 3. 生成特征（如果features_brb.csv不存在）
 python pipelines/generate_features.py
 
-# 3. 运行对比
+# 4. 运行对比
 python pipelines/compare_methods.py
 ```
 

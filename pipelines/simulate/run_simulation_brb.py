@@ -179,28 +179,61 @@ def simulate_curve(
     band_ranges: List[Tuple[float, float]],
     traces: np.ndarray | None,
     rng: np.random.Generator,
+    target_class: str | None = None,
 ) -> Tuple[np.ndarray, str, str]:
+    """Generate simulated curve with optional target fault class.
+    
+    Args:
+        frequency: Frequency array
+        rrs: Reference response spectrum
+        band_ranges: Frequency band ranges
+        traces: Optional baseline traces
+        rng: Random number generator
+        target_class: If specified, force generation of this class
+                     Options: 'amp_error', 'freq_error', 'ref_error', 'normal'
+    
+    Returns:
+        (curve, label_sys, label_mod)
+    """
     curve = _pick_base_trace(rrs, traces, rng).copy()
-    kind_probs = {
-        "amp": 0.12,
-        "freq": 0.12,
-        "rl": 0.12,
-        "att": 0.08,
-        "preamp": 0.08,
-        "lpf": 0.06,
-        "mixer": 0.06,
-        "ytf": 0.06,
-        "clock": 0.06,
-        "lo": 0.06,
-        "adc": 0.06,
-        "vbw": 0.06,
-        "power": 0.06,
-        "normal": 0.1,
-    }
-    kinds = list(kind_probs.keys())
-    probs = np.array(list(kind_probs.values()), dtype=float)
-    probs = probs / probs.sum()
-    fault_kind = rng.choice(kinds, p=probs)
+    
+    # Define fault kinds grouped by system-level class
+    amp_faults = ["amp", "preamp", "lpf", "mixer", "ytf", "adc", "vbw", "power"]
+    freq_faults = ["freq", "clock", "lo"]
+    ref_faults = ["rl", "att"]
+    
+    # If target class specified, select from that class only
+    if target_class == "amp_error":
+        fault_kind = rng.choice(amp_faults)
+    elif target_class == "freq_error":
+        fault_kind = rng.choice(freq_faults)
+    elif target_class == "ref_error":
+        fault_kind = rng.choice(ref_faults)
+    elif target_class == "normal":
+        fault_kind = "normal"
+    else:
+        # Random selection with balanced probabilities
+        kind_probs = {
+            "amp": 0.12,
+            "freq": 0.12,
+            "rl": 0.12,
+            "att": 0.08,
+            "preamp": 0.08,
+            "lpf": 0.06,
+            "mixer": 0.06,
+            "ytf": 0.06,
+            "clock": 0.06,
+            "lo": 0.06,
+            "adc": 0.06,
+            "vbw": 0.06,
+            "power": 0.06,
+            "normal": 0.1,
+        }
+        kinds = list(kind_probs.keys())
+        probs = np.array(list(kind_probs.values()), dtype=float)
+        probs = probs / probs.sum()
+        fault_kind = rng.choice(kinds, p=probs)
+    
     label_sys = "normal"
     label_mod = "none"
 
@@ -272,48 +305,113 @@ def run_simulation(args: argparse.Namespace):
     sys_labels: List[str] = []
     mod_labels: List[str] = []
 
-    for idx in range(args.n_samples):
-        sample_id = f"sim_{idx:05d}"
-        curve, label_sys, label_mod = simulate_curve(freq, rrs, band_ranges, traces, rng)
-        curves.append(curve)
-        sys_labels.append(label_sys)
-        mod_labels.append(label_mod)
-
-        sys_feats = extract_system_features(curve)
-        dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
-        sys_result = system_level_infer(sys_feats)
-
-        module_feats = extract_module_features(curve, module_id=idx)
-        module_probs = module_level_infer({**module_feats, **sys_feats, **dyn_feats}, sys_result)
-
-        sys_probs = sys_result.get("probabilities", sys_result)
-        fault_class = "normal"
-        if label_sys == "幅度失准":
-            fault_class = "amp_error"
-        elif label_sys == "频率失准":
-            fault_class = "freq_error"
-        elif label_sys == "参考电平失准":
-            fault_class = "ref_error"
-
-        labels[sample_id] = {
-            "type": "normal" if fault_class == "normal" else "fault",
-            "system_fault_class": fault_class if fault_class != "normal" else None,
-            "module": None if fault_class == "normal" else label_mod,
+    # Generate balanced samples across 4 system classes
+    if args.balanced:
+        # Ensure n_samples is divisible by 4 for perfect balance
+        n_per_class = args.n_samples // 4
+        remaining = args.n_samples % 4
+        
+        class_counts = {
+            'amp_error': n_per_class + (1 if remaining > 0 else 0),
+            'freq_error': n_per_class + (1 if remaining > 1 else 0),
+            'ref_error': n_per_class + (1 if remaining > 2 else 0),
+            'normal': n_per_class,
         }
+        
+        print(f"Generating balanced dataset with {args.n_samples} samples:")
+        for cls, count in class_counts.items():
+            print(f"  {cls}: {count}")
+        
+        # Generate samples for each class
+        idx = 0
+        for target_class in ['amp_error', 'freq_error', 'ref_error', 'normal']:
+            for _ in range(class_counts[target_class]):
+                sample_id = f"sim_{idx:05d}"
+                curve, label_sys, label_mod = simulate_curve(freq, rrs, band_ranges, traces, rng, target_class=target_class)
+                curves.append(curve)
+                sys_labels.append(label_sys)
+                mod_labels.append(label_mod)
 
-        feature_rows.append({"sample_id": sample_id, "fault_kind": label_sys, "module_label": label_mod, **sys_feats, **dyn_feats})
-        system_rows.append({"sample_id": sample_id, "fault_kind": label_sys, **sys_probs})
-        module_rows.append({"sample_id": sample_id, "fault_kind": label_sys, **dict(zip(MODULE_LABELS, module_probs.values()))})
+                sys_feats = extract_system_features(curve)
+                dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
+                sys_result = system_level_infer(sys_feats)
 
-        brb_rows.append(
-            {
-                "sample_id": sample_id,
-                **sys_feats,
-                **dyn_feats,
-                **{f"sys_{k}": v for k, v in sys_probs.items()},
-                **{f"mod_{k}": v for k, v in module_probs.items()},
+                module_feats = extract_module_features(curve, module_id=idx)
+                module_probs = module_level_infer({**module_feats, **sys_feats, **dyn_feats}, sys_result)
+
+                sys_probs = sys_result.get("probabilities", sys_result)
+                fault_class = "normal"
+                if label_sys == "幅度失准":
+                    fault_class = "amp_error"
+                elif label_sys == "频率失准":
+                    fault_class = "freq_error"
+                elif label_sys == "参考电平失准":
+                    fault_class = "ref_error"
+
+                labels[sample_id] = {
+                    "type": "normal" if fault_class == "normal" else "fault",
+                    "system_fault_class": fault_class if fault_class != "normal" else None,
+                    "module": None if fault_class == "normal" else label_mod,
+                }
+
+                feature_rows.append({"sample_id": sample_id, "fault_kind": label_sys, "module_label": label_mod, **sys_feats, **dyn_feats})
+                system_rows.append({"sample_id": sample_id, "fault_kind": label_sys, **sys_probs})
+                module_rows.append({"sample_id": sample_id, "fault_kind": label_sys, **dict(zip(MODULE_LABELS, module_probs.values()))})
+
+                brb_rows.append(
+                    {
+                        "sample_id": sample_id,
+                        **sys_feats,
+                        **dyn_feats,
+                        **{f"sys_{k}": v for k, v in sys_probs.items()},
+                        **{f"mod_{k}": v for k, v in module_probs.items()},
+                    }
+                )
+                idx += 1
+    else:
+        # Original random generation
+        for idx in range(args.n_samples):
+            sample_id = f"sim_{idx:05d}"
+            curve, label_sys, label_mod = simulate_curve(freq, rrs, band_ranges, traces, rng)
+            curves.append(curve)
+            sys_labels.append(label_sys)
+            mod_labels.append(label_mod)
+
+            sys_feats = extract_system_features(curve)
+            dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
+            sys_result = system_level_infer(sys_feats)
+
+            module_feats = extract_module_features(curve, module_id=idx)
+            module_probs = module_level_infer({**module_feats, **sys_feats, **dyn_feats}, sys_result)
+
+            sys_probs = sys_result.get("probabilities", sys_result)
+            fault_class = "normal"
+            if label_sys == "幅度失准":
+                fault_class = "amp_error"
+            elif label_sys == "频率失准":
+                fault_class = "freq_error"
+            elif label_sys == "参考电平失准":
+                fault_class = "ref_error"
+
+            labels[sample_id] = {
+                "type": "normal" if fault_class == "normal" else "fault",
+                "system_fault_class": fault_class if fault_class != "normal" else None,
+                "module": None if fault_class == "normal" else label_mod,
             }
-        )
+
+            feature_rows.append({"sample_id": sample_id, "fault_kind": label_sys, "module_label": label_mod, **sys_feats, **dyn_feats})
+            system_rows.append({"sample_id": sample_id, "fault_kind": label_sys, **sys_probs})
+            module_rows.append({"sample_id": sample_id, "fault_kind": label_sys, **dict(zip(MODULE_LABELS, module_probs.values()))})
+
+            brb_rows.append(
+                {
+                    "sample_id": sample_id,
+                    **sys_feats,
+                    **dyn_feats,
+                    **{f"sys_{k}": v for k, v in sys_probs.items()},
+                    **{f"mod_{k}": v for k, v in module_probs.items()},
+                }
+            )
 
     _write_raw_csvs(out_dir, freq, curves, sys_labels, mod_labels)
     _write_csv(out_dir / "simulated_features.csv", feature_rows)
@@ -333,8 +431,13 @@ def build_argparser():
     parser.add_argument("--baseline_meta", default=BASELINE_META)
     parser.add_argument("--switch_json", default=SWITCH_JSON)
     parser.add_argument("--out_dir", default=f"{OUTPUT_DIR}/sim_spectrum")
-    parser.add_argument("--n_samples", type=int, default=200)
+    parser.add_argument("--n_samples", type=int, default=200, 
+                       help="总样本数（建议4的倍数以便完美平衡）")
     parser.add_argument("--seed", type=int, default=2024)
+    parser.add_argument("--balanced", action="store_true", default=True,
+                       help="生成各类故障均衡的样本（默认开启）")
+    parser.add_argument("--no-balanced", dest="balanced", action="store_false",
+                       help="使用原始随机概率生成样本")
     return parser
 
 

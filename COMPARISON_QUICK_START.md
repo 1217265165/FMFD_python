@@ -8,7 +8,26 @@
 pip install -r requirements.txt
 ```
 
-### 2. 生成特征（如果需要）
+### 2. 生成仿真数据（如果需要）
+
+**重新生成均衡的仿真样本**（推荐，混淆矩阵更美观）：
+
+```bash
+# 生成200个样本，4类故障各50个（均衡分布）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 200 --balanced
+
+# 自定义样本数（建议4的倍数以完美平衡）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 400 --balanced
+
+# 使用原始随机概率生成（不均衡）
+PYTHONPATH=. python pipelines/simulate/run_simulation_brb.py --n_samples 200 --no-balanced
+```
+
+**样本分布对比**：
+- `--balanced`（默认）：amp_error=50, freq_error=50, ref_error=50, normal=50
+- `--no-balanced`：amp_error≈111, freq_error≈43, ref_error≈30, normal≈16（随机）
+
+**生成特征**（从已有raw_curves生成）：
 
 ```bash
 python pipelines/generate_features.py
@@ -31,10 +50,10 @@ python -m pipelines.compare_methods
 
 结果保存在 `Output/sim_spectrum/`:
 - `comparison_table.csv` - 主对比表
-- `confusion_matrix_*.png` - 各方法混淆矩阵  
+- `confusion_matrix_*.png` - 各方法混淆矩阵（均衡数据下更美观）
 - `compare_barplot.png` - 规则数/参数数/推理时间对比图
 
-## 输出示例
+## 输出示例（均衡数据）
 
 ```csv
 method,sys_accuracy,sys_macro_f1,n_rules,n_params,n_features_used
