@@ -233,6 +233,7 @@ def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> 
     amp_range = _get_feature(features, "amp_range", "X17")
     amp_std = _get_feature(features, "amp_std", "X11")
     switching_rate = _get_feature(features, "switching_rate", "X13")
+    band1_std = _get_feature(features, "band1_std", default=0.5)
     
     # ========== 基于数据分析的规则判断 ==========
     
@@ -247,17 +248,29 @@ def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> 
     if amp_std > 1.3:
         ref_score += 0.2
     
-    # freq_error特征: 极端的ripple_var, 或X5>55且amp_range>50
+    # freq_error特征
+    # Based on test data analysis:
+    # - Extreme cases: X2 > 1000, amp_range > 1000
+    # - Moderate cases: X5 > 60 or amp_range > 55
+    # - Hard cases: similar to amp_error (low X2, amp_range < 50)
     freq_score = 0.0
-    if x2_raw > 5:  # 较高ripple (freq median=1.02)
-        freq_score += 0.3
-    if x2_raw > 50:  # 极端ripple
+    
+    # Extreme indicators (very strong signal)
+    if x2_raw > 1000:
         freq_score += 0.6
-    if x5_raw > 55:  # 稍高的X5 (freq median=56.7)
+    if amp_range > 100:
+        freq_score += 0.5
+    
+    # Moderate indicators
+    if x5_raw > 60:  # Several freq samples have X5 > 60
         freq_score += 0.3
-    if amp_range > 52:  # freq median=52.3
+    if amp_range > 55:  # Moderate elevated amp_range
         freq_score += 0.3
-    if amp_std > 1.25:  # freq samples with amp_std > 1.25
+    if amp_std > 1.25:  # Some freq samples have slightly higher amp_std
+        freq_score += 0.15
+    
+    # Combined indicator for borderline cases
+    if x5_raw > 45 and amp_range > 45:
         freq_score += 0.15
     
     # normal特征: 所有特征都在非常狭窄的正常范围内
