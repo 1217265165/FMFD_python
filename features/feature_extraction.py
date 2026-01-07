@@ -84,6 +84,29 @@ def robust_stats(arr):
     )
 
 
+def robust_z_score_normalization(values: Sequence[float]) -> np.ndarray:
+    """使用中位数和IQR进行z-score归一化（式 5）。
+
+    参数
+    ----
+    values : Sequence[float]
+        输入序列。
+
+    返回
+    ----
+    np.ndarray
+        归一化后的数组。
+    """
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0:
+        return arr
+    median = np.nanmedian(arr)
+    q75 = np.nanpercentile(arr, 75)
+    q25 = np.nanpercentile(arr, 25)
+    iqr = q75 - q25
+    return (arr - median) / (iqr + 1e-6)
+
+
 def linear_trend(x, y):
     try:
         x = np.array(x).reshape(-1, 1)
@@ -117,27 +140,37 @@ def parse_trace_cell(cell):
 # 面向 BRB 推理的核心特征提取接口（对应小论文式 (1)-(2)）
 # ---------------------------------------------------------------------------
 
-def extract_system_features(response_curve, baseline_curve=None, envelope=None) -> dict:
+def extract_system_features(response_curve, baseline_curve=None, envelope=None, phase_curve=None) -> dict:
     """提取系统级特征 X1~X22（扩展版，对应准确率提升需求）。
 
-    参数
-    ----
-    response_curve : array-like
-        频响幅度序列，默认为等间隔采样的 dB 值。
-    baseline_curve : array-like, optional
-        基线RRS曲线，用于计算包络相关特征(X11-X15)。
-    envelope : tuple of (upper, lower), optional
-        动态包络边界，用于计算包络违规特征。
+    特征定义（物理含义与公式编号见文档，序号对应小论文式 (1)）：
+    - X1: 整体幅度偏移（式 1-1）
+    - X2: 带内平坦度（式 1-2）
+    - X3: 高频段衰减斜率（式 1-3）
+    - X4: 频率标度非线性度（式 1-4）
+    - X5: 幅度缩放一致性（式 1-5）
+    - X6: 纹波（式 1-6）
+    - X7: 增益非线性（式 1-7）
+    - X8: 本振泄漏（式 1-8）
+    - X9: 调谐线性度残差（式 1-9）
+    - X10: 不同频段幅度一致性（式 1-10）
+    - X11: 增益失真度（式 1-11）
+    - X12: 电源噪声（式 1-12）
+    - X13: 信号幅度变化率（式 1-13）
+    - X14: 频段响应精度（式 1-14）
+    - X15: 相位偏差（式 1-15）
 
-    返回
-    ----
-    dict
-        包含 X1-X22 的特征字典：
-        - X1-X5: 原有系统级基础特征
-        - X6-X10: 模块级症状特征
-        - X11-X15: 基于包络/残差的通用特征
-        - X16-X18: 频率对齐/形变特征
-        - X19-X22: 幅度链路细粒度特征
+    同时输出动态包络特征（对应式 1-16~1-20）：
+    - X11_out_env_ratio: 包络越界占比
+    - X12_max_env_violation: 最大包络违规量
+    - X13_env_violation_energy: 包络违规能量
+    - X14_low_band_residual: 低频段残差均值
+    - X15_high_band_residual_std: 高频段残差标准差
+
+    频率对齐特征（式 1-21~1-23）：
+    - X16/X16_corr_shift_bins: 互相关滞后
+    - X17/X17_warp_scale: 频率缩放偏差
+    - X18/X18_warp_bias: 频率平移偏差
     """
 
     arr = np.asarray(response_curve, dtype=float)
@@ -193,7 +226,24 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             band_means.append(np.mean(arr[start:end]))
     x10 = float(np.std(band_means)) if len(band_means) > 1 else 0.0
 
-    # X11-X15: 基于包络/残差的通用特征
+    # X11-X15: 增强特征
+    gain_ref = np.abs(np.mean(arr)) + 1e-12
+    x11 = float(np.sqrt(np.mean(residual ** 2)) / gain_ref)  # 增益失真度
+    high_band = arr[int(len(arr) * 0.7) :] if len(arr) > 5 else arr
+    high_diff = np.diff(high_band) if high_band.size > 1 else np.array([0.0])
+    x12 = float(np.std(high_diff))  # 电源噪声代理
+    x13 = float(np.mean(np.abs(diff))) if diff.size else 0.0  # 幅度变化率
+    x14 = float(np.mean(np.abs(np.array(band_means) - np.mean(arr)))) if band_means else 0.0  # 频段响应精度
+    if phase_curve is not None:
+        phase = np.asarray(phase_curve, dtype=float)
+        if phase.shape == arr.shape:
+            x15 = float(np.std(phase - np.mean(phase)))
+        else:
+            x15 = 0.0
+    else:
+        x15 = 0.0
+
+    # X11_out_env_ratio - X15_high_band_residual_std: 基于包络/残差的通用特征
     if baseline_curve is not None:
         baseline = np.asarray(baseline_curve, dtype=float)
         if baseline.shape == arr.shape:
@@ -203,41 +253,41 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     else:
         envelope_residual = residual
 
-    # X11: 超出动态包络点占比
-    x11 = 0.0
+    # X11_out_env_ratio: 超出动态包络点占比
+    x11_out = 0.0
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
         if upper.shape == arr.shape and lower.shape == arr.shape:
             above = arr > upper
             below = arr < lower
-            x11 = float(np.mean(above | below))
+            x11_out = float(np.mean(above | below))
         else:
-            x11 = float(np.mean(np.abs(envelope_residual) > 3 * np.std(envelope_residual)))
+            x11_out = float(np.mean(np.abs(envelope_residual) > 3 * np.std(envelope_residual)))
     else:
-        x11 = float(np.mean(np.abs(envelope_residual) > 3 * np.std(envelope_residual)))
+        x11_out = float(np.mean(np.abs(envelope_residual) > 3 * np.std(envelope_residual)))
 
-    # X12: 最大包络违规幅度
+    # X12_max_env_violation: 最大包络违规幅度
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
         if upper.shape == arr.shape and lower.shape == arr.shape:
             above = np.maximum(arr - upper, 0)
             below = np.maximum(lower - arr, 0)
-            x12 = float(np.max(above + below))
+            x12_max = float(np.max(above + below))
         else:
-            x12 = float(np.max(np.abs(envelope_residual)))
+            x12_max = float(np.max(np.abs(envelope_residual)))
     else:
-        x12 = float(np.max(np.abs(envelope_residual)))
+        x12_max = float(np.max(np.abs(envelope_residual)))
 
-    # X13: 包络违规能量
-    x13 = float(np.sum(np.maximum(np.abs(envelope_residual) - 2 * np.std(envelope_residual), 0)))
+    # X13_env_violation_energy: 包络违规能量
+    x13_energy = float(np.sum(np.maximum(np.abs(envelope_residual) - 2 * np.std(envelope_residual), 0)))
 
-    # X14-X15: 低/中/高频段残差统计
+    # X14_low_band_residual/X15_high_band_residual_std: 低/高频段残差统计
     low_band = envelope_residual[: len(envelope_residual) // 3]
     mid_band = envelope_residual[len(envelope_residual) // 3 : 2 * len(envelope_residual) // 3]
     high_band = envelope_residual[2 * len(envelope_residual) // 3 :]
     
-    x14 = float(np.mean(np.abs(low_band))) if low_band.size > 0 else 0.0  # 低频段残差均值
-    x15 = float(np.std(high_band)) if high_band.size > 0 else 0.0  # 高频段残差方差
+    x14_low = float(np.mean(np.abs(low_band))) if low_band.size > 0 else 0.0  # 低频段残差均值
+    x15_high = float(np.std(high_band)) if high_band.size > 0 else 0.0  # 高频段残差方差
 
     # X16-X18: 频率对齐/形变特征
     if baseline_curve is not None:
@@ -247,7 +297,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             try:
                 corr = np.correlate(arr - np.mean(arr), baseline - np.mean(baseline), mode='same')
                 lag = np.argmax(corr) - len(arr) // 2
-                x16 = float(lag / len(arr))  # 归一化滞后
+            x16 = float(lag / len(arr))  # 归一化滞后
             except Exception:
                 x16 = 0.0
             
@@ -312,7 +362,15 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
         "X6": x6, "X7": x7, "X8": x8, "X9": x9, "X10": x10,
         "X11": x11, "X12": x12, "X13": x13, "X14": x14, "X15": x15,
+        "X11_out_env_ratio": x11_out,
+        "X12_max_env_violation": x12_max,
+        "X13_env_violation_energy": x13_energy,
+        "X14_low_band_residual": x14_low,
+        "X15_high_band_residual_std": x15_high,
         "X16": x16, "X17": x17, "X18": x18,
+        "X16_corr_shift_bins": x16,
+        "X17_warp_scale": x17,
+        "X18_warp_bias": x18,
         "X19": x19, "X20": x20, "X21": x21, "X22": x22,
     }
 
@@ -410,6 +468,13 @@ def extract_module_features(response_curve, module_id: int, sys_features: dict =
     dict
         包含 ``step_score``、``res_slope``、``ripple_var``、``df``、
         ``viol_rate``、``bias`` 等传统字段 + X6-X22中模块相关字段。
+
+    特征定义（物理含义与公式编号见文档，序号对应小论文式 (3)）：
+    - X6: 纹波（式 3-1）
+    - X7: 增益非线性（式 3-2）
+    - X8: 本振泄漏（式 3-3）
+    - X9: 调谐线性度残差（式 3-4）
+    - X10: 不同频段幅度一致性（式 3-5）
     """
 
     arr = np.asarray(response_curve, dtype=float)
@@ -425,8 +490,15 @@ def extract_module_features(response_curve, module_id: int, sys_features: dict =
         }
         # 添加扩展特征（如果系统特征可用则复用）
         if sys_features:
-            for k in ["X6", "X7", "X8", "X9", "X10", "X11", "X12", "X13", "X14", "X15", 
-                     "X16", "X17", "X18", "X19", "X20", "X21", "X22"]:
+            for k in [
+                "X6", "X7", "X8", "X9", "X10",
+                "X11", "X12", "X13", "X14", "X15",
+                "X11_out_env_ratio", "X12_max_env_violation", "X13_env_violation_energy",
+                "X14_low_band_residual", "X15_high_band_residual_std",
+                "X16", "X17", "X18",
+                "X16_corr_shift_bins", "X17_warp_scale", "X18_warp_bias",
+                "X19", "X20", "X21", "X22",
+            ]:
                 result[k] = sys_features.get(k, 0.0)
         return result
 
@@ -455,14 +527,22 @@ def extract_module_features(response_curve, module_id: int, sys_features: dict =
         result["X8"] = sys_features.get("X8", 0.0)  # 本振泄漏
         result["X9"] = sys_features.get("X9", 0.0)  # 调谐线性度
         result["X10"] = sys_features.get("X10", 0.0)  # 频段一致性
-        result["X11"] = sys_features.get("X11", viol_rate)  # 包络超出率
-        result["X12"] = sys_features.get("X12", 0.0)  # 最大违规
-        result["X13"] = sys_features.get("X13", 0.0)  # 违规能量
-        result["X14"] = sys_features.get("X14", 0.0)  # 低频残差
-        result["X15"] = sys_features.get("X15", 0.0)  # 高频残差
+        result["X11"] = sys_features.get("X11", 0.0)  # 增益失真度
+        result["X12"] = sys_features.get("X12", 0.0)  # 电源噪声
+        result["X13"] = sys_features.get("X13", 0.0)  # 幅度变化率
+        result["X14"] = sys_features.get("X14", 0.0)  # 频段响应精度
+        result["X15"] = sys_features.get("X15", 0.0)  # 相位偏差
+        result["X11_out_env_ratio"] = sys_features.get("X11_out_env_ratio", viol_rate)  # 包络超出率
+        result["X12_max_env_violation"] = sys_features.get("X12_max_env_violation", 0.0)  # 最大违规
+        result["X13_env_violation_energy"] = sys_features.get("X13_env_violation_energy", 0.0)  # 违规能量
+        result["X14_low_band_residual"] = sys_features.get("X14_low_band_residual", 0.0)  # 低频残差
+        result["X15_high_band_residual_std"] = sys_features.get("X15_high_band_residual_std", 0.0)  # 高频残差
         result["X16"] = sys_features.get("X16", 0.0)  # 频移
         result["X17"] = sys_features.get("X17", 0.0)  # 频率缩放
         result["X18"] = sys_features.get("X18", 0.0)  # 频率平移
+        result["X16_corr_shift_bins"] = sys_features.get("X16_corr_shift_bins", result["X16"])
+        result["X17_warp_scale"] = sys_features.get("X17_warp_scale", result["X17"])
+        result["X18_warp_bias"] = sys_features.get("X18_warp_bias", result["X18"])
         result["X19"] = sys_features.get("X19", 0.0)  # 低频斜率
         result["X20"] = sys_features.get("X20", 0.0)  # 峰度
         result["X21"] = sys_features.get("X21", 0.0)  # 峰值数
@@ -523,11 +603,11 @@ def extract_enhanced_features(df_raw: pd.DataFrame, prefix="run_enh",
 
     # 归一化/衍生
     for col in ["amplitude_error_dB", "frequency_error_Hz", "phase_noise_raw", "ref_level_raw"]:
-        global_mean = df[col].mean()
-        global_std = df[col].std() if not math.isnan(df[col].std()) else 1.0
-        df[f"{col}_z"] = (df[col] - global_mean) / (global_std + 1e-12)
+        raw = df[col].to_numpy()
+        df[f"{col}_z"] = robust_z_score_normalization(raw)
         df[f"{col}_abs"] = np.abs(df[col])
-        df[f"{col}_rel_pct"] = (df[col] - global_mean) / (global_mean + 1e-12) * 100.0
+        median_val = df[col].median()
+        df[f"{col}_rel_pct"] = (df[col] - median_val) / (median_val + 1e-12) * 100.0
 
     # 衰减-幅度斜率（若存在衰减设置）
     if "atten_dB" in df.columns and group_cols:

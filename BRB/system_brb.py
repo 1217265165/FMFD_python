@@ -14,9 +14,13 @@ Core design principles:
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple
+
+from .aggregator import aggregate_system_results
+from .system_brb_amp import infer_amp_brb
+from .system_brb_freq import infer_freq_brb
+from .system_brb_ref import infer_ref_brb
 
 
 @dataclass
@@ -37,7 +41,7 @@ class SystemBRBConfig:
     attribute_weights : Tuple[float, ...]
         Relative importance of features when computing the aggregated
         anomaly score. Extended to support X1-X22 (22 features).
-        Grouped as: [X1-X5基础, X6-X10模块, X11-X15包络, X16-X18频率, X19-X22幅度]
+        Grouped as: [X1-X5基础, X6-X10模块, X11-X15增强, X16-X18频率, X19-X22幅度]
     rule_weights : Tuple[float, float, float]
         Weights for amplitude/frequency/reference rule groups to mimic
         knowledge-driven rule compression.
@@ -45,15 +49,15 @@ class SystemBRBConfig:
         If True, use X1-X22; if False, use only X1-X5 (backward compatibility).
     """
 
-    alpha: float = 2.5  # 提高温度以增强区分度
+    alpha: float = 2.0  # Softmax温度，按实验固定
     overall_threshold: float = 0.15  # 降低阈值使正常识别更严格
-    max_prob_threshold: float = 0.28  # 降低阈值要求更高置信度
+    max_prob_threshold: float = 0.30  # 正常识别的max_prob阈值
     attribute_weights: Tuple[float, ...] = (
         # X1-X5: 基础特征权重
         0.20, 0.18, 0.15, 0.14, 0.13,
         # X6-X10: 模块症状特征权重（较低，主要供模块层使用）
         0.05, 0.05, 0.04, 0.04, 0.04,
-        # X11-X15: 包络/残差特征权重（系统层重要）
+        # X11-X15: 增强特征权重（系统层重要）
         0.12, 0.10, 0.08, 0.07, 0.07,
         # X16-X18: 频率特征权重（频率失准识别）
         0.10, 0.10, 0.10,
@@ -112,12 +116,19 @@ def _compute_attribute_scores(features: Dict[str, float]) -> Dict[str, float]:
     x9_raw = _get_feature(features, "X9", "tuning_linearity_residual")
     x10_raw = _get_feature(features, "X10", "band_amplitude_consistency")
 
-    # X11-X15: 包络/残差特征（系统层使用）
-    x11_raw = _get_feature(features, "X11", "env_overrun_rate", "viol_rate")
-    x12_raw = _get_feature(features, "X12", "env_overrun_max")
-    x13_raw = _get_feature(features, "X13", "env_violation_energy")
-    x14_raw = _get_feature(features, "X14", "band_residual_low")
-    x15_raw = _get_feature(features, "X15", "band_residual_high_std")
+    # X11-X15: 增强特征（系统层使用）
+    x11_raw = _get_feature(features, "X11", "gain_distortion")
+    x12_raw = _get_feature(features, "X12", "power_noise")
+    x13_raw = _get_feature(features, "X13", "amp_change_rate")
+    x14_raw = _get_feature(features, "X14", "band_response_accuracy")
+    x15_raw = _get_feature(features, "X15", "phase_deviation")
+
+    # 动态包络特征（额外使用于推理）
+    x11_env_raw = _get_feature(features, "X11_out_env_ratio", "env_overrun_rate", "viol_rate")
+    x12_env_raw = _get_feature(features, "X12_max_env_violation", "env_overrun_max")
+    x13_env_raw = _get_feature(features, "X13_env_violation_energy", "env_overrun_mean", "env_violation_energy")
+    x14_env_raw = _get_feature(features, "X14_low_band_residual", "band_residual_low")
+    x15_env_raw = _get_feature(features, "X15_high_band_residual_std", "band_residual_high_std")
 
     # X16-X18: 频率对齐/形变（频率失准识别）
     x16_raw = abs(_get_feature(features, "X16", "corr_shift_bins"))
@@ -143,12 +154,18 @@ def _compute_attribute_scores(features: Dict[str, float]) -> Dict[str, float]:
         "X8": _normalize_feature(x8_raw, 0.01, 1.0),
         "X9": _normalize_feature(x9_raw, 1e3, 1e5),
         "X10": _normalize_feature(x10_raw, 0.02, 0.5),
-        # 包络/残差特征归一化
-        "X11": _normalize_feature(x11_raw, 0.01, 0.3),
-        "X12": _normalize_feature(x12_raw, 0.5, 5.0),
-        "X13": _normalize_feature(x13_raw, 0.1, 10.0),
+        # 增强特征归一化
+        "X11": _normalize_feature(x11_raw, 0.01, 0.4),
+        "X12": _normalize_feature(x12_raw, 0.001, 0.2),
+        "X13": _normalize_feature(x13_raw, 0.001, 0.5),
         "X14": _normalize_feature(x14_raw, 0.01, 1.0),
         "X15": _normalize_feature(x15_raw, 0.01, 0.5),
+        # 动态包络特征归一化
+        "X11_out_env_ratio": _normalize_feature(x11_env_raw, 0.01, 0.3),
+        "X12_max_env_violation": _normalize_feature(x12_env_raw, 0.5, 5.0),
+        "X13_env_violation_energy": _normalize_feature(x13_env_raw, 0.1, 10.0),
+        "X14_low_band_residual": _normalize_feature(x14_env_raw, 0.01, 1.0),
+        "X15_high_band_residual_std": _normalize_feature(x15_env_raw, 0.01, 0.5),
         # 频率对齐特征归一化
         "X16": _normalize_feature(x16_raw, 0.001, 0.1),
         "X17": _normalize_feature(x17_raw, 0.001, 0.05),
@@ -186,69 +203,35 @@ def _system_level_infer_er(features: Dict[str, float], cfg: SystemBRBConfig) -> 
     scores = _compute_attribute_scores(features)
     match = _attribute_match_degrees(scores)
 
-    # Rule compression with extended features support
+    # 子BRB推理（支持扩展特征）
     if cfg.use_extended_features:
-        # 幅度失准：使用X1,X2,X5(基础)+X11,X12,X13(包络)+X19,X20,X21,X22(幅度细粒度)
-        amp_activation = cfg.rule_weights[0] * max(
-            match["X1"][2], match["X2"][2], match["X5"][2],
-            match["X11"][2], match["X12"][2], match["X13"][2],
-            match["X19"][2], match["X20"][2], match["X21"][2], match["X22"][2]
-        )
-        
-        # 频率失准：使用X4(基础)+X14,X15(残差)+X16,X17,X18(频率对齐)
-        freq_activation = cfg.rule_weights[1] * max(
-            match["X4"][2],
-            match["X14"][2], match["X15"][2],
-            match["X16"][2], match["X17"][2], match["X18"][2]
-        )
-        
-        # 参考电平失准：使用X1,X3,X5(基础)+X11,X12,X13(包络)
-        ref_activation = cfg.rule_weights[2] * max(
-            match["X1"][2], match["X3"][2], match["X5"][2],
-            match["X11"][2], match["X12"][2], match["X13"][0]  # 低包络违规
-        )
+        amp_result = infer_amp_brb(scores, match, cfg.rule_weights[0])
+        freq_result = infer_freq_brb(scores, match, cfg.rule_weights[1])
+        ref_result = infer_ref_brb(scores, match, cfg.rule_weights[2])
     else:
-        # 向后兼容：仅使用X1-X5
-        amp_activation = cfg.rule_weights[0] * max(match["X1"][2], match["X2"][2], match["X5"][2])
-        freq_activation = cfg.rule_weights[1] * match["X4"][2]
-        ref_activation = cfg.rule_weights[2] * max(match["X2"][0], match["X3"][2], match["X5"][0])
+        amp_result = {
+            "label": "幅度失准",
+            "activation": cfg.rule_weights[0] * max(match["X1"][2], match["X2"][2], match["X5"][2]),
+        }
+        freq_result = {
+            "label": "频率失准",
+            "activation": cfg.rule_weights[1] * match["X4"][2],
+        }
+        ref_result = {
+            "label": "参考电平失准",
+            "activation": cfg.rule_weights[2] * max(match["X2"][0], match["X3"][2], match["X5"][0]),
+        }
 
     overall_score = _aggregate_score(scores, cfg.attribute_weights, cfg.use_extended_features)
-    activations = [amp_activation, freq_activation, ref_activation]
-
-    es = [math.exp(cfg.alpha * a) for a in activations]
-    s = sum(es) + 1e-12
-    fault_probs = {"幅度失准": es[0] / s, "频率失准": es[1] / s, "参考电平失准": es[2] / s}
-
-    # 正常状态检测：整体异常度低或最高概率低于阈值都视为正常
-    normal_weight = 0.0
-    if overall_score < cfg.overall_threshold:
-        normal_weight = 1.0 - overall_score / (cfg.overall_threshold + 1e-12)
-
-    max_fault_prob = max(fault_probs.values())
-    if max_fault_prob < cfg.max_prob_threshold:
-        normal_weight = max(normal_weight, cfg.max_prob_threshold - max_fault_prob)
-
-    fault_scale = max(0.0, 1.0 - normal_weight)
-    scaled_faults = {k: v * fault_scale for k, v in fault_probs.items()}
-
-    total = normal_weight + sum(scaled_faults.values())
-    if total <= 1e-12:
-        normalized = {"正常": 1.0}
-    else:
-        normalized = {"正常": normal_weight / total}
-        normalized.update({k: v / total for k, v in scaled_faults.items()})
-
-    max_prob = max(normalized.values())
-    is_normal = normalized.get("正常", 0.0) >= 0.5 or max_fault_prob < cfg.max_prob_threshold
-
-    return {
-        "probabilities": normalized,
-        "max_prob": max_prob,
-        "is_normal": is_normal,
-        "uncertainty": 1 - max_prob,
-        "overall_score": overall_score,
-    }
+    aggregated = aggregate_system_results(
+        [amp_result, freq_result, ref_result],
+        alpha=cfg.alpha,
+        overall_score=overall_score,
+        overall_threshold=cfg.overall_threshold,
+        normal_prob_threshold=cfg.max_prob_threshold,
+    )
+    aggregated["overall_score"] = overall_score
+    return aggregated
 
 def system_level_infer_er(features: Dict[str, float], config: SystemBRBConfig | None = None) -> Dict[str, float]:
     """显式 ER 版本入口，保持向后兼容。"""
@@ -304,4 +287,3 @@ def system_level_infer(
     if selected == "simple":
         return system_level_infer_simple(features, config=config)
     raise ValueError(f"Unsupported mode '{mode}', expected 'er' or 'simple'.")
-

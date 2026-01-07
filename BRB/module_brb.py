@@ -11,6 +11,7 @@ import statistics
 from typing import Dict, Iterable, List
 
 from .utils import BRBRule, SimpleBRB, normalize_feature
+from features.feature_router import feature_router
 
 
 MODULE_LABELS: List[str] = [
@@ -73,7 +74,7 @@ def _aggregate_module_score(features: Dict[str, float], anomaly_type: str = None
     md_slope = normalize_feature(abs(features.get("res_slope", 0.0)), 1e-12, 1e-10)
     md_ripple = normalize_feature(features.get("ripple_var", features.get("X6", 0.0)), 0.001, 0.02)
     md_df = normalize_feature(abs(features.get("df", 0.0)), 1e6, 5e7)
-    md_viol = normalize_feature(features.get("viol_rate", features.get("X11", 0.0)), 0.02, 0.2)
+    md_viol = normalize_feature(features.get("viol_rate", features.get("X11_out_env_ratio", 0.0)), 0.02, 0.2)
     md_gain_bias = max(
         normalize_feature(abs(features.get("bias", 0.0)), 0.1, 1.0),
         normalize_feature(abs(features.get("gain", 1.0) - 1.0), 0.02, 0.2),
@@ -86,9 +87,12 @@ def _aggregate_module_score(features: Dict[str, float], anomaly_type: str = None
             md_step,
             md_ripple,
             md_gain_bias,
-            normalize_feature(features.get("X11", 0.0), 0.01, 0.3),  # 包络超出率
-            normalize_feature(features.get("X12", 0.0), 0.5, 5.0),  # 最大违规
-            normalize_feature(features.get("X13", 0.0), 0.1, 10.0),  # 违规能量
+            normalize_feature(features.get("X11", 0.0), 0.01, 0.4),  # 增益失真度
+            normalize_feature(features.get("X12", 0.0), 0.001, 0.2),  # 电源噪声
+            normalize_feature(features.get("X13", 0.0), 0.001, 0.5),  # 幅度变化率
+            normalize_feature(features.get("X11_out_env_ratio", 0.0), 0.01, 0.3),  # 包络超出率
+            normalize_feature(features.get("X12_max_env_violation", 0.0), 0.5, 5.0),  # 最大违规
+            normalize_feature(features.get("X13_env_violation_energy", 0.0), 0.1, 10.0),  # 违规能量
             normalize_feature(abs(features.get("X19", 0.0)), 1e-12, 1e-10),  # 低频斜率
             normalize_feature(abs(features.get("X20", 0.0)), 0.5, 5.0),  # 峰度
             normalize_feature(features.get("X21", 0.0), 1, 20),  # 峰值数
@@ -100,8 +104,10 @@ def _aggregate_module_score(features: Dict[str, float], anomaly_type: str = None
         # 频率模块：使用频率相关特征X4,X14-X15,X16-X18
         freq_features = [
             md_df,
-            normalize_feature(features.get("X14", 0.0), 0.01, 1.0),  # 低频残差
-            normalize_feature(features.get("X15", 0.0), 0.01, 0.5),  # 高频残差
+            normalize_feature(features.get("X14", 0.0), 0.01, 1.0),  # 频段响应精度
+            normalize_feature(features.get("X15", 0.0), 0.01, 0.5),  # 相位偏差
+            normalize_feature(features.get("X14_low_band_residual", 0.0), 0.01, 1.0),  # 低频残差
+            normalize_feature(features.get("X15_high_band_residual_std", 0.0), 0.01, 0.5),  # 高频残差
             normalize_feature(abs(features.get("X16", 0.0)), 0.001, 0.1),  # 频移
             normalize_feature(abs(features.get("X17", 0.0)), 0.001, 0.05),  # 缩放
             normalize_feature(abs(features.get("X18", 0.0)), 0.001, 0.05),  # 平移
@@ -113,9 +119,11 @@ def _aggregate_module_score(features: Dict[str, float], anomaly_type: str = None
         ref_features = [
             md_slope,
             md_gain_bias,
-            normalize_feature(features.get("X11", 0.0), 0.01, 0.3),  # 包络超出率
-            normalize_feature(features.get("X12", 0.0), 0.5, 5.0),  # 最大违规
-            normalize_feature(features.get("X13", 0.0), 0.1, 10.0),  # 违规能量
+            normalize_feature(features.get("X11", 0.0), 0.01, 0.4),  # 增益失真度
+            normalize_feature(features.get("X12", 0.0), 0.001, 0.2),  # 电源噪声
+            normalize_feature(features.get("X11_out_env_ratio", 0.0), 0.01, 0.3),  # 包络超出率
+            normalize_feature(features.get("X12_max_env_violation", 0.0), 0.5, 5.0),  # 最大违规
+            normalize_feature(features.get("X13_env_violation_energy", 0.0), 0.1, 10.0),  # 违规能量
         ]
         return _mean(ref_features)
     
@@ -158,7 +166,9 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
         anomaly_type = "参考电平失准"
 
     # 使用特征分流计算模块层分数
-    md = _aggregate_module_score(features, anomaly_type)
+    fault_type_map = {"幅度失准": "amp", "频率失准": "freq", "参考电平失准": "ref"}
+    routed_features = feature_router(features, fault_type_map.get(anomaly_type, "amp"))
+    md = _aggregate_module_score(routed_features, anomaly_type)
 
     rules = [
         BRBRule(

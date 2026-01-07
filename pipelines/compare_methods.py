@@ -660,6 +660,127 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
     return results
 
 
+def compare_methods(
+    data_dir: str = "Output/sim_spectrum",
+    output_dir: str = "Output/sim_spectrum",
+    seed: int = 42,
+    train_size: float = 0.6,
+    val_size: float = 0.2,
+    small_sample: bool = False,
+) -> List[Dict]:
+    """对比实验，比较本方法和其他BRB变体。"""
+    set_global_seed(seed)
+    data_path = Path(data_dir) if Path(data_dir).is_absolute() else ROOT / data_dir
+    out_path = Path(output_dir) if Path(output_dir).is_absolute() else ROOT / output_dir
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    X, y_sys, y_mod, feature_names, sample_ids = prepare_dataset(data_path, use_pool_features=True)
+    n_sys_classes = len(np.unique(y_sys))
+    X_train, X_val, X_test, y_sys_train, y_sys_val, y_sys_test, train_idx, val_idx, test_idx = \
+        stratified_split(X, y_sys, train_size, val_size, seed)
+    y_mod_train = y_mod[train_idx] if y_mod is not None else None
+    y_mod_test = y_mod[test_idx] if y_mod is not None else None
+
+    from methods.ours_adapter import OursAdapter
+    from methods.hcf_adapter import HCFAdapter
+    from methods.aifd_adapter import AIFDAdapter
+    from methods.brb_p_adapter import BRBPAdapter
+    from methods.brb_mu_adapter import BRBMUAdapter
+    from methods.dbrb_adapter import DBRBAdapter
+    from methods.a_ibrb_adapter import AIBRBAdapter
+    from methods.fast_brb_adapter import FastBRBAdapter
+
+    methods = [
+        OursAdapter(),
+        HCFAdapter(),
+        AIFDAdapter(),
+        BRBPAdapter(),
+        BRBMUAdapter(),
+        DBRBAdapter(),
+        AIBRBAdapter(),
+        FastBRBAdapter(),
+    ]
+
+    all_results = []
+    for method in methods:
+        try:
+            results = evaluate_method(
+                method, X_train, y_sys_train, y_mod_train,
+                X_test, y_sys_test, y_mod_test,
+                feature_names, n_sys_classes
+            )
+            all_results.append(results)
+        except Exception as e:
+            print(f"Error evaluating {method.name}: {e}")
+
+    comparison_path = out_path / "comparison_table.csv"
+    with open(comparison_path, 'w', newline='', encoding='utf-8') as f:
+        fieldnames = ['method', 'sys_accuracy', 'sys_macro_f1', 'mod_top1_accuracy',
+                      'fit_time_sec', 'infer_ms_per_sample',
+                      'n_rules', 'n_params', 'n_features_used']
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in all_results:
+            row = {k: result[k] for k in fieldnames if k in result}
+            writer.writerow(row)
+    print(f"Saved comparison table to: {comparison_path}")
+
+    sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+    for result in all_results:
+        cm_path = out_path / f"confusion_matrix_{result['method']}.png"
+        plot_confusion_matrix(
+            result['confusion_matrix'],
+            sys_label_names,
+            cm_path,
+            f"System-Level Confusion Matrix: {result['method']}"
+        )
+
+    plot_comparison_bar(all_results, out_path)
+    plot_comprehensive_comparison(all_results, out_path)
+
+    if small_sample:
+        train_sizes = [5, 10, 20, 30]
+        n_repeats = 5
+        small_sample_results = []
+        for train_size_item in train_sizes:
+            if train_size_item > len(X_train):
+                continue
+            for method in methods:
+                method_accs = []
+                for rep in range(n_repeats):
+                    rep_seed = seed + rep
+                    rng = np.random.RandomState(rep_seed)
+                    indices = rng.choice(len(X_train), size=train_size_item, replace=False)
+                    X_small = X_train[indices]
+                    y_small = y_sys_train[indices]
+                    try:
+                        method_copy = method.__class__()
+                        method_copy.fit(X_small, y_small, None, {'feature_names': feature_names})
+                        pred = method_copy.predict(X_test, {'feature_names': feature_names})
+                        acc = calculate_accuracy(y_sys_test, pred['system_pred'])
+                        method_accs.append(acc)
+                    except Exception as e:
+                        print(f"Error in small-sample experiment for {method.name}: {e}")
+                        method_accs.append(0.0)
+                mean_acc = np.mean(method_accs)
+                std_acc = np.std(method_accs)
+                small_sample_results.append({
+                    'method': method.name,
+                    'train_size': train_size_item,
+                    'mean_acc': mean_acc,
+                    'std_acc': std_acc,
+                })
+        small_sample_path = out_path / "small_sample_curve.csv"
+        with open(small_sample_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['method', 'train_size', 'mean_acc', 'std_acc']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(small_sample_results)
+        plot_small_sample_curve(small_sample_results, out_path)
+
+    return all_results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comprehensive method comparison")
     parser.add_argument('--data_dir', default='Output/sim_spectrum', 
