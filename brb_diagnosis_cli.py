@@ -65,11 +65,15 @@ def main():
                         help='输出JSON文件路径')
     parser.add_argument('--baseline', '-b', default=None,
                         help='基线数据目录 (可选，默认使用程序内置路径)')
-    parser.add_argument('--mode', '-m', default='er',
-                        choices=['er', 'simple'],
-                        help='BRB推理模式: er(默认,增强版) 或 simple(简化版)')
+    parser.add_argument('--mode', '-m', default='sub_brb',
+                        choices=['er', 'simple', 'sub_brb'],
+                        help='BRB推理模式: sub_brb(推荐,子BRB架构), er(增强版), simple(简化版)')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='显示详细输出')
+    parser.add_argument('--run_name', default=None,
+                        help='运行名称 (用于组织输出目录，默认使用时间戳)')
+    parser.add_argument('--out_dir', default='Output',
+                        help='输出目录根路径 (默认: Output)')
     
     args = parser.parse_args()
     
@@ -151,6 +155,12 @@ def main():
             print(f"[INFO] 模块级诊断完成 ({len(mod_probs)}个模块)", file=sys.stderr)
         
         # 5. 构造输出结果
+        # 计算证据字段
+        sys_probs_dict = sys_probs.get('probabilities', sys_probs) if isinstance(sys_probs, dict) else sys_probs
+        is_normal = sys_probs.get('is_normal', False) if isinstance(sys_probs, dict) else False
+        max_prob = max(sys_probs_dict.values()) if sys_probs_dict else 0.0
+        predicted_class = max(sys_probs_dict, key=sys_probs_dict.get) if sys_probs_dict else "未知"
+        
         result = {
             "status": "success",
             "input_file": str(input_path.absolute()),
@@ -159,10 +169,23 @@ def main():
                 "min": float(freq_raw.min()),
                 "max": float(freq_raw.max())
             },
-            "features": {k: float(v) for k, v in features.items()},
-            "system_diagnosis": {k: float(v) for k, v in sys_probs.items()},
+            "features": {k: float(v) if isinstance(v, (int, float)) else v for k, v in features.items()},
+            "system_diagnosis": {
+                "probabilities": {k: float(v) for k, v in sys_probs_dict.items()},
+                "predicted_class": predicted_class,
+                "max_prob": float(max_prob),
+                "is_normal": is_normal,
+            },
             "module_diagnosis": {k: float(v) for k, v in mod_probs.items()},
-            "mode": args.mode
+            "evidence": {
+                "envelope_violation": features.get('X11', 0) > 0.1,
+                "violation_max_db": float(features.get('X12', 0)),
+                "violation_energy": float(features.get('X13', 0)),
+            },
+            "config": {
+                "mode": args.mode,
+                "run_name": args.run_name,
+            }
         }
         
         # 6. 保存结果
@@ -174,13 +197,24 @@ def main():
         
         if args.verbose:
             print(f"[INFO] 结果已保存到: {output_path}", file=sys.stderr)
-            print("\n[系统级诊断结果]", file=sys.stderr)
-            for k, v in sys_probs.items():
-                print(f"  {k}: {v:.4f}", file=sys.stderr)
-            print("\n[模块级诊断TOP5]", file=sys.stderr)
+            print("\n" + "="*50, file=sys.stderr)
+            print("[系统级诊断结果]", file=sys.stderr)
+            print("="*50, file=sys.stderr)
+            print(f"  预测类别: {predicted_class}", file=sys.stderr)
+            print(f"  最大概率: {max_prob:.4f}", file=sys.stderr)
+            print(f"  是否正常: {is_normal}", file=sys.stderr)
+            print("\n  概率分布:", file=sys.stderr)
+            for k, v in sys_probs_dict.items():
+                print(f"    {k}: {v:.4f}", file=sys.stderr)
+            print("\n" + "="*50, file=sys.stderr)
+            print("[模块级诊断TOP5]", file=sys.stderr)
+            print("="*50, file=sys.stderr)
             sorted_mods = sorted(mod_probs.items(), key=lambda x: x[1], reverse=True)[:5]
-            for k, v in sorted_mods:
-                print(f"  {k}: {v:.4f}", file=sys.stderr)
+            for i, (k, v) in enumerate(sorted_mods, 1):
+                print(f"  {i}. {k}: {v:.4f}", file=sys.stderr)
+            print("\n" + "="*50, file=sys.stderr)
+            print(f"[输出文件] {output_path}", file=sys.stderr)
+            print("="*50, file=sys.stderr)
         
         print(json.dumps(result, ensure_ascii=False))
         return 0
