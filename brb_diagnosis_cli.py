@@ -114,25 +114,56 @@ def main():
         # 2. 加载基线数据
         if args.baseline:
             baseline_dir = Path(args.baseline)
-            baseline_artifacts = baseline_dir / "baseline_artifacts.npz"
-            baseline_meta = baseline_dir / "baseline_meta.json"
+            if baseline_dir.is_file() and baseline_dir.suffix == '.npz':
+                # 用户直接提供了npz文件路径
+                baseline_artifacts = baseline_dir
+                baseline_meta = baseline_dir.parent / "baseline_meta.json"
+            else:
+                # 用户提供了目录路径
+                baseline_artifacts = baseline_dir / "baseline_artifacts.npz"
+                baseline_meta = baseline_dir / "baseline_meta.json"
         else:
-            # 使用默认路径
-            baseline_artifacts = fmfd_root / BASELINE_ARTIFACTS
-            baseline_meta = fmfd_root / BASELINE_META
+            # 使用默认路径 - 尝试多个可能的位置
+            possible_paths = [
+                fmfd_root / BASELINE_ARTIFACTS,           # 相对于CLI脚本
+                fmfd_root / "Output" / "baseline_artifacts.npz",  # Output子目录
+                Path("Output") / "baseline_artifacts.npz",  # 当前工作目录下
+                Path.cwd() / "Output" / "baseline_artifacts.npz",  # 当前工作目录绝对路径
+            ]
+            baseline_artifacts = None
+            for p in possible_paths:
+                if p.exists():
+                    baseline_artifacts = p
+                    baseline_meta = p.parent / "baseline_meta.json"
+                    break
+            
+            if baseline_artifacts is None:
+                baseline_artifacts = fmfd_root / BASELINE_ARTIFACTS
+                baseline_meta = fmfd_root / BASELINE_META
         
         if not baseline_artifacts.exists():
             print(f"[错误] 基线数据文件不存在: {baseline_artifacts}", file=sys.stderr)
+            print(f"[提示] 请先运行基线构建: python pipelines/run_baseline.py", file=sys.stderr)
+            print(f"[提示] 或使用 --baseline 参数指定基线文件路径", file=sys.stderr)
+            print(f"[提示] 示例: --baseline ./Output 或 --baseline ./Output/baseline_artifacts.npz", file=sys.stderr)
             sys.exit(1)
+        
+        if args.verbose:
+            print(f"[INFO] 使用基线文件: {baseline_artifacts}", file=sys.stderr)
         
         art = np.load(baseline_artifacts)
         frequency = art["frequency"]
         rrs = art["rrs"]
         bounds = (art["upper"], art["lower"])
         
-        with open(baseline_meta, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-        band_ranges = meta.get("band_ranges", BAND_RANGES)
+        # 加载基线元数据（如果不存在则使用默认值）
+        band_ranges = BAND_RANGES
+        if baseline_meta.exists():
+            with open(baseline_meta, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            band_ranges = meta.get("band_ranges", BAND_RANGES)
+        elif args.verbose:
+            print(f"[WARN] 基线元数据文件不存在: {baseline_meta}, 使用默认频段配置", file=sys.stderr)
         
         if args.verbose:
             print(f"[INFO] 基线频率点数: {len(frequency)}", file=sys.stderr)
