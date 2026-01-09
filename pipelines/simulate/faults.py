@@ -55,22 +55,35 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     """
     参考电平失准：在切换点施加错误步进；高幅度区压缩。
     step_biases/compression_coef 未给出时按 σ 自适应随机生成。
+    
+    单频段模式（len(band_ranges) <= 1）：只施加压缩效果，不施加步进。
     """
     rng = rng or np.random.default_rng()
     out = amp.copy()
     _, sig_med = _estimate_sigma(amp)
-    if step_biases is None:
-        step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
-                       for _ in range(len(band_ranges) - 1)]
-    for i in range(len(band_ranges) - 1):
-        end_f = band_ranges[i][1]
-        m_end = np.argmin(np.abs(frequency - end_f))
-        out[m_end:] += step_biases[i]
+    
+    # 只有多频段时才施加步进
+    if len(band_ranges) > 1:
+        if step_biases is None:
+            step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
+                           for _ in range(len(band_ranges) - 1)]
+        for i in range(len(band_ranges) - 1):
+            end_f = band_ranges[i][1]
+            m_end = np.argmin(np.abs(frequency - end_f))
+            out[m_end:] += step_biases[i]
+    
+    # 施加压缩效果（适用于单频段和多频段）
     if compression_coef is None:
         compression_coef = abs(rng.normal(0.15, 0.05))
     thr = np.percentile(out, 100 * compression_start_percent)
     mask = out >= thr
     out[mask] = out[mask] - compression_coef * (out[mask] - thr)
+    
+    # 单频段额外施加整体偏移（模拟参考电平漂移）
+    if len(band_ranges) <= 1:
+        offset = rng.normal(0.3 * sig_med, 0.1 * max(0.1, sig_med))
+        out += offset
+    
     return out
 
 # -------------------------
@@ -127,11 +140,21 @@ def inject_clock_drift(frequency, amp, delta_f=None, rng=None):
     return inject_freq_miscal(frequency, amp, delta_f=delta_f, rng=rng)
 
 def inject_lo_path_error(frequency, amp, band_ranges, band_shifts=None, rng=None):
-    """本振/路径相关：分段 Δf，分频段重采样。"""
+    """本振/路径相关：分段 Δf，分频段重采样。
+    
+    单频段模式：对整个频段施加单个频率偏移。
+    """
     rng = rng or np.random.default_rng()
     out = amp.copy()
+    bw = frequency[-1] - frequency[0]
+    
+    # 单频段模式：直接施加全局频偏
+    if len(band_ranges) <= 1:
+        delta_f = rng.uniform(-0.02 * bw, 0.02 * bw)
+        return inject_freq_miscal(frequency, amp, delta_f=delta_f, rng=rng)
+    
+    # 多频段模式：分段施加
     if band_shifts is None:
-        bw = frequency[-1] - frequency[0]
         band_shifts = [rng.uniform(-0.02 * bw, 0.02 * bw) for _ in band_ranges]
     for (start, end), df in zip(band_ranges, band_shifts):
         mask = (frequency >= start) & (frequency <= end)
