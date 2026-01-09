@@ -25,18 +25,15 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Project specific
+# Project specific - Output files (generated, not to be committed)
 *.npz
 Output/*.zip
-Output/sim_spectrum/*.csv
-Output/sim_spectrum/*.png
-Output/sim_spectrum/*.txt
-Output/sim_spectrum/*.json
-!Output/sim_spectrum/labels.json
-!Output/sim_spectrum/statistics.json
+Output/*.png
+Output/*.csv
+Output/*.json
+Output/sim_spectrum/
 Output/comparison_results/
-!Output/sim_spectrum/.gitkeep
-!Output/comparison_results/.gitkeep
+!Output/.gitkeep
 
 # Temporary files
 *.tmp
