@@ -86,7 +86,7 @@ def main():
         from FMFD.baseline.config import BASELINE_ARTIFACTS, BASELINE_META, BAND_RANGES
         from FMFD.features.extract import extract_system_features
         from FMFD.BRB.system_brb import system_level_infer
-        from FMFD.BRB.module_brb import module_level_infer
+        from FMFD.BRB.module_brb import module_level_infer, module_level_infer_with_evidence_routing
         
         if args.verbose:
             print(f"[INFO] FMFD模块导入成功", file=sys.stderr)
@@ -179,11 +179,33 @@ def main():
         
         # 4. 执行BRB推理
         sys_probs = system_level_infer(features, mode=args.mode)
-        mod_probs = module_level_infer(features, sys_probs)
+        
+        # 构建证据字典
+        evidence = {
+            'jump_flag': features.get('jump_flag', False) if isinstance(features.get('jump_flag'), bool) else float(features.get('X7', 0)) > 0.5,
+            'jump_type': features.get('jump_type', 'step'),
+            'jump_max_score': float(features.get('X7', 0)),  # 使用增益非线性作为突变得分
+            'max_env_violation_db': float(features.get('X12', 0)),
+            'env_violation_energy': float(features.get('X13', 0)),
+            'env_violation_type': 'upper' if features.get('X12', 0) > 0 else 'lower',
+        }
+        
+        # 使用证据路由进行模块级推理
+        module_result = module_level_infer_with_evidence_routing(
+            features, 
+            sys_probs, 
+            evidence=evidence,
+            exclude_preamp=True  # 前放OFF模式
+        )
+        mod_probs = module_result['module_probs']
+        routing_result = module_result.get('routing_result')
+        routing_explanation = module_result.get('routing_explanation', '')
         
         if args.verbose:
             print(f"[INFO] 系统级诊断完成", file=sys.stderr)
             print(f"[INFO] 模块级诊断完成 ({len(mod_probs)}个模块)", file=sys.stderr)
+            if routing_result:
+                print(f"[INFO] 证据路由: {len(routing_result.get('candidate_modules', []))}个候选模块", file=sys.stderr)
         
         # 5. 构造输出结果
         # 计算证据字段
@@ -213,9 +235,16 @@ def main():
                 "violation_max_db": float(features.get('X12', 0)),
                 "violation_energy": float(features.get('X13', 0)),
             },
+            "evidence_routing": {
+                "enabled": routing_result is not None,
+                "candidate_modules": routing_result.get('candidate_module_names', []) if routing_result else [],
+                "candidate_count": len(routing_result.get('candidate_modules', [])) if routing_result else 0,
+                "explanation": routing_explanation,
+            },
             "config": {
                 "mode": args.mode,
                 "run_name": args.run_name,
+                "exclude_preamp": True,  # 前放OFF模式
             }
         }
         
@@ -237,6 +266,16 @@ def main():
             print("\n  概率分布:", file=sys.stderr)
             for k, v in sys_probs_dict.items():
                 print(f"    {k}: {v:.4f}", file=sys.stderr)
+            
+            # 显示证据路由信息
+            if routing_result:
+                print("\n" + "="*50, file=sys.stderr)
+                print("[证据路由结果]", file=sys.stderr)
+                print("="*50, file=sys.stderr)
+                print(f"  候选模块数: {len(routing_result.get('candidate_modules', []))}", file=sys.stderr)
+                print(f"  激活的模块组: {', '.join(routing_result.get('candidate_groups', []))}", file=sys.stderr)
+                print(f"  候选模块: {', '.join(routing_result.get('candidate_module_names', [])[:5])}...", file=sys.stderr)
+            
             print("\n" + "="*50, file=sys.stderr)
             print("[模块级诊断TOP5]", file=sys.stderr)
             print("="*50, file=sys.stderr)
