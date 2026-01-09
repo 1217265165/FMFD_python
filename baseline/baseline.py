@@ -359,6 +359,7 @@ def auto_widen_envelope(
     target_coverage: float = 0.95,
     min_coverage: float = 0.90,
     max_iterations: int = 5,
+    k_step: float = 0.5,
 ) -> tuple:
     """
     自动增宽包络，直到覆盖率达到目标。
@@ -374,6 +375,7 @@ def auto_widen_envelope(
         target_coverage: 目标平均覆盖率
         min_coverage: 最小单曲线覆盖率
         max_iterations: 最大迭代次数
+        k_step: 每次迭代增加的k步长
         
     Returns:
         (lower, upper, coverage_stats, k_final): 增宽后的包络、覆盖率统计、最终k值
@@ -395,9 +397,9 @@ def auto_widen_envelope(
         
         if iteration < max_iterations:
             # 增加padding
-            k += 0.5
-            lower = lower - 0.5 * mad
-            upper = upper + 0.5 * mad
+            k += k_step
+            lower = lower - k_step * mad
+            upper = upper + k_step * mad
             print(f"[包络覆盖] 迭代{iteration}: k={k:.2f}, coverage_mean={coverage_mean:.4f}, coverage_min={coverage_min_val:.4f} - 自动增宽包络")
     
     return lower, upper, coverage_stats, k

@@ -17,9 +17,6 @@ def validate_frequency_axis(frequency: np.ndarray) -> None:
     freq_min = frequency.min()
     freq_max = frequency.max()
     
-    # Debug output
-    print(f"[DEBUG] 频率轴验证: min={freq_min:.2e} Hz, max={freq_max:.2e} Hz, len={len(frequency)}")
-    
     if freq_min < 1e6:
         raise ValueError(f"频率轴异常：freq.min()={freq_min:.2e} < 1e6 Hz，可能读取了索引而非真实频率")
     if freq_max < 1e8:
