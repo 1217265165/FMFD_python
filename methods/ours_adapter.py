@@ -86,6 +86,15 @@ class OursAdapter(MethodAdapter):
         # 选择推理模式：使用sub_brb架构以提高准确率
         inference_mode = 'sub_brb' if self.use_sub_brb else 'er'
         
+        # B2 FIX: Unified probability key mapping (Chinese -> English index)
+        # Order must match: 正常(0), 幅度失准(1), 频率失准(2), 参考电平失准(3)
+        prob_key_map = {
+            '正常': 0, 'Normal': 0, 'normal': 0,
+            '幅度失准': 1, 'Amp': 1, 'amp': 1, 'amp_error': 1,
+            '频率失准': 2, 'Freq': 2, 'freq': 2, 'freq_error': 2,
+            '参考电平失准': 3, 'Ref': 3, 'ref': 3, 'ref_error': 3,
+        }
+        
         for i in range(n_test):
             # Convert sample to feature dict (支持X1-X22)
             features = self._array_to_dict(X_test[i])
@@ -94,23 +103,26 @@ class OursAdapter(MethodAdapter):
             sys_result = system_level_infer(features, self.config, mode=inference_mode)
             probs = sys_result.get('probabilities', {})
             
-            # Map to probability array with better fallback handling
-            # Order: 正常(0), 幅度失准(1), 频率失准(2), 参考电平失准(3)
-            total_prob = sum(probs.values()) if probs else 0.0
+            # B2 FIX: Map probability keys to indices with unified mapping
+            # Ensure all 4 classes are present, default to 0.0 if missing
+            for key, value in probs.items():
+                if key in prob_key_map:
+                    idx = prob_key_map[key]
+                    sys_proba[i, idx] = float(value)
             
-            if total_prob > 0.01:  # Valid probabilities
-                sys_proba[i, 0] = probs.get('正常', 0.0)
-                sys_proba[i, 1] = probs.get('幅度失准', 0.0)
-                sys_proba[i, 2] = probs.get('频率失准', 0.0)
-                sys_proba[i, 3] = probs.get('参考电平失准', 0.0)
-                
-                # Normalize if needed
-                row_sum = np.sum(sys_proba[i])
-                if row_sum > 0:
-                    sys_proba[i] /= row_sum
+            # Normalize if sum > 0, otherwise use uniform
+            row_sum = np.sum(sys_proba[i])
+            if row_sum > 0.01:
+                sys_proba[i] /= row_sum
             else:
-                # Fallback: use uniform distribution
-                sys_proba[i] = np.ones(n_sys_classes) / n_sys_classes
+                # Fallback: use prior based on overall_score
+                overall_score = sys_result.get('overall_score', 0.5)
+                if overall_score < 0.15:
+                    # Low anomaly: likely normal
+                    sys_proba[i] = np.array([0.7, 0.1, 0.1, 0.1])
+                else:
+                    # High anomaly: uniform over fault classes
+                    sys_proba[i] = np.array([0.1, 0.3, 0.3, 0.3])
             
             sys_pred[i] = np.argmax(sys_proba[i])
             

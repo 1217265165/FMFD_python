@@ -39,25 +39,20 @@ def _normalize_feature(value: float, lower: float, upper: float) -> float:
 
 
 # 参考电平相关特征及其归一化参数
+# 关键改动: 参考电平失准的特征应该体现"频段间一致性问题"而非单纯的幅度偏移
+# 与幅度失准的区别: 幅度失准通常全频段一致偏移，参考电平失准会导致频段间不一致
 REF_FEATURE_PARAMS = {
-    'X1': (0.02, 0.5),      # 整体幅度偏移 - 与参考电平直接相关
-    'X3': (1e-12, 1e-9),    # 高频段衰减斜率
-    'X5': (0.01, 0.35),     # 幅度缩放一致性
-    'X10': (0.02, 0.5),     # 频段幅度一致性
-    'X11': (0.01, 0.3),     # 包络超出率
-    'X12': (0.5, 5.0),      # 最大包络违规
-    'X13': (0.1, 10.0),     # 包络违规能量
+    'X3': (1e-12, 1e-9),    # 高频段衰减斜率 - 参考电平特有
+    'X10': (0.02, 0.5),     # 频段幅度一致性 - 核心指标，参考电平失准时应显著异常
+    'X13': (0.1, 10.0),     # 包络违规能量 - 用于检测局部异常
 }
 
-# 特征权重 - 表示各特征对参考电平异常识别的重要性
+# 特征权重 - 参考电平异常应主要依赖"频段间不一致性"而非单纯的幅度偏移
+# 降低通用特征权重，提高特异性特征权重
 REF_FEATURE_WEIGHTS = {
-    'X1': 0.25,   # 整体幅度偏移 - 最重要
-    'X3': 0.15,   # 高频段衰减斜率
-    'X5': 0.15,   # 幅度缩放一致性
-    'X10': 0.10,  # 频段幅度一致性
-    'X11': 0.15,  # 包络超出率
-    'X12': 0.10,  # 最大包络违规
-    'X13': 0.10,  # 包络违规能量
+    'X3': 0.35,   # 高频段衰减斜率 - 核心，参考电平失准会导致特定频段衰减变化
+    'X10': 0.45,  # 频段幅度一致性 - 最重要的区分特征
+    'X13': 0.20,  # 包络违规能量 - 辅助判断
 }
 
 
@@ -65,14 +60,10 @@ def _get_feature_value(features: Dict[str, float], key: str, default: float = 0.
     """安全获取特征值。"""
     if key in features:
         return float(features[key])
-    # 尝试其他可能的键名
+    # 尝试其他可能的键名 - 只保留实际使用的特征
     alt_keys = {
-        'X1': ['amplitude_offset', 'bias', 'overall_amplitude_offset'],
         'X3': ['hf_attenuation_slope', 'res_slope', 'high_freq_slope'],
-        'X5': ['scale_consistency', 'amp_scale_consistency', 'gain_consistency'],
         'X10': ['band_amplitude_consistency'],
-        'X11': ['env_overrun_rate', 'viol_rate', 'envelope_ratio'],
-        'X12': ['env_overrun_max', 'max_env_violation'],
         'X13': ['env_violation_energy'],
     }
     for alt_key in alt_keys.get(key, []):

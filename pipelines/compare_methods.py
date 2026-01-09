@@ -660,6 +660,118 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
     return results
 
 
+def save_diagnostic_outputs(output_dir: Path, y_sys: np.ndarray, y_sys_test: np.ndarray,
+                           all_results: List[Dict], class_names: List[str]):
+    """Save diagnostic outputs to help debug accuracy issues.
+    
+    Section A of the fix: Generate diagnostic files to understand why ours 
+    accuracy is below majority-class baseline.
+    """
+    # A1: Dataset class distribution and majority baseline
+    unique, counts = np.unique(y_sys, return_counts=True)
+    total = len(y_sys)
+    majority_class = unique[np.argmax(counts)]
+    majority_count = np.max(counts)
+    majority_baseline_acc = majority_count / total
+    
+    distribution_data = []
+    for i, (cls, cnt) in enumerate(zip(unique, counts)):
+        cls_name = class_names[cls] if cls < len(class_names) else f"Class_{cls}"
+        distribution_data.append({
+            'class_id': int(cls),
+            'class_name': cls_name,
+            'count': int(cnt),
+            'percentage': float(cnt / total * 100),
+        })
+    
+    distribution_data.append({
+        'class_id': -1,
+        'class_name': 'MAJORITY_BASELINE',
+        'count': int(majority_count),
+        'percentage': float(majority_baseline_acc * 100),
+    })
+    
+    dist_path = output_dir / "dataset_class_distribution.csv"
+    with open(dist_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['class_id', 'class_name', 'count', 'percentage'])
+        writer.writeheader()
+        writer.writerows(distribution_data)
+    print(f"Saved class distribution to: {dist_path}")
+    print(f"  Majority class baseline accuracy: {majority_baseline_acc:.4f} ({majority_baseline_acc*100:.2f}%)")
+    
+    # A2 & A3: Per-method diagnostics (focus on "ours")
+    for result in all_results:
+        method_name = result['method']
+        cm = result.get('confusion_matrix')
+        
+        if cm is None:
+            continue
+        
+        # Per-class metrics
+        n_classes = len(cm)
+        per_class_metrics = []
+        for c in range(n_classes):
+            tp = cm[c, c]
+            fp = cm[:, c].sum() - tp
+            fn = cm[c, :].sum() - tp
+            
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+            support = int(cm[c, :].sum())
+            
+            cls_name = class_names[c] if c < len(class_names) else f"Class_{c}"
+            per_class_metrics.append({
+                'class_id': c,
+                'class_name': cls_name,
+                'precision': float(precision),
+                'recall': float(recall),
+                'f1': float(f1),
+                'support': support,
+            })
+        
+        metrics_path = output_dir / f"{method_name}_per_class_metrics.csv"
+        with open(metrics_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['class_id', 'class_name', 'precision', 'recall', 'f1', 'support'])
+            writer.writeheader()
+            writer.writerows(per_class_metrics)
+        print(f"Saved per-class metrics for {method_name} to: {metrics_path}")
+        
+        # Prediction distribution
+        pred_counts = cm.sum(axis=0)
+        pred_dist = []
+        for c in range(n_classes):
+            cls_name = class_names[c] if c < len(class_names) else f"Class_{c}"
+            pred_dist.append({
+                'class_id': c,
+                'class_name': cls_name,
+                'pred_count': int(pred_counts[c]),
+                'pred_percentage': float(pred_counts[c] / pred_counts.sum() * 100) if pred_counts.sum() > 0 else 0.0,
+            })
+        
+        pred_path = output_dir / f"{method_name}_pred_distribution.csv"
+        with open(pred_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['class_id', 'class_name', 'pred_count', 'pred_percentage'])
+            writer.writeheader()
+            writer.writerows(pred_dist)
+        
+        # Save confusion matrix
+        cm_path = output_dir / f"{method_name}_confusion_matrix.csv"
+        cm_df_data = []
+        for i in range(n_classes):
+            row = {'true_class': class_names[i] if i < len(class_names) else f"Class_{i}"}
+            for j in range(n_classes):
+                row[class_names[j] if j < len(class_names) else f"Class_{j}"] = int(cm[i, j])
+            cm_df_data.append(row)
+        
+        with open(cm_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['true_class'] + [class_names[j] if j < len(class_names) else f"Class_{j}" for j in range(n_classes)]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(cm_df_data)
+        print(f"Saved confusion matrix for {method_name} to: {cm_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comprehensive method comparison")
     parser.add_argument('--data_dir', default='Output/sim_spectrum', 
@@ -671,6 +783,8 @@ def main():
     parser.add_argument('--val_size', type=float, default=0.2, help='Validation set ratio')
     parser.add_argument('--small_sample', action='store_true', 
                        help='Run small-sample adaptability experiments')
+    parser.add_argument('--save_diagnostics', action='store_true', default=True,
+                       help='Save diagnostic outputs for debugging accuracy issues')
     args = parser.parse_args()
     
     # Setup
@@ -779,6 +893,13 @@ def main():
     
     # Plot comprehensive comparison
     plot_comprehensive_comparison(all_results, output_dir)
+    
+    # Save diagnostic outputs (Section A of accuracy fix)
+    if args.save_diagnostics:
+        print("\n" + "="*60)
+        print("Saving diagnostic outputs...")
+        print("="*60)
+        save_diagnostic_outputs(output_dir, y_sys, y_sys_test, all_results, sys_label_names)
     
     # Small-sample experiments
     if args.small_sample:

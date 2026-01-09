@@ -380,7 +380,11 @@ def run_simulation(args: argparse.Namespace):
 
                 sys_feats = extract_system_features(curve)
                 dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
-                sys_result = system_level_infer(sys_feats)
+                
+                # B1 FIX: Merge sys_feats and dyn_feats for system-level inference
+                # This ensures envelope/switching features contribute to system diagnosis
+                merged_sys_input = {**sys_feats, **dyn_feats}
+                sys_result = system_level_infer(merged_sys_input, mode='sub_brb')
 
                 module_feats = extract_module_features(curve, module_id=idx)
                 module_probs = module_level_infer({**module_feats, **sys_feats, **dyn_feats}, sys_result)
@@ -433,7 +437,10 @@ def run_simulation(args: argparse.Namespace):
 
             sys_feats = extract_system_features(curve)
             dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
-            sys_result = system_level_infer(sys_feats)
+            
+            # B1 FIX: Merge sys_feats and dyn_feats for system-level inference
+            merged_sys_input = {**sys_feats, **dyn_feats}
+            sys_result = system_level_infer(merged_sys_input, mode='sub_brb')
 
             module_feats = extract_module_features(curve, module_id=idx)
             module_probs = module_level_infer({**module_feats, **sys_feats, **dyn_feats}, sys_result)
