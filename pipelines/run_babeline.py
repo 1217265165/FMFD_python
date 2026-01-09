@@ -12,6 +12,8 @@ from baseline.baseline import (
     detect_switch_steps,
     compute_single_band_baseline,
     compute_abrupt_change_thresholds,
+    compute_envelope_coverage,
+    auto_widen_envelope,
 )
 from baseline.config import (
     BAND_RANGES, K_LIST, SWITCH_TOL,
@@ -79,6 +81,18 @@ def main():
         lower = baseline_stats['lower']
         mad = baseline_stats['mad']
         
+        # 包络覆盖率验证与自动增宽
+        print("\n[包络覆盖率检查]")
+        lower, upper, coverage_stats, k_widen = auto_widen_envelope(
+            traces, lower, upper, mad,
+            target_coverage=0.95,
+            min_coverage=0.90,
+            max_iterations=5
+        )
+        
+        print(f"  最终覆盖率: mean={coverage_stats['coverage_mean']:.4f}, min={coverage_stats['coverage_min']:.4f}")
+        print(f"  包络增宽系数: k={k_widen:.2f}")
+        
         # 使用center作为rrs（实际是median）
         rrs = center
         bounds = (upper, lower)
@@ -106,6 +120,8 @@ def main():
         upper, lower = bounds
         mad = None
         abrupt_thresholds = None
+        coverage_stats = None
+        k_widen = 0.0
         
         switch_feats = detect_switch_steps(frequency, traces, BAND_RANGES, tol=SWITCH_TOL)
         band_ranges_used = BAND_RANGES
@@ -155,9 +171,34 @@ def main():
             "abrupt_q_dr": ABRUPT_Q_DR,
             "abrupt_q_d2r": ABRUPT_Q_D2R,
         })
+        
+        # 包络覆盖率统计
+        if coverage_stats is not None:
+            meta_dict.update({
+                "envelope_coverage_mean": coverage_stats['coverage_mean'],
+                "envelope_coverage_min": coverage_stats['coverage_min'],
+                "envelope_coverage_p05": coverage_stats['coverage_p05'],
+                "envelope_widen_k": k_widen,
+            })
     
     with open(baseline_meta, "w", encoding="utf-8") as f:
         json.dump(meta_dict, f, ensure_ascii=False, indent=2)
+
+    # 保存覆盖率质量报告
+    if coverage_stats is not None:
+        quality_path = out_dir / "baseline_quality.json"
+        quality_report = {
+            "coverage_mean": coverage_stats['coverage_mean'],
+            "coverage_min": coverage_stats['coverage_min'],
+            "coverage_p05": coverage_stats['coverage_p05'],
+            "envelope_widen_k": k_widen,
+            "target_coverage": 0.95,
+            "min_coverage_threshold": 0.90,
+            "quality_check_passed": coverage_stats['coverage_mean'] >= 0.95 and coverage_stats['coverage_min'] >= 0.90,
+        }
+        with open(quality_path, "w", encoding="utf-8") as f:
+            json.dump(quality_report, f, ensure_ascii=False, indent=2)
+        print(f"  - 包络质量报告: {quality_path}")
 
     # 4) 保存切换点特性（单频段为空）
     pd.DataFrame(switch_feats).to_csv(switch_csv, index=False)

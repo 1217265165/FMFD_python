@@ -308,3 +308,96 @@ def compute_rrs(traces, center=None):
     rrs = residuals / (mad[np.newaxis, :] + eps)
     
     return rrs
+
+
+def compute_envelope_coverage(traces: np.ndarray, lower: np.ndarray, upper: np.ndarray) -> dict:
+    """
+    计算包络对正常数据的覆盖率。
+    
+    对每条正常曲线，计算有多少点落在 [lower, upper] 包络内。
+    
+    Args:
+        traces: 多条正常曲线 (n_traces, n_points)
+        lower: 下包络
+        upper: 上包络
+        
+    Returns:
+        dict: {
+            'coverage_per_trace': 每条曲线的覆盖率,
+            'coverage_mean': 平均覆盖率,
+            'coverage_min': 最小覆盖率,
+            'coverage_p05': 5%分位数覆盖率,
+            'n_traces': 曲线数量,
+        }
+    """
+    n_traces, n_points = traces.shape
+    
+    # 对每条曲线计算覆盖率
+    coverages = []
+    for i in range(n_traces):
+        trace = traces[i]
+        in_envelope = (trace >= lower) & (trace <= upper)
+        coverage = np.mean(in_envelope)
+        coverages.append(coverage)
+    
+    coverages = np.array(coverages)
+    
+    return {
+        'coverage_per_trace': coverages.tolist(),
+        'coverage_mean': float(np.mean(coverages)),
+        'coverage_min': float(np.min(coverages)),
+        'coverage_p05': float(np.percentile(coverages, 5)),
+        'n_traces': n_traces,
+    }
+
+
+def auto_widen_envelope(
+    traces: np.ndarray,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    mad: np.ndarray,
+    target_coverage: float = 0.95,
+    min_coverage: float = 0.90,
+    max_iterations: int = 5,
+) -> tuple:
+    """
+    自动增宽包络，直到覆盖率达到目标。
+    
+    如果 coverage_mean < target_coverage 或 coverage_min < min_coverage，
+    自动增加 padding: lower -= k * mad, upper += k * mad，直到满足条件。
+    
+    Args:
+        traces: 多条正常曲线 (n_traces, n_points)
+        lower: 下包络
+        upper: 上包络
+        mad: MAD尺度统计量（用于padding）
+        target_coverage: 目标平均覆盖率
+        min_coverage: 最小单曲线覆盖率
+        max_iterations: 最大迭代次数
+        
+    Returns:
+        (lower, upper, coverage_stats, k_final): 增宽后的包络、覆盖率统计、最终k值
+    """
+    lower = lower.copy()
+    upper = upper.copy()
+    k = 0.0
+    
+    for iteration in range(max_iterations + 1):
+        coverage_stats = compute_envelope_coverage(traces, lower, upper)
+        
+        coverage_mean = coverage_stats['coverage_mean']
+        coverage_min_val = coverage_stats['coverage_min']
+        
+        # 检查是否满足条件
+        if coverage_mean >= target_coverage and coverage_min_val >= min_coverage:
+            print(f"[包络覆盖] 迭代{iteration}: k={k:.2f}, coverage_mean={coverage_mean:.4f}, coverage_min={coverage_min_val:.4f} - 满足要求")
+            break
+        
+        if iteration < max_iterations:
+            # 增加padding
+            k += 0.5
+            lower = lower - 0.5 * mad
+            upper = upper + 0.5 * mad
+            print(f"[包络覆盖] 迭代{iteration}: k={k:.2f}, coverage_mean={coverage_mean:.4f}, coverage_min={coverage_min_val:.4f} - 自动增宽包络")
+    
+    return lower, upper, coverage_stats, k
