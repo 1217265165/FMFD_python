@@ -74,19 +74,21 @@ def read_real_response_csv(csv_path: str | Path) -> Tuple[np.ndarray, np.ndarray
     except Exception as e:
         raise ValueError(f"无法解析数值列: {e}")
     
-    # 创建DataFrame用于清洗
+    # Create DataFrame for data cleaning
     data = pd.DataFrame({'freq': freq, 'amp': amp})
     
-    # 去除NaN
+    # Remove NaN values
     data = data.dropna()
     
     if len(data) == 0:
         raise ValueError(f"文件无有效数据: {csv_path}")
     
-    # 按频率排序
+    # Sort by frequency
     data = data.sort_values('freq')
     
-    # 频率去重（取平均）
+    # Handle duplicate frequencies by taking mean of amplitude values
+    # Mean is used because duplicate readings at same frequency likely represent
+    # measurement variations, and averaging provides a reasonable estimate
     data = data.groupby('freq', as_index=False).mean()
     
     freq = data['freq'].values.astype(np.float64)

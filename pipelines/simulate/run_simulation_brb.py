@@ -202,13 +202,15 @@ def simulate_curve(
     # Frequency faults have fewer modules (3) so less common
     # Reference level faults have specific modules (2)
     
-    # 读取配置：是否禁用前置放大器故障
+    # Read config for disabled fault modules and single-band mode
+    # Import may fail if config module is not properly set up, use fallback values
     try:
         from baseline.config import DISABLED_FAULT_MODULES, SINGLE_BAND_MODE, SINGLE_BAND_RANGE
         disable_preamp = '前置放大器' in DISABLED_FAULT_MODULES
         single_band_mode = SINGLE_BAND_MODE
         single_band_range = SINGLE_BAND_RANGE
     except ImportError:
+        # Fallback to defaults when config is not available
         disable_preamp = False
         single_band_mode = False
         single_band_range = None

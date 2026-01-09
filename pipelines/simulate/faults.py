@@ -58,11 +58,22 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     
     单频段模式（len(band_ranges) <= 1）：只施加压缩效果，不施加步进。
     """
+    # Import offset parameters from config
+    try:
+        from baseline.config import (
+            SINGLE_BAND_REFLEVEL_OFFSET_SCALE,
+            SINGLE_BAND_REFLEVEL_OFFSET_STD,
+        )
+    except ImportError:
+        # Fallback values if config is not available
+        SINGLE_BAND_REFLEVEL_OFFSET_SCALE = 0.3
+        SINGLE_BAND_REFLEVEL_OFFSET_STD = 0.1
+    
     rng = rng or np.random.default_rng()
     out = amp.copy()
     _, sig_med = _estimate_sigma(amp)
     
-    # 只有多频段时才施加步进
+    # Only apply step transitions for multi-band mode
     if len(band_ranges) > 1:
         if step_biases is None:
             step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
@@ -72,16 +83,19 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
             m_end = np.argmin(np.abs(frequency - end_f))
             out[m_end:] += step_biases[i]
     
-    # 施加压缩效果（适用于单频段和多频段）
+    # Apply compression effect (works for both single and multi-band)
     if compression_coef is None:
         compression_coef = abs(rng.normal(0.15, 0.05))
     thr = np.percentile(out, 100 * compression_start_percent)
     mask = out >= thr
     out[mask] = out[mask] - compression_coef * (out[mask] - thr)
     
-    # 单频段额外施加整体偏移（模拟参考电平漂移）
+    # Single-band mode: apply overall offset to simulate reference level drift
     if len(band_ranges) <= 1:
-        offset = rng.normal(0.3 * sig_med, 0.1 * max(0.1, sig_med))
+        offset = rng.normal(
+            SINGLE_BAND_REFLEVEL_OFFSET_SCALE * sig_med,
+            SINGLE_BAND_REFLEVEL_OFFSET_STD * max(0.1, sig_med)
+        )
         out += offset
     
     return out

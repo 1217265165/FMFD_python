@@ -152,10 +152,11 @@ def compute_single_band_baseline(frequency, traces, q_low=0.02, q_high=0.98, smo
             'std': 标准差
         }
     """
+    # Ensure smooth_window is odd (required by median filter for symmetric window)
     if smooth_window % 2 == 0:
         smooth_window += 1
     
-    # 中心曲线（median，鲁棒性强于mean）
+    # Center curve using median (more robust than mean against outliers)
     center = np.median(traces, axis=0)
     
     # 动态包络（分位数）

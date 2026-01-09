@@ -26,6 +26,10 @@ ENVELOPE_SMOOTH_WINDOW = 21   # 平滑窗口大小
 ABRUPT_Q_DR = 0.995           # 一阶差分阈值分位数
 ABRUPT_Q_D2R = 0.995          # 二阶差分阈值分位数
 
+# 单频段参考电平失准偏移参数（用于faults.py中的inject_reflevel_miscal）
+SINGLE_BAND_REFLEVEL_OFFSET_SCALE = 0.3   # Offset magnitude relative to sigma
+SINGLE_BAND_REFLEVEL_OFFSET_STD = 0.1     # Offset variation relative to sigma
+
 # 禁用的故障模块（单频段真实数据模式）
 # 前置放大器在前放OFF模式下不是诊断对象
 DISABLED_FAULT_MODULES = ['前置放大器']
