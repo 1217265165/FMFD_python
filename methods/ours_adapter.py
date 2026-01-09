@@ -29,6 +29,11 @@ class OursAdapter(MethodAdapter):
     
     name = "ours"
     
+    # Fallback probability distributions when BRB output is invalid
+    # These are used when sum of probabilities is too low to normalize
+    FALLBACK_NORMAL_PROBS = np.array([0.7, 0.1, 0.1, 0.1])  # High normal, low fault
+    FALLBACK_FAULT_PROBS = np.array([0.1, 0.3, 0.3, 0.3])   # Low normal, uniform fault
+    
     def __init__(self):
         self.config = SystemBRBConfig()  # 默认启用扩展特征
         self.feature_names = None
@@ -110,7 +115,7 @@ class OursAdapter(MethodAdapter):
                     idx = prob_key_map[key]
                     sys_proba[i, idx] = float(value)
             
-            # Normalize if sum > 0, otherwise use uniform
+            # Normalize if sum > 0, otherwise use fallback priors
             row_sum = np.sum(sys_proba[i])
             if row_sum > 0.01:
                 sys_proba[i] /= row_sum
@@ -119,10 +124,10 @@ class OursAdapter(MethodAdapter):
                 overall_score = sys_result.get('overall_score', 0.5)
                 if overall_score < 0.15:
                     # Low anomaly: likely normal
-                    sys_proba[i] = np.array([0.7, 0.1, 0.1, 0.1])
+                    sys_proba[i] = self.FALLBACK_NORMAL_PROBS.copy()
                 else:
                     # High anomaly: uniform over fault classes
-                    sys_proba[i] = np.array([0.1, 0.3, 0.3, 0.3])
+                    sys_proba[i] = self.FALLBACK_FAULT_PROBS.copy()
             
             sys_pred[i] = np.argmax(sys_proba[i])
             

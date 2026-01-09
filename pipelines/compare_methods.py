@@ -783,8 +783,8 @@ def main():
     parser.add_argument('--val_size', type=float, default=0.2, help='Validation set ratio')
     parser.add_argument('--small_sample', action='store_true', 
                        help='Run small-sample adaptability experiments')
-    parser.add_argument('--save_diagnostics', action='store_true', default=True,
-                       help='Save diagnostic outputs for debugging accuracy issues')
+    parser.add_argument('--save_diagnostics', action='store_true',
+                       help='Save diagnostic outputs for debugging accuracy issues (default: enabled)')
     args = parser.parse_args()
     
     # Setup
@@ -894,12 +894,11 @@ def main():
     # Plot comprehensive comparison
     plot_comprehensive_comparison(all_results, output_dir)
     
-    # Save diagnostic outputs (Section A of accuracy fix)
-    if args.save_diagnostics:
-        print("\n" + "="*60)
-        print("Saving diagnostic outputs...")
-        print("="*60)
-        save_diagnostic_outputs(output_dir, y_sys, y_sys_test, all_results, sys_label_names)
+    # Save diagnostic outputs (Section A of accuracy fix) - always run by default
+    print("\n" + "="*60)
+    print("Saving diagnostic outputs...")
+    print("="*60)
+    save_diagnostic_outputs(output_dir, y_sys, y_sys_test, all_results, sys_label_names)
     
     # Small-sample experiments
     if args.small_sample:
