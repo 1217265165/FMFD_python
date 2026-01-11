@@ -139,7 +139,18 @@ def _write_curves(path: Path, frequency: np.ndarray, curves: List[np.ndarray]) -
             writer.writerow(row)
 
 
-def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarray], labels: List[str], modules: List[str]) -> None:
+def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarray], labels: List[str], modules: List[str], use_real_format: bool = True) -> None:
+    """
+    写出仿真数据CSV文件。
+    
+    Args:
+        base_dir: 输出基目录
+        frequency: 频率数组
+        curves: 幅度曲线列表
+        labels: 系统级标签列表
+        modules: 模块标签列表
+        use_real_format: 是否使用9列真实数据格式（默认True）
+    """
     raw_dir = base_dir / "raw_curves"
     raw_dir.mkdir(parents=True, exist_ok=True)
     manifest_rows: List[Dict[str, object]] = []
@@ -149,9 +160,37 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
         csv_path = raw_dir / f"{sample_id}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["freq_Hz", "amplitude_dB"])
-            for freq, amp in zip(frequency, curve):
-                writer.writerow([freq, amp])
+            
+            if use_real_format:
+                # 使用9列真实数据格式
+                # 频率（Hz）,功率（dBm）,前放开关,AC/DC,IQ/扫频,低射频直采,功率计读数,频谱仪读数,差值
+                writer.writerow([
+                    "频率（Hz）", "功率（dBm）", "前放开关", "AC/DC", 
+                    "IQ/扫频", "低射频直采", "功率计读数", "频谱仪读数", "差值"
+                ])
+                for freq, amp in zip(frequency, curve):
+                    # 频率列使用科学计数法
+                    freq_str = f"{freq:.0e}"
+                    # 幅度列保留两位小数
+                    amp_str = f"{amp:.2f}"
+                    # 其余列填充占位值
+                    # power_dbm: -10 (固定值)
+                    # preamp: OFF (前放OFF)
+                    # acdc: AC
+                    # mode: 扫频
+                    # direct: OFF
+                    # powermeter: 0
+                    # spectrum_reading: 实际幅度值（倒数第二列）
+                    # diff: 与spectrum_reading相同
+                    writer.writerow([
+                        freq_str, "-10", "OFF", "AC", "扫频", "OFF", 
+                        "0", amp_str, amp_str
+                    ])
+            else:
+                # 使用简单两列格式（向后兼容）
+                writer.writerow(["freq_Hz", "amplitude_dB"])
+                for freq, amp in zip(frequency, curve):
+                    writer.writerow([freq, amp])
 
         manifest_rows.append(
             {
@@ -474,7 +513,7 @@ def run_simulation(args: argparse.Namespace):
                 }
             )
 
-    _write_raw_csvs(out_dir, freq, curves, sys_labels, mod_labels)
+    _write_raw_csvs(out_dir, freq, curves, sys_labels, mod_labels, use_real_format=True)
     _write_csv(out_dir / "simulated_features.csv", feature_rows)
     _write_csv(out_dir / "system_predictions.csv", system_rows)
     _write_csv(out_dir / "module_predictions.csv", module_rows)

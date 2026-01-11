@@ -52,13 +52,11 @@ def main():
     # 1) 加载并对齐正常数据（仓库根下 normal_response_data）
     folder_path = repo_root / "normal_response_data"
     
-    # 选择点数：单频段模式使用较少点数
-    n_points = N_POINTS_REAL if SINGLE_BAND_MODE else 10000
-    
     print(f"加载正常数据: {folder_path}")
     print(f"模式: {'单频段' if SINGLE_BAND_MODE else '多频段'}")
     
-    frequency, traces, names = load_and_align(folder_path, n_points=n_points)
+    # 单频段模式使用固定820点频率网格
+    frequency, traces, names = load_and_align(folder_path, use_fixed_grid=SINGLE_BAND_MODE)
     
     print(f"加载 {len(names)} 条正常曲线")
     print(f"频率范围: {frequency[0]:.2e} - {frequency[-1]:.2e} Hz")

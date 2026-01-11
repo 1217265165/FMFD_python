@@ -4,13 +4,67 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 from scipy.ndimage import median_filter
-from .config import BAND_RANGES, K_LIST, N_POINTS
+from .config import BAND_RANGES, K_LIST, N_POINTS, F_START, F_STOP, F_STEP, N_POINTS_FIXED
 from .io import auto_read_csv, load_all_real_responses
 
 
-def load_and_align(folder_path, n_points=None, use_new_format=True):
+def get_fixed_frequency_grid():
     """
-    加载文件夹内所有 CSV 频响，插值到统一频率网格（取频率交集，n_points 均匀采样）。
+    获取固定频率网格（820点，10MHz步进）。
+    
+    频率范围：10 MHz ~ 8.2 GHz，步进 10 MHz
+    
+    Returns:
+        np.ndarray: 固定频率数组，长度820
+    """
+    freq = np.arange(F_START, F_STOP + F_STEP, F_STEP)
+    # 确保是820点
+    assert len(freq) == N_POINTS_FIXED, f"频率网格应为{N_POINTS_FIXED}点，实际{len(freq)}点"
+    return freq
+
+
+def align_to_fixed_grid(freq: np.ndarray, amp: np.ndarray, tolerance: float = 1.0) -> np.ndarray:
+    """
+    将曲线对齐到固定820点频率网格。
+    
+    如果原始频率与固定网格存在轻微浮点误差（<= tolerance Hz），使用直接对齐。
+    否则使用线性插值重采样。
+    
+    Args:
+        freq: 原始频率数组
+        amp: 原始幅度数组
+        tolerance: 频率容差(Hz)，默认1Hz
+        
+    Returns:
+        np.ndarray: 对齐后的幅度数组（820点）
+    """
+    fixed_freq = get_fixed_frequency_grid()
+    
+    # 检查是否需要插值
+    if len(freq) == len(fixed_freq):
+        # 检查频率是否近似相等
+        max_diff = np.max(np.abs(freq - fixed_freq))
+        if max_diff <= tolerance:
+            # 直接返回，频率已经对齐
+            return amp
+    
+    # 需要插值重采样
+    # 先排序确保频率单调递增
+    sort_idx = np.argsort(freq)
+    freq_sorted = freq[sort_idx]
+    amp_sorted = amp[sort_idx]
+    
+    # 线性插值到固定网格
+    interp = interp1d(freq_sorted, amp_sorted, kind="linear", 
+                      bounds_error=False, fill_value="extrapolate")
+    aligned_amp = interp(fixed_freq)
+    
+    return aligned_amp
+
+
+def load_and_align(folder_path, n_points=None, use_new_format=True, use_fixed_grid=True):
+    """
+    加载文件夹内所有 CSV 频响，插值到统一频率网格。
     
     支持两种数据格式：
     1. 新格式（真实频响）：多列，第1列频率，倒数第二列幅度
@@ -18,8 +72,9 @@ def load_and_align(folder_path, n_points=None, use_new_format=True):
     
     Args:
         folder_path: 数据文件夹路径
-        n_points: 插值点数，默认使用 N_POINTS
+        n_points: 插值点数（当use_fixed_grid=False时使用），默认使用 N_POINTS
         use_new_format: 是否优先使用新格式读取
+        use_fixed_grid: 是否使用固定820点频率网格（推荐True）
     
     返回: frequency, traces(np.ndarray: n_traces x n_points), file_names
     """
@@ -57,15 +112,34 @@ def load_and_align(folder_path, n_points=None, use_new_format=True):
     if not traces:
         raise FileNotFoundError("未找到有效 CSV 频响数据")
     
-    all_freq = [t[0] for t in traces]
-    min_f = max(np.min(f) for f in all_freq)
-    max_f = min(np.max(f) for f in all_freq)
-    frequency = np.linspace(min_f, max_f, n_points)
+    # 验证原始数据频率范围
+    for i, (freq, amp) in enumerate(traces):
+        freq_min, freq_max = freq.min(), freq.max()
+        if freq_min < 1e6 or freq_max < 1e8:
+            raise ValueError(
+                f"文件 {names[i] if i < len(names) else i}: 频率范围异常 "
+                f"({freq_min:.2e} ~ {freq_max:.2e} Hz)，请检查频率列读取是否正确"
+            )
     
-    aligned = []
-    for freq, amp in traces:
-        interp = interp1d(freq, amp, kind="linear", fill_value="extrapolate")
-        aligned.append(interp(frequency))
+    if use_fixed_grid:
+        # 使用固定820点频率网格
+        frequency = get_fixed_frequency_grid()
+        aligned = []
+        for freq, amp in traces:
+            aligned_amp = align_to_fixed_grid(freq, amp)
+            aligned.append(aligned_amp)
+        print(f"[固定网格模式] 所有曲线对齐到 {len(frequency)} 点 ({frequency[0]/1e6:.0f}MHz ~ {frequency[-1]/1e9:.1f}GHz)")
+    else:
+        # 原始模式：取频率交集，插值到n_points
+        all_freq = [t[0] for t in traces]
+        min_f = max(np.min(f) for f in all_freq)
+        max_f = min(np.max(f) for f in all_freq)
+        frequency = np.linspace(min_f, max_f, n_points)
+        
+        aligned = []
+        for freq, amp in traces:
+            interp = interp1d(freq, amp, kind="linear", fill_value="extrapolate")
+            aligned.append(interp(frequency))
     
     return frequency, np.vstack(aligned), names
 

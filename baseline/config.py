@@ -6,6 +6,14 @@ SINGLE_BAND_MODE = True  # 启用单频段模式
 # 单频段范围（真实数据）
 SINGLE_BAND_RANGE = (1e7, 8.2e9)  # 10MHz ~ 8.2GHz
 
+# ========== 固定频率网格（820点，10MHz步进）==========
+# 真实数据格式：10 MHz ~ 8.2 GHz，步进 10 MHz，严格 820 个点
+F_START = 1e7       # 10 MHz
+F_STOP = 8.2e9      # 8.2 GHz
+F_STEP = 1e7        # 10 MHz
+# 理论点数: (8.2e9 - 1e7) / 1e7 + 1 = 820
+N_POINTS_FIXED = 820  # 固定820点，不允许变化
+
 # 多频段范围（仿真数据，向后兼容）
 BAND_RANGES = [
     (9e3, 1.3e10),
@@ -14,8 +22,8 @@ BAND_RANGES = [
 ]
 K_LIST = [3, 4, 5]            # 每段包络系数
 SWITCH_TOL = 0.2              # 切换点步进容差 (dB)
-N_POINTS = 10000              # 基线频率网格点数（原值）
-N_POINTS_REAL = 1000          # 真实数据基线点数（更少，因为原始数据只有~820点）
+N_POINTS = 10000              # 基线频率网格点数（原值，兼容旧代码）
+N_POINTS_REAL = N_POINTS_FIXED  # 真实数据必须是820点
 
 # 包络参数（单频段模式使用）
 ENVELOPE_Q_LOW = 0.02         # 下包络分位数
