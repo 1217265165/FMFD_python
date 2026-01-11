@@ -17,9 +17,8 @@ def get_fixed_frequency_grid():
     Returns:
         np.ndarray: 固定频率数组，长度820
     """
-    freq = np.arange(F_START, F_STOP + F_STEP, F_STEP)
-    # 确保是820点
-    assert len(freq) == N_POINTS_FIXED, f"频率网格应为{N_POINTS_FIXED}点，实际{len(freq)}点"
+    # 使用linspace避免浮点精度问题
+    freq = np.linspace(F_START, F_STOP, N_POINTS_FIXED)
     return freq
 
 
@@ -116,8 +115,9 @@ def load_and_align(folder_path, n_points=None, use_new_format=True, use_fixed_gr
     for i, (freq, amp) in enumerate(traces):
         freq_min, freq_max = freq.min(), freq.max()
         if freq_min < 1e6 or freq_max < 1e8:
+            file_name = names[i] if names and i < len(names) else f"index_{i}"
             raise ValueError(
-                f"文件 {names[i] if i < len(names) else i}: 频率范围异常 "
+                f"文件 {file_name}: 频率范围异常 "
                 f"({freq_min:.2e} ~ {freq_max:.2e} Hz)，请检查频率列读取是否正确"
             )
     

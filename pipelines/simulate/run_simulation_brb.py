@@ -173,15 +173,16 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
                     freq_str = f"{freq:.0e}"
                     # 幅度列保留两位小数
                     amp_str = f"{amp:.2f}"
-                    # 其余列填充占位值
-                    # power_dbm: -10 (固定值)
-                    # preamp: OFF (前放OFF)
-                    # acdc: AC
-                    # mode: 扫频
-                    # direct: OFF
-                    # powermeter: 0
-                    # spectrum_reading: 实际幅度值（倒数第二列）
-                    # diff: 与spectrum_reading相同
+                    # 填充9列数据（与真实数据格式一致）：
+                    # 列1 - 频率（Hz）: 实际频率值（科学计数法）
+                    # 列2 - 功率（dBm）: 占位值 -10
+                    # 列3 - 前放开关: OFF（前置放大器关闭）
+                    # 列4 - AC/DC: AC
+                    # 列5 - IQ/扫频: 扫频
+                    # 列6 - 低射频直采: OFF
+                    # 列7 - 功率计读数: 占位值 0
+                    # 列8 - 频谱仪读数: 实际幅度值（算法使用的幅度，倒数第二列）
+                    # 列9 - 差值: 与频谱仪读数相同
                     writer.writerow([
                         freq_str, "-10", "OFF", "AC", "扫频", "OFF", 
                         "0", amp_str, amp_str
