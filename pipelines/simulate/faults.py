@@ -2,6 +2,86 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
+# =============================================================================
+# 模块列表定义（排除前置放大器，因为采集数据为前放OFF模式）
+# =============================================================================
+# 所有可用模块（19个模块，不含前置放大器）
+ENABLED_MODULES = [
+    "衰减器",
+    "低频段前置低通滤波器",
+    "低频段第一混频器",
+    "高频段YTF滤波器",
+    "高频段混频器",
+    "时钟振荡器",
+    "时钟合成与同步网络",
+    "本振源（谐波发生器）",
+    "本振混频组件",
+    "校准源",
+    "存储器",
+    "校准信号开关",
+    "中频放大器",
+    "ADC",
+    "数字RBW",
+    "数字放大器",
+    "数字检波器",
+    "VBW滤波器",
+    "电源模块",
+]
+
+# 明确排除的模块（禁止生成）
+DISABLED_MODULES = ["前置放大器"]
+
+# 模块 → 注入函数映射表
+# 每个模块对应一个或多个故障注入函数
+MODULE_TO_INJECTION_MAP = {
+    "衰减器": ("inject_reflevel_miscal", "ref_error"),
+    "低频段前置低通滤波器": ("inject_lpf_shift", "amp_error"),
+    "低频段第一混频器": ("inject_mixer_ripple", "amp_error"),
+    "高频段YTF滤波器": ("inject_ytf_variation", "amp_error"),
+    "高频段混频器": ("inject_mixer_ripple", "amp_error"),
+    "时钟振荡器": ("inject_clock_drift", "freq_error"),
+    "时钟合成与同步网络": ("inject_clock_drift", "freq_error"),
+    "本振源（谐波发生器）": ("inject_lo_path_error", "freq_error"),
+    "本振混频组件": ("inject_lo_path_error", "freq_error"),
+    "校准源": ("inject_amplitude_miscal", "amp_error"),
+    "存储器": ("inject_adc_bias", "amp_error"),
+    "校准信号开关": ("inject_amplitude_miscal", "amp_error"),
+    "中频放大器": ("inject_amplitude_miscal", "amp_error"),
+    "ADC": ("inject_adc_bias", "amp_error"),
+    "数字RBW": ("inject_vbw_smoothing", "amp_error"),
+    "数字放大器": ("inject_amplitude_miscal", "amp_error"),
+    "数字检波器": ("inject_vbw_smoothing", "amp_error"),
+    "VBW滤波器": ("inject_vbw_smoothing", "amp_error"),
+    "电源模块": ("inject_power_noise", "amp_error"),
+}
+
+# 系统级分类 → 模块列表
+SYSTEM_CLASS_TO_MODULES = {
+    "amp_error": [
+        "低频段前置低通滤波器", "低频段第一混频器", "高频段YTF滤波器",
+        "高频段混频器", "校准源", "存储器", "校准信号开关",
+        "中频放大器", "ADC", "数字RBW", "数字放大器",
+        "数字检波器", "VBW滤波器", "电源模块",
+    ],
+    "freq_error": [
+        "时钟振荡器", "时钟合成与同步网络", "本振源（谐波发生器）", "本振混频组件",
+    ],
+    "ref_error": [
+        "衰减器",
+    ],
+}
+
+
+def validate_module_not_disabled(module_name: str) -> None:
+    """验证模块未被禁用，若被禁用则抛出异常（Fail Fast）"""
+    if module_name in DISABLED_MODULES:
+        raise ValueError(
+            f"禁止生成 '{module_name}' 模块的故障数据！"
+            f"该模块已被禁用（原因：采集数据为前放OFF模式）。"
+            f"可用模块列表: {ENABLED_MODULES}"
+        )
+
+
 # 辅助：估计局部/全局 sigma，用于自适应幅度/噪声
 def _estimate_sigma(amp, window_frac=0.02, min_window=21):
     x = np.asarray(amp, dtype=float)
