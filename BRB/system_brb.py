@@ -97,7 +97,7 @@ def _normalize_feature_zscore(value: float, median: float, iqr: float, epsilon: 
     """
     if iqr < epsilon:
         iqr = epsilon
-    z = (value - median) / (iqr + epsilon)
+    z = (value - median) / iqr
     return max(-5.0, min(5.0, z))
 
 

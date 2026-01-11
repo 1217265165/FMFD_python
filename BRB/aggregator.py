@@ -22,6 +22,14 @@ from .system_brb_freq import freq_brb_infer
 from .system_brb_ref import ref_brb_infer
 
 
+# 子BRB权重常量
+# 频率子BRB的激活度对所有类别都偏高，需要降低其影响力
+# 这些权重用于在聚合时平衡各子BRB的贡献
+SUB_BRB_WEIGHT_AMP = 1.2   # 幅度子BRB权重
+SUB_BRB_WEIGHT_FREQ = 0.7  # 频率子BRB权重（降低以避免过度分类为Freq）
+SUB_BRB_WEIGHT_REF = 1.0   # 参考电平子BRB权重
+
+
 def softmax_with_temperature(values: list, alpha: float = 2.0) -> list:
     """带温度参数的softmax函数。
     
@@ -165,14 +173,10 @@ def aggregate_system_results(
     ref_result = ref_brb_infer(features, alpha)
     
     # 获取各子BRB的激活度，并应用相对权重
-    # 问题：频率子BRB的激活度对所有类别都偏高，需要降低其影响力
-    # 权重比例：amp:freq:ref = 1.2:0.7:1.0
-    sub_brb_weights = [1.2, 0.7, 1.0]  # amp, freq, ref
-    
     activations = [
-        amp_result['activation'] * sub_brb_weights[0],
-        freq_result['activation'] * sub_brb_weights[1],
-        ref_result['activation'] * sub_brb_weights[2]
+        amp_result['activation'] * SUB_BRB_WEIGHT_AMP,
+        freq_result['activation'] * SUB_BRB_WEIGHT_FREQ,
+        ref_result['activation'] * SUB_BRB_WEIGHT_REF
     ]
     
     # 计算整体异常度
@@ -286,12 +290,10 @@ def system_level_infer_with_sub_brbs(
             ref_result = ref_brb_infer(ref_features, alpha)
             
             # 聚合结果 - 应用子BRB权重
-            # 问题：频率子BRB的激活度对所有类别都偏高，需要降低其影响力
-            sub_brb_weights = [1.2, 0.7, 1.0]  # amp, freq, ref
             activations = [
-                amp_result['activation'] * sub_brb_weights[0],
-                freq_result['activation'] * sub_brb_weights[1],
-                ref_result['activation'] * sub_brb_weights[2]
+                amp_result['activation'] * SUB_BRB_WEIGHT_AMP,
+                freq_result['activation'] * SUB_BRB_WEIGHT_FREQ,
+                ref_result['activation'] * SUB_BRB_WEIGHT_REF
             ]
             
             overall_score = compute_overall_score(features)
