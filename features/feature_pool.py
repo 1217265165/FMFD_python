@@ -245,22 +245,27 @@ def augment_features_with_pool(base_features: Dict[str, float],
     If raw curve is available, extract full pool. Otherwise, create
     derived pool features from existing base features.
     
+    IMPORTANT: Base features (especially X1-X22 which are residual-based)
+    take precedence over pool features to preserve the correct feature definitions.
+    
     Args:
-        base_features: Existing features dict
+        base_features: Existing features dict (X1-X22, dyn_feats, etc.)
         raw_curve_path: Optional path to raw curve CSV
         
     Returns:
-        Augmented feature dict
+        Augmented feature dict with base features preserved
     """
     if raw_curve_path and raw_curve_path.exists():
         freq, amp = read_curve_csv(raw_curve_path)
         pool = build_feature_pool_from_curve(freq, amp)
-        # Merge, preferring pool values
-        return {**base_features, **pool}
+        # FIXED: Base features take precedence to preserve residual-based X1-X22
+        # Pool features only fill in missing keys
+        return {**pool, **base_features}
     else:
         # Create synthetic pool from base features
         pool = _synthesize_pool_from_base(base_features)
-        return {**base_features, **pool}
+        # Base features take precedence
+        return {**pool, **base_features}
 
 
 def _synthesize_pool_from_base(base: Dict[str, float]) -> Dict[str, float]:

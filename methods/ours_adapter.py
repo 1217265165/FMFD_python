@@ -1,7 +1,9 @@
 """Adapter for Ours method (knowledge-driven rule compression + hierarchical BRB)."""
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -20,6 +22,7 @@ class OursAdapter(MethodAdapter):
     - Knowledge mapping: modules use relevant frequency bands/features only
     - Sub-BRB architecture: separate BRBs for amp/freq/ref faults
     - Normal anchor: Two-stage classification (Normal vs Fault first, then fault type)
+    - Branch evidence gating: freq/ref specific gates to boost logits
     
     Enhanced with X1-X22 features for improved accuracy while maintaining framework.
     
@@ -35,16 +38,23 @@ class OursAdapter(MethodAdapter):
     FALLBACK_NORMAL_PROBS = np.array([0.7, 0.1, 0.1, 0.1])  # High normal, low fault
     FALLBACK_FAULT_PROBS = np.array([0.1, 0.3, 0.3, 0.3])   # Low normal, uniform fault
     
-    # Normal anchor thresholds - calibrated for better class separation
-    NORMAL_ANCHOR_SCORE_THRESHOLD = 0.12  # Below this = definitely normal
-    FAULT_CONFIRMATION_THRESHOLD = 0.25   # Above this = definitely fault
-    
     # Normal anchor probability distribution (used when sample is classified as Normal)
     NORMAL_ANCHOR_PROBS = np.array([0.8, 0.067, 0.067, 0.066])
     
+    # Default thresholds - will be overridden by calibration file if available
+    # Step1 requirement: Normal anchor must use auto-calibrated thresholds from normal stats
+    DEFAULT_NORMAL_ANCHOR_THRESHOLD = 0.12  # Below this = definitely normal
+    DEFAULT_FAULT_CONFIRMATION_THRESHOLD = 0.25   # Above this = definitely fault
+    
+    # Branch evidence gating defaults - Step2 requirement
+    # Boosts for freq/ref branches when their specific evidence exceeds gate
+    DEFAULT_FREQ_GATE = 0.3   # Threshold for X16/X17/X18 z-score to trigger boost
+    DEFAULT_REF_GATE = 0.3    # Threshold for X3/X10 z-score to trigger boost
+    DEFAULT_FREQ_BOOST = 1.0  # Logit boost amount for freq branch
+    DEFAULT_REF_BOOST = 1.0   # Logit boost amount for ref branch
+    
     # Class balancing parameters
     AMP_DOMINANCE_THRESHOLD = 0.5  # Threshold to detect Amp dominance
-    CLASS_BOOST_THRESHOLD = 0.3    # Threshold for class-specific score to trigger boost
     MAX_BOOST_AMOUNT = 0.2         # Maximum probability boost
     BOOST_SCALE_FACTOR = 0.3      # Scale factor for boost calculation
     AMP_REDUCTION_RATIO = 0.7     # Ratio to reduce Amp probability during boost
@@ -61,7 +71,20 @@ class OursAdapter(MethodAdapter):
         self.n_params = 68  # 增加：22个特征权重 + 3个规则权重 + 33个belief参数 + 10个子BRB参数
         self.kd_features = [f'X{i}' for i in range(1, 23)]  # X1-X22
         self.use_sub_brb = True  # 启用子BRB架构以提高准确率
-        self.use_normal_anchor = True  # 启用Normal锚点两阶段判定
+        self.use_normal_anchor = False  # 暂时禁用Normal锚点，等待calibration
+        self.use_evidence_gating = False  # 暂时禁用证据门控，等待calibration
+        
+        # Calibrated thresholds - will be loaded from calibration.json if available
+        self.normal_anchor_threshold = self.DEFAULT_NORMAL_ANCHOR_THRESHOLD
+        self.fault_confirmation_threshold = self.DEFAULT_FAULT_CONFIRMATION_THRESHOLD
+        self.freq_gate = self.DEFAULT_FREQ_GATE
+        self.ref_gate = self.DEFAULT_REF_GATE
+        self.freq_boost = self.DEFAULT_FREQ_BOOST
+        self.ref_boost = self.DEFAULT_REF_BOOST
+        
+        # Normal feature statistics - loaded from baseline or calibration
+        self.normal_feature_stats = None
+        
         # 添加别名映射
         self.kd_features_aliases = {
             'bias': 'X1', 'ripple_var': 'X2', 'res_slope': 'X3', 
@@ -76,6 +99,84 @@ class OursAdapter(MethodAdapter):
             'slope_low': 'X19', 'kurtosis_detrended': 'X20',
             'peak_count_residual': 'X21', 'ripple_dom_freq_energy': 'X22',
         }
+        
+        # Try to load calibration from file
+        self._load_calibration()
+    
+    def _load_calibration(self):
+        """Load calibrated thresholds from calibration.json if available.
+        
+        Step1 requirement: T_normal must read from statistics file (auto-calibrated),
+        not hard-coded constants.
+        """
+        # Try multiple possible locations
+        calibration_paths = [
+            Path('Output/calibration.json'),
+            Path('Output/sim_spectrum/calibration.json'),
+            Path(__file__).parent.parent / 'Output' / 'calibration.json',
+        ]
+        
+        for calib_path in calibration_paths:
+            if calib_path.exists():
+                try:
+                    with open(calib_path, 'r', encoding='utf-8') as f:
+                        calib = json.load(f)
+                    
+                    # Load calibrated thresholds
+                    if 'normal_anchor_threshold' in calib:
+                        self.normal_anchor_threshold = float(calib['normal_anchor_threshold'])
+                    if 'fault_confirmation_threshold' in calib:
+                        self.fault_confirmation_threshold = float(calib['fault_confirmation_threshold'])
+                    if 'freq_gate' in calib:
+                        self.freq_gate = float(calib['freq_gate'])
+                    if 'ref_gate' in calib:
+                        self.ref_gate = float(calib['ref_gate'])
+                    if 'freq_boost' in calib:
+                        self.freq_boost = float(calib['freq_boost'])
+                    if 'ref_boost' in calib:
+                        self.ref_boost = float(calib['ref_boost'])
+                    if 'alpha' in calib:
+                        self.config.alpha = float(calib['alpha'])
+                    
+                    print(f"[OursAdapter] Loaded calibration from {calib_path}")
+                    break
+                except Exception as e:
+                    print(f"[OursAdapter] Warning: Failed to load calibration from {calib_path}: {e}")
+        
+        # Try to load normal feature stats for percentile-based thresholds
+        stats_paths = [
+            Path('Output/normal_feature_stats.csv'),
+            Path('Output/sim_spectrum/normal_feature_stats.csv'),
+            Path(__file__).parent.parent / 'Output' / 'normal_feature_stats.csv',
+        ]
+        
+        for stats_path in stats_paths:
+            if stats_path.exists():
+                try:
+                    import pandas as pd
+                    stats_df = pd.read_csv(stats_path, index_col=0)
+                    self.normal_feature_stats = {}
+                    
+                    # Extract median and IQR for each feature
+                    for col in stats_df.columns:
+                        if col.startswith('X') and col[1:].isdigit():
+                            median = stats_df.loc['50%', col] if '50%' in stats_df.index else 0.0
+                            q25 = stats_df.loc['25%', col] if '25%' in stats_df.index else 0.0
+                            q75 = stats_df.loc['75%', col] if '75%' in stats_df.index else 0.0
+                            iqr = q75 - q25
+                            p95 = stats_df.loc['95%', col] if '95%' in stats_df.index else 0.0
+                            p97 = stats_df.loc['97%', col] if '97%' in stats_df.index else p95
+                            self.normal_feature_stats[col] = {
+                                'median': float(median),
+                                'iqr': float(iqr),
+                                'p95': float(p95),
+                                'p97': float(p97),
+                            }
+                    
+                    print(f"[OursAdapter] Loaded normal feature stats from {stats_path}")
+                    break
+                except Exception as e:
+                    print(f"[OursAdapter] Warning: Failed to load normal feature stats from {stats_path}: {e}")
     
     def fit(self, X_train: np.ndarray, y_sys_train: np.ndarray,
             y_mod_train: Optional[np.ndarray] = None, meta: Optional[Dict] = None) -> None:
@@ -98,6 +199,8 @@ class OursAdapter(MethodAdapter):
         Uses a two-stage Normal Anchor approach:
         1. First determine if sample is Normal vs Fault based on overall anomaly score
         2. If Fault, use sub-BRB architecture to classify among Amp/Freq/Ref
+        
+        Step2: Branch evidence gating - boost freq/ref logits when specific evidence is present
         """
         n_test = len(X_test)
         n_sys_classes = 4  # Normal, Amp, Freq, Ref
@@ -129,14 +232,14 @@ class OursAdapter(MethodAdapter):
             # Convert sample to feature dict (支持X1-X22)
             features = self._array_to_dict(X_test[i])
             
-            # ==================== Normal Anchor Stage ====================
+            # ==================== Normal Anchor Stage (Step1) ====================
             # Two-stage classification: First determine Normal vs Fault
             if self.use_normal_anchor:
                 # Compute overall anomaly score for normal anchor
                 overall_score = self._compute_overall_anomaly_score(features)
                 
-                # Stage 1: Normal anchor check
-                if overall_score < self.NORMAL_ANCHOR_SCORE_THRESHOLD:
+                # Stage 1: Normal anchor check - use calibrated threshold
+                if overall_score < self.normal_anchor_threshold:
                     # Low anomaly score -> classify as Normal
                     sys_proba[i] = self.NORMAL_ANCHOR_PROBS.copy()
                     sys_pred[i] = 0  # Normal
@@ -154,6 +257,28 @@ class OursAdapter(MethodAdapter):
                     idx = prob_key_map[key]
                     sys_proba[i, idx] = float(value)
             
+            # ==================== Branch Evidence Gating (Step2) ====================
+            # Boost freq/ref branches when their specific evidence exceeds gate
+            if self.use_evidence_gating:
+                freq_z_score = self._compute_freq_zscore(features)
+                ref_z_score = self._compute_ref_zscore(features)
+                
+                # Apply logit-space boost for freq branch
+                if freq_z_score > self.freq_gate:
+                    # Convert probs to logits, boost, convert back
+                    logits = np.log(sys_proba[i] + 1e-12)
+                    logits[2] += self.freq_boost * (freq_z_score - self.freq_gate)
+                    # Convert back to probs
+                    exp_logits = np.exp(logits - np.max(logits))
+                    sys_proba[i] = exp_logits / (np.sum(exp_logits) + 1e-12)
+                
+                # Apply logit-space boost for ref branch
+                if ref_z_score > self.ref_gate:
+                    logits = np.log(sys_proba[i] + 1e-12)
+                    logits[3] += self.ref_boost * (ref_z_score - self.ref_gate)
+                    exp_logits = np.exp(logits - np.max(logits))
+                    sys_proba[i] = exp_logits / (np.sum(exp_logits) + 1e-12)
+            
             # ==================== Fault Type Balancing ====================
             # Apply class-specific calibration to prevent Amp dominance
             # Reduce Amp probability if it's dominating
@@ -163,13 +288,13 @@ class OursAdapter(MethodAdapter):
                 ref_score = self._compute_ref_specific_score(features)
                 
                 # Redistribute probability if other classes have significant features
-                if freq_score > self.CLASS_BOOST_THRESHOLD:
+                if freq_score > 0.3:
                     # Boost Freq probability
                     boost = min(self.MAX_BOOST_AMOUNT, freq_score * self.BOOST_SCALE_FACTOR)
                     sys_proba[i, 2] += boost
                     sys_proba[i, 1] -= boost * self.AMP_REDUCTION_RATIO
                     
-                if ref_score > self.CLASS_BOOST_THRESHOLD:
+                if ref_score > 0.3:
                     # Boost Ref probability
                     boost = min(self.MAX_BOOST_AMOUNT, ref_score * self.BOOST_SCALE_FACTOR)
                     sys_proba[i, 3] += boost
@@ -290,9 +415,9 @@ class OursAdapter(MethodAdapter):
         z = (value - median) / (iqr + 1e-6)
         return min(1.0, abs(z) / 3.0)  # |z|=3 对应 score=1.0
     
-    # 正常特征统计：(median, iqr)
-    # 特征现在是residual-based，来自实际正常样本统计
-    NORMAL_FEATURE_STATS = {
+    # 默认正常特征统计：(median, iqr)
+    # 如果加载了calibration文件则会被覆盖
+    DEFAULT_NORMAL_FEATURE_STATS = {
         "X1": (0.003152, 0.067323),    # 整体幅度偏移（residual均值）
         "X2": (0.000094, 0.000115),    # 带内平坦度（residual方差）
         "X3": (-0.000018, 0.000228),   # 高频衰减斜率
@@ -306,11 +431,18 @@ class OursAdapter(MethodAdapter):
         "X18": (0.000000, 0.001000),   # 频率平移
     }
     
+    def _get_feature_stats(self, feature_name: str) -> tuple:
+        """Get median and IQR for a feature, using loaded stats or defaults."""
+        if self.normal_feature_stats and feature_name in self.normal_feature_stats:
+            stats = self.normal_feature_stats[feature_name]
+            return (stats['median'], stats['iqr'])
+        return self.DEFAULT_NORMAL_FEATURE_STATS.get(feature_name, (0.0, 0.1))
+    
     def _compute_overall_anomaly_score(self, features: Dict[str, float]) -> float:
         """Compute overall anomaly score for Normal anchor detection.
         
         Step3要求：Normal两阶段判决必须用"证据阈值"而不是"softmax最大概率"。
-        使用z-score归一化，低分（< 0.12）表示正常状态。
+        使用z-score归一化，低分（< normal_anchor_threshold）表示正常状态。
         """
         # Weights for overall anomaly score
         # 重点使用envelope相关特征和residual-based特征
@@ -330,7 +462,7 @@ class OursAdapter(MethodAdapter):
         for key, weight in weights.items():
             if key in features:
                 raw_value = float(features.get(key, 0.0))
-                median, iqr = self.NORMAL_FEATURE_STATS.get(key, (0.0, 0.1))
+                median, iqr = self._get_feature_stats(key)
                 norm_value = self._zscore_normalize(raw_value, median, iqr)
                 weighted_sum += weight * norm_value
                 total_weight += weight
@@ -338,6 +470,40 @@ class OursAdapter(MethodAdapter):
         if total_weight > 0:
             return weighted_sum / total_weight
         return 0.0
+    
+    def _compute_freq_zscore(self, features: Dict[str, float]) -> float:
+        """Compute aggregate z-score for frequency-specific features.
+        
+        Step2 requirement: freq gate based on X16/X17/X18.
+        """
+        z_scores = []
+        for key in ['X16', 'X17', 'X18']:
+            if key in features:
+                raw_value = float(features.get(key, 0.0))
+                median, iqr = self._get_feature_stats(key)
+                if iqr < 1e-6:
+                    iqr = 1e-6
+                z = abs(raw_value - median) / (iqr + 1e-6)
+                z_scores.append(z)
+        
+        return max(z_scores) if z_scores else 0.0
+    
+    def _compute_ref_zscore(self, features: Dict[str, float]) -> float:
+        """Compute aggregate z-score for reference-level-specific features.
+        
+        Step2 requirement: ref gate based on X3/X10.
+        """
+        z_scores = []
+        for key in ['X3', 'X10']:
+            if key in features:
+                raw_value = float(features.get(key, 0.0))
+                median, iqr = self._get_feature_stats(key)
+                if iqr < 1e-6:
+                    iqr = 1e-6
+                z = abs(raw_value - median) / (iqr + 1e-6)
+                z_scores.append(z)
+        
+        return max(z_scores) if z_scores else 0.0
     
     def _compute_freq_specific_score(self, features: Dict[str, float]) -> float:
         """Compute frequency-specific anomaly score.
@@ -352,7 +518,7 @@ class OursAdapter(MethodAdapter):
         for key, weight in weights.items():
             if key in features:
                 raw_value = float(features.get(key, 0.0))
-                median, iqr = self.NORMAL_FEATURE_STATS.get(key, (0.0, 0.01))
+                median, iqr = self._get_feature_stats(key)
                 norm_value = self._zscore_normalize(raw_value, median, iqr)
                 weighted_sum += weight * norm_value
                 total_weight += weight
@@ -381,7 +547,7 @@ class OursAdapter(MethodAdapter):
         for key, weight in weights.items():
             if key in features:
                 raw_value = float(features.get(key, 0.0))
-                median, iqr = stats.get(key, (0.0, 0.01))
+                median, iqr = self._get_feature_stats(key)
                 norm_value = self._zscore_normalize(raw_value, median, iqr)
                 weighted_sum += weight * norm_value
                 total_weight += weight

@@ -25,7 +25,7 @@ from baseline.config import (
     ABRUPT_Q_DR, ABRUPT_Q_D2R,
 )
 from baseline.viz import plot_rrs_envelope_switch
-from features.extract import extract_system_features
+from features.feature_extraction import extract_system_features
 
 
 def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
@@ -204,10 +204,12 @@ def main():
         json.dump(switch_feats, f, indent=4, ensure_ascii=False)
 
     # 5) 正常特征统计（用于阈值初设）
+    # 使用新的 X1-X22 特征定义（residual-based）
     feats_list = []
     for i in range(traces.shape[0]):
         amp = traces[i]
-        feats = extract_system_features(frequency, rrs, bounds, band_ranges_used, amp)
+        # 新签名：extract_system_features(response_curve, baseline_curve=None, envelope=None)
+        feats = extract_system_features(amp, baseline_curve=rrs, envelope=bounds)
         feats_list.append(feats)
     stats_df = pd.DataFrame(feats_list)
     stats_df.describe(percentiles=[0.5, 0.9, 0.95, 0.99]).to_csv(normal_feat_stats)
