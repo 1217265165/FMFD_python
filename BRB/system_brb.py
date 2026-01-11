@@ -86,79 +86,128 @@ def _get_feature(features: Dict[str, float], *names: Iterable[str], default: flo
     return default
 
 
+def _normalize_feature_zscore(value: float, median: float, iqr: float, epsilon: float = 1e-6) -> float:
+    """使用robust z-score归一化特征值。
+    
+    Step2要求：归一化只允许用 normal_feature_stats（robust z-score），
+    禁止再改"手写区间"。
+    
+    归一化公式: z = (x - median) / (IQR + epsilon)
+    然后clip到[-5, 5]范围。
+    """
+    if iqr < epsilon:
+        iqr = epsilon
+    z = (value - median) / (iqr + epsilon)
+    return max(-5.0, min(5.0, z))
+
+
 def _normalize_feature(value: float, lower: float, upper: float) -> float:
+    """Legacy min-max normalization for backward compatibility."""
     value = max(lower, min(value, upper))
     return (value - lower) / (upper - lower + 1e-12)
 
 
-def _compute_attribute_scores(features: Dict[str, float]) -> Dict[str, float]:
-    """Compute normalized attribute scores for X1~X22 (扩展版).
+# 正常特征统计（从run_baseline生成的normal_feature_stats.csv获取）
+# 特征值现在是residual（相对baseline的偏差），正常样本应该围绕0分布
+# 这些值从实际正常样本中计算得出，格式为 (median, iqr)
+NORMAL_FEATURE_STATS = {
+    # 格式: feature_name: (median, iqr)
+    # residual-based特征：来自实际正常样本统计
+    "X1": (0.003152, 0.067323),    # 整体幅度偏移（residual均值）
+    "X2": (0.000094, 0.000115),    # 带内平坦度（residual方差）
+    "X3": (-0.000018, 0.000228),   # 高频衰减斜率
+    "X4": (0.010546, 0.005289),    # 频率标度非线性（std）
+    "X5": (0.255391, 0.101644),    # 幅度缩放一致性
+    "X6": (0.000135, 0.000121),    # 纹波方差
+    "X7": (0.040000, 0.025000),    # 增益非线性
+    "X8": (0.008982, 0.004616),    # 本振泄漏
+    "X9": (0.000111, 0.000107),    # 调谐线性度残差
+    "X10": (0.005749, 0.003149),   # 频段幅度一致性
+    "X11": (0.003659, 0.001220),   # 包络越界率
+    "X12": (0.030000, 0.010000),   # 最大包络违规
+    "X13": (6.394475, 23.550748),  # 包络违规能量
+    "X14": (0.023388, 0.039121),   # 低频段残差均值
+    "X15": (0.008679, 0.008099),   # 高频段残差std
+    "X16": (0.000000, 0.001000),   # 频移（互相关滞后），IQR=0时设为小正数
+    "X17": (0.000000, 0.001000),   # 频率缩放
+    "X18": (0.000000, 0.001000),   # 频率平移
+    "X19": (-0.000036, 0.000172),  # 低频斜率
+    "X20": (0.207247, 1.282695),   # 峰度
+    "X21": (23.000000, 12.000000), # 峰值数
+    "X22": (0.249534, 0.222095),   # 主频能量占比
+}
 
-    The function is robust to different key names and accepts either
-    X1~X22 or descriptive names used in the baseline scripts.
+
+def _compute_attribute_scores(features: Dict[str, float], feature_stats: Dict[str, Tuple[float, float]] = None) -> Dict[str, float]:
+    """Compute normalized attribute scores for X1~X22 using robust z-score.
+
+    Step2要求：使用 normal_feature_stats 进行归一化，而不是硬编码的min/max区间。
+    这样正常样本的z-score大多在[-2, 2]范围内。
     """
+    
+    stats = feature_stats or NORMAL_FEATURE_STATS
 
-    # X1-X5: 基础系统级特征
-    x1_raw = abs(_get_feature(features, "X1", "amplitude_offset", "bias"))
+    # X1-X5: 基础系统级特征（现在是residual-based）
+    x1_raw = _get_feature(features, "X1", "amplitude_offset", "bias")  # 不取abs，保留符号
     x2_raw = _get_feature(features, "X2", "inband_flatness", "ripple_var")
-    x3_raw = abs(_get_feature(features, "X3", "hf_attenuation_slope", "res_slope"))
-    x4_raw = abs(_get_feature(features, "X4", "freq_scale_nonlinearity", "df"))
-    x5_raw = abs(_get_feature(features, "X5", "scale_consistency", "amp_scale_consistency", "gain_consistency"))
+    x3_raw = _get_feature(features, "X3", "hf_attenuation_slope", "res_slope")
+    x4_raw = _get_feature(features, "X4", "freq_scale_nonlinearity", "df")
+    x5_raw = _get_feature(features, "X5", "scale_consistency", "amp_scale_consistency", "gain_consistency")
 
-    # X6-X10: 模块级症状（系统层可选使用）
+    # X6-X10: 模块级症状
     x6_raw = _get_feature(features, "X6", "ripple_variance")
     x7_raw = _get_feature(features, "X7", "gain_nonlinearity", "step_score")
     x8_raw = _get_feature(features, "X8", "lo_leakage")
     x9_raw = _get_feature(features, "X9", "tuning_linearity_residual")
     x10_raw = _get_feature(features, "X10", "band_amplitude_consistency")
 
-    # X11-X15: 包络/残差特征（系统层使用）
+    # X11-X15: 包络/残差特征
     x11_raw = _get_feature(features, "X11", "env_overrun_rate", "viol_rate")
     x12_raw = _get_feature(features, "X12", "env_overrun_max")
     x13_raw = _get_feature(features, "X13", "env_violation_energy")
     x14_raw = _get_feature(features, "X14", "band_residual_low")
     x15_raw = _get_feature(features, "X15", "band_residual_high_std")
 
-    # X16-X18: 频率对齐/形变（频率失准识别）
-    x16_raw = abs(_get_feature(features, "X16", "corr_shift_bins"))
-    x17_raw = abs(_get_feature(features, "X17", "warp_scale"))
-    x18_raw = abs(_get_feature(features, "X18", "warp_bias"))
+    # X16-X18: 频率对齐/形变
+    x16_raw = _get_feature(features, "X16", "corr_shift_bins")
+    x17_raw = _get_feature(features, "X17", "warp_scale")
+    x18_raw = _get_feature(features, "X18", "warp_bias")
 
-    # X19-X22: 幅度链路细粒度（幅度/参考异常识别）
-    x19_raw = abs(_get_feature(features, "X19", "slope_low"))
-    x20_raw = abs(_get_feature(features, "X20", "kurtosis_detrended"))
+    # X19-X22: 幅度链路细粒度
+    x19_raw = _get_feature(features, "X19", "slope_low")
+    x20_raw = _get_feature(features, "X20", "kurtosis_detrended")
     x21_raw = _get_feature(features, "X21", "peak_count_residual")
     x22_raw = _get_feature(features, "X22", "ripple_dom_freq_energy")
 
+    # 使用z-score归一化，然后映射到[0,1]用于BRB
+    # z-score绝对值越大表示越异常
+    def zscore_to_score(z_value: float) -> float:
+        """将z-score映射到[0,1]的异常分数，|z|越大分数越高"""
+        return min(1.0, abs(z_value) / 3.0)  # |z|=3 对应 score=1.0
+
     scores = {
-        # 基础特征归一化 - 调整范围以匹配实际数据分布
-        # X1: mean dB value, typically around -10 dB
-        "X1": _normalize_feature(x1_raw, -15, -5),  # Raw mean dB value
-        "X2": _normalize_feature(x2_raw, 0.0, 0.2),  # Inband flatness variance
-        "X3": _normalize_feature(x3_raw, -0.005, 0.005),  # HF attenuation slope
-        "X4": _normalize_feature(x4_raw, 0.0, 0.5),  # Frequency scale nonlinearity (std)
-        "X5": _normalize_feature(x5_raw, 0.1, 0.7),  # Scale consistency
-        # 模块症状归一化
-        "X6": _normalize_feature(x6_raw, 0.0, 0.2),  # Ripple variance
-        "X7": _normalize_feature(x7_raw, 0.0, 0.3),  # Gain nonlinearity (step score)
-        "X8": _normalize_feature(x8_raw, 0.0, 0.5),  # LO leakage
-        "X9": _normalize_feature(x9_raw, 0.0, 0.5),  # Tuning linearity residual
-        "X10": _normalize_feature(x10_raw, 0.0, 0.2),  # Band amplitude consistency
-        # 包络/残差特征归一化
-        "X11": _normalize_feature(x11_raw, 0.0, 0.1),  # Envelope overrun rate
-        "X12": _normalize_feature(x12_raw, 0.0, 2.0),  # Max envelope violation
-        "X13": _normalize_feature(x13_raw, 0.0, 20.0),  # Envelope violation energy
-        "X14": _normalize_feature(x14_raw, -0.1, 0.1),  # Band residual low
-        "X15": _normalize_feature(x15_raw, 0.0, 0.1),  # Band residual high std
-        # 频率对齐特征归一化 - 这些特征当前为0，需要重新计算
-        "X16": _normalize_feature(x16_raw, 0.0, 0.01),  # Correlation shift bins
-        "X17": _normalize_feature(x17_raw, 0.0, 0.01),  # Warp scale
-        "X18": _normalize_feature(x18_raw, 0.0, 0.01),  # Warp bias
-        # 幅度细粒度特征归一化
-        "X19": _normalize_feature(x19_raw, -0.001, 0.001),  # Slope low
-        "X20": _normalize_feature(x20_raw, -1.0, 1.0),  # Kurtosis detrended
-        "X21": _normalize_feature(x21_raw, 0, 10),  # Peak count residual
-        "X22": _normalize_feature(x22_raw, 0.0, 0.1),  # Ripple dom freq energy
+        "X1": zscore_to_score(_normalize_feature_zscore(x1_raw, *stats.get("X1", (0.0, 0.1)))),
+        "X2": zscore_to_score(_normalize_feature_zscore(x2_raw, *stats.get("X2", (0.01, 0.02)))),
+        "X3": zscore_to_score(_normalize_feature_zscore(x3_raw, *stats.get("X3", (0.0, 0.001)))),
+        "X4": zscore_to_score(_normalize_feature_zscore(x4_raw, *stats.get("X4", (0.05, 0.03)))),
+        "X5": zscore_to_score(_normalize_feature_zscore(x5_raw, *stats.get("X5", (0.3, 0.1)))),
+        "X6": zscore_to_score(_normalize_feature_zscore(x6_raw, *stats.get("X6", (0.01, 0.02)))),
+        "X7": zscore_to_score(_normalize_feature_zscore(x7_raw, *stats.get("X7", (0.05, 0.03)))),
+        "X8": zscore_to_score(_normalize_feature_zscore(x8_raw, *stats.get("X8", (0.02, 0.02)))),
+        "X9": zscore_to_score(_normalize_feature_zscore(x9_raw, *stats.get("X9", (0.01, 0.01)))),
+        "X10": zscore_to_score(_normalize_feature_zscore(x10_raw, *stats.get("X10", (0.02, 0.02)))),
+        "X11": zscore_to_score(_normalize_feature_zscore(x11_raw, *stats.get("X11", (0.0, 0.01)))),
+        "X12": zscore_to_score(_normalize_feature_zscore(x12_raw, *stats.get("X12", (0.0, 0.2)))),
+        "X13": zscore_to_score(_normalize_feature_zscore(x13_raw, *stats.get("X13", (0.0, 1.0)))),
+        "X14": zscore_to_score(_normalize_feature_zscore(x14_raw, *stats.get("X14", (0.0, 0.05)))),
+        "X15": zscore_to_score(_normalize_feature_zscore(x15_raw, *stats.get("X15", (0.05, 0.03)))),
+        "X16": zscore_to_score(_normalize_feature_zscore(x16_raw, *stats.get("X16", (0.0, 0.001)))),
+        "X17": zscore_to_score(_normalize_feature_zscore(x17_raw, *stats.get("X17", (0.0, 0.001)))),
+        "X18": zscore_to_score(_normalize_feature_zscore(x18_raw, *stats.get("X18", (0.0, 0.001)))),
+        "X19": zscore_to_score(_normalize_feature_zscore(x19_raw, *stats.get("X19", (0.0, 0.0005)))),
+        "X20": zscore_to_score(_normalize_feature_zscore(x20_raw, *stats.get("X20", (0.0, 0.5)))),
+        "X21": zscore_to_score(_normalize_feature_zscore(x21_raw, *stats.get("X21", (2.0, 3.0)))),
+        "X22": zscore_to_score(_normalize_feature_zscore(x22_raw, *stats.get("X22", (0.02, 0.02)))),
     }
     return scores
 

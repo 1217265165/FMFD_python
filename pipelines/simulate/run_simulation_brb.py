@@ -521,7 +521,8 @@ def run_simulation(args: argparse.Namespace):
             sys_labels.append(label_sys)
             mod_labels.append(label_mod)
             
-            sys_feats = extract_system_features(curve)
+            # Pass baseline (rrs) to extract_system_features for proper residual calculation
+            sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
             dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
             merged_sys_input = {**sys_feats, **dyn_feats}
             sys_result = system_level_infer(merged_sys_input, mode='sub_brb')
@@ -569,7 +570,8 @@ def run_simulation(args: argparse.Namespace):
                 sys_labels.append(label_sys)
                 mod_labels.append(label_mod)
                 
-                sys_feats = extract_system_features(curve)
+                # Pass baseline (rrs) to extract_system_features for proper residual calculation
+                sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
                 dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
                 merged_sys_input = {**sys_feats, **dyn_feats}
                 sys_result = system_level_infer(merged_sys_input, mode='sub_brb')
@@ -628,7 +630,8 @@ def run_simulation(args: argparse.Namespace):
                 sys_labels.append(label_sys)
                 mod_labels.append(label_mod)
 
-                sys_feats = extract_system_features(curve)
+                # Pass baseline (rrs) to extract_system_features for proper residual calculation
+                sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
                 dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
                 merged_sys_input = {**sys_feats, **dyn_feats}
                 sys_result = system_level_infer(merged_sys_input, mode='sub_brb')
@@ -684,7 +687,8 @@ def run_simulation(args: argparse.Namespace):
             sys_labels.append(label_sys)
             mod_labels.append(label_mod)
 
-            sys_feats = extract_system_features(curve)
+            # Pass baseline (rrs) to extract_system_features for proper residual calculation
+            sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
             dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
             merged_sys_input = {**sys_feats, **dyn_feats}
             sys_result = system_level_infer(merged_sys_input, mode='sub_brb')

@@ -177,12 +177,16 @@ def parse_trace_cell(cell):
 def extract_system_features(response_curve, baseline_curve=None, envelope=None) -> dict:
     """提取系统级特征 X1~X22（扩展版，对应准确率提升需求）。
 
+    **关键改进（Step1要求）：所有特征必须基于"相对baseline的偏差/残差"，
+    而不是原始dB值。这确保正常样本的特征值围绕0分布。**
+
     参数
     ----
     response_curve : array-like
         频响幅度序列，默认为等间隔采样的 dB 值。
     baseline_curve : array-like, optional
-        基线RRS曲线，用于计算包络相关特征(X11-X15)。
+        基线RRS曲线（必须提供以计算正确的特征）。如果不提供，
+        特征会回退到使用原始值，但这不是推荐用法。
     envelope : tuple of (upper, lower), optional
         动态包络边界，用于计算包络违规特征。
 
@@ -190,7 +194,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     ----
     dict
         包含 X1-X22 的特征字典：
-        - X1-X5: 原有系统级基础特征
+        - X1-X5: 系统级基础特征（基于residual）
         - X6-X10: 模块级症状特征
         - X11-X15: 基于包络/残差的通用特征
         - X16-X18: 频率对齐/形变特征
@@ -201,64 +205,76 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     if arr.size == 0:
         return {f"X{i}": 0.0 for i in range(1, 23)}
 
-    # X1-X5: 保留原有特征
-    x1 = float(np.mean(arr))  # 整体幅度偏移
-    inband = arr[: int(len(arr) * 0.6)] if len(arr) > 5 else arr
-    x2 = float(np.var(inband))  # 带内平坦度
+    # 计算residual（相对baseline的偏差）
+    # 这是正确的特征计算方式：X1应该是residual的均值，而不是原始dB均值
+    if baseline_curve is not None:
+        baseline = np.asarray(baseline_curve, dtype=float)
+        if baseline.shape == arr.shape:
+            residual_from_baseline = arr - baseline
+        else:
+            # baseline形状不匹配，回退到去趋势residual
+            residual_from_baseline = arr - np.mean(arr)
+    else:
+        # 无baseline时，使用去趋势residual作为近似
+        residual_from_baseline = arr - np.mean(arr)
 
-    # 高频段衰减斜率
-    tail = arr[int(len(arr) * 0.8) :] if len(arr) > 5 else arr
-    if tail.size >= 2:
-        idx = np.arange(len(tail))
-        coef = np.polyfit(idx, tail, 1)[0]
+    # ========== X1-X5: 系统级基础特征（基于residual）==========
+    # X1: 整体幅度偏移 = mean(residual)，正常样本应该~0
+    x1 = float(np.mean(residual_from_baseline))
+    
+    # X2: 带内平坦度 = var(residual in 60% inband)
+    inband_len = int(len(residual_from_baseline) * 0.6)
+    inband_residual = residual_from_baseline[:inband_len] if len(residual_from_baseline) > 5 else residual_from_baseline
+    x2 = float(np.var(inband_residual))
+
+    # X3: 高频段衰减斜率（基于residual的高频段）
+    tail_start = int(len(residual_from_baseline) * 0.8)
+    tail_residual = residual_from_baseline[tail_start:] if len(residual_from_baseline) > 5 else residual_from_baseline
+    if tail_residual.size >= 2:
+        idx = np.arange(len(tail_residual))
+        coef = np.polyfit(idx, tail_residual, 1)[0]
         x3 = float(coef)
     else:
         x3 = 0.0
 
-    # 频率标度非线性度
-    x_axis = np.linspace(0, 1, len(arr))
+    # X4: 频率标度非线性度（基于去趋势后的residual的std）
+    x_axis = np.linspace(0, 1, len(residual_from_baseline))
     try:
-        coef = np.polyfit(x_axis, arr, 1)
+        coef = np.polyfit(x_axis, residual_from_baseline, 1)
         fit = np.polyval(coef, x_axis)
-        residual = arr - fit
-        x4 = float(np.std(residual))
+        detrended_residual = residual_from_baseline - fit
+        x4 = float(np.std(detrended_residual))
     except Exception:
         x4 = 0.0
-        residual = arr - np.mean(arr)
+        detrended_residual = residual_from_baseline
 
-    # 幅度缩放一致性
-    centered = arr - np.mean(arr)
-    denom = np.max(np.abs(centered)) + 1e-12
-    normalized = centered / denom
-    x5 = float(np.std(normalized))
+    # X5: 幅度缩放一致性（基于residual的normalized std）
+    centered_residual = residual_from_baseline - np.mean(residual_from_baseline)
+    denom = np.max(np.abs(centered_residual)) + 1e-12
+    normalized_residual = centered_residual / denom
+    x5 = float(np.std(normalized_residual))
 
-    # X6-X10: 模块级症状特征（供模块层使用）
-    diff = np.diff(arr)
-    x6 = float(np.var(arr))  # 纹波方差
-    x7 = float(np.max(np.abs(diff)) if diff.size else 0.0)  # 增益非线性（最大步进）
-    x8 = float(np.mean(np.abs(arr - np.median(arr))))  # 本振泄漏（偏离中位数）
-    x9 = float(np.sum((arr - fit) ** 2) / len(arr)) if len(arr) > 0 else 0.0  # 调谐线性度残差
+    # ========== X6-X10: 模块级症状特征（供模块层使用）==========
+    diff_residual = np.diff(residual_from_baseline)
+    x6 = float(np.var(residual_from_baseline))  # 纹波方差（基于residual）
+    x7 = float(np.max(np.abs(diff_residual)) if diff_residual.size else 0.0)  # 增益非线性（最大步进）
+    x8 = float(np.mean(np.abs(residual_from_baseline - np.median(residual_from_baseline))))  # 本振泄漏（偏离中位数）
+    x9 = float(np.sum(detrended_residual ** 2) / len(detrended_residual)) if len(detrended_residual) > 0 else 0.0  # 调谐线性度残差
     
-    # X10: 不同频段幅度一致性
+    # X10: 不同频段幅度一致性（基于residual）
     n_bands = 4
-    band_size = len(arr) // n_bands
+    band_size = len(residual_from_baseline) // n_bands
     band_means = []
     for i in range(n_bands):
         start = i * band_size
-        end = (i + 1) * band_size if i < n_bands - 1 else len(arr)
+        end = (i + 1) * band_size if i < n_bands - 1 else len(residual_from_baseline)
         if end > start:
-            band_means.append(np.mean(arr[start:end]))
+            band_means.append(np.mean(residual_from_baseline[start:end]))
     x10 = float(np.std(band_means)) if len(band_means) > 1 else 0.0
 
-    # X11-X15: 基于包络/残差的通用特征
-    if baseline_curve is not None:
-        baseline = np.asarray(baseline_curve, dtype=float)
-        if baseline.shape == arr.shape:
-            envelope_residual = arr - baseline
-        else:
-            envelope_residual = residual
-    else:
-        envelope_residual = residual
+    # ========== X11-X15: 基于包络/残差的通用特征 ==========
+    # 使用residual_from_baseline作为envelope_residual
+    envelope_residual = residual_from_baseline
 
     # X11: 超出动态包络点占比
     x11 = 0.0
@@ -333,29 +349,29 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         x16, x17, x18 = 0.0, 0.0, 0.0
 
     # X19-X22: 幅度链路细粒度特征
-    # X19: 低频段斜率（区分前置链路 vs IF链路）
-    low_tail = arr[: len(arr) // 4] if len(arr) > 8 else arr
-    if low_tail.size >= 2:
-        idx = np.arange(len(low_tail))
-        x19 = float(np.polyfit(idx, low_tail, 1)[0])
+    # X19: 低频段斜率（区分前置链路 vs IF链路，基于residual）
+    low_residual = residual_from_baseline[: len(residual_from_baseline) // 4] if len(residual_from_baseline) > 8 else residual_from_baseline
+    if low_residual.size >= 2:
+        idx = np.arange(len(low_residual))
+        x19 = float(np.polyfit(idx, low_residual, 1)[0])
     else:
         x19 = 0.0
 
     # X20: 去趋势残差峰度（纹波/阻抗失配）
-    if residual.size > 3:
-        x20 = float(kurtosis(residual))
+    if detrended_residual.size > 3:
+        x20 = float(kurtosis(detrended_residual))
     else:
         x20 = 0.0
 
-    # X21: 残差峰值数量（纹波密度）
-    threshold = np.mean(np.abs(residual)) + 2 * np.std(residual)
-    peaks = np.abs(residual) > threshold
+    # X21: 残差峰值数量（纹波密度，基于residual_from_baseline）
+    threshold = np.mean(np.abs(residual_from_baseline)) + 2 * np.std(residual_from_baseline)
+    peaks = np.abs(residual_from_baseline) > threshold
     x21 = float(np.sum(peaks))
 
     # X22: 残差主频能量占比
-    if residual.size > 4:
+    if residual_from_baseline.size > 4:
         try:
-            fft_vals = np.abs(np.fft.rfft(residual))
+            fft_vals = np.abs(np.fft.rfft(residual_from_baseline))
             if len(fft_vals) > 1:
                 x22 = float(np.max(fft_vals) / np.sum(fft_vals))
             else:

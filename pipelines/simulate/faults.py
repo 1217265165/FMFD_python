@@ -104,8 +104,12 @@ def _estimate_sigma(amp, window_frac=0.02, min_window=21):
 # -------------------------
 def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
     """
-    幅度失准：A' = gain*A + bias + comp*A^2
+    幅度失准：A' = gain*A + bias + comp*(A - mean(A))^2
     若 gain/bias/comp 未给出，则基于当前曲线的 σ 自适应随机生成。
+    
+    注意：非线性压缩项使用去中心化的幅度 (A - mean(A))^2，
+    而不是原始 A^2。这样可以保证对任意幅度基线（如 0dBm 或 -10dBm）
+    都有一致的效果，避免因基线幅度不同导致的异常偏移。
     """
     rng = rng or np.random.default_rng()
     _, sig_med = _estimate_sigma(amp)
@@ -115,7 +119,10 @@ def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
         bias = rng.normal(0, 0.5 * max(0.2, sig_med))
     if comp is None:
         comp = rng.normal(0.02, 0.01)
-    return gain * amp + bias + comp * (amp ** 2)
+    
+    # 使用去中心化的幅度计算非线性项，避免基线幅度差异导致的问题
+    amp_centered = amp - np.mean(amp)
+    return gain * amp + bias + comp * (amp_centered ** 2)
 
 def inject_freq_miscal(frequency, amp, delta_f=None, rng=None):
     """

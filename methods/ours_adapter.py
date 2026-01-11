@@ -279,27 +279,49 @@ class OursAdapter(MethodAdapter):
         value = max(lower, min(value, upper))
         return (value - lower) / (upper - lower + 1e-12)
     
+    def _zscore_normalize(self, value: float, median: float, iqr: float) -> float:
+        """使用robust z-score归一化特征值，返回绝对值用于异常检测。
+        
+        Step2要求：归一化只允许用 normal_feature_stats（robust z-score）。
+        z = (x - median) / (IQR + eps)
+        """
+        if iqr < 1e-6:
+            iqr = 1e-6
+        z = (value - median) / (iqr + 1e-6)
+        return min(1.0, abs(z) / 3.0)  # |z|=3 对应 score=1.0
+    
+    # 正常特征统计：(median, iqr)
+    # 特征现在是residual-based，来自实际正常样本统计
+    NORMAL_FEATURE_STATS = {
+        "X1": (0.003152, 0.067323),    # 整体幅度偏移（residual均值）
+        "X2": (0.000094, 0.000115),    # 带内平坦度（residual方差）
+        "X3": (-0.000018, 0.000228),   # 高频衰减斜率
+        "X4": (0.010546, 0.005289),    # 频率标度非线性
+        "X5": (0.255391, 0.101644),    # 幅度缩放一致性
+        "X11": (0.003659, 0.001220),   # 包络越界率
+        "X12": (0.030000, 0.010000),   # 最大包络违规
+        "X13": (6.394475, 23.550748),  # 包络违规能量
+        "X16": (0.000000, 0.001000),   # 频移
+        "X17": (0.000000, 0.001000),   # 频率缩放
+        "X18": (0.000000, 0.001000),   # 频率平移
+    }
+    
     def _compute_overall_anomaly_score(self, features: Dict[str, float]) -> float:
         """Compute overall anomaly score for Normal anchor detection.
         
-        Uses weighted combination of key anomaly indicators.
-        Low score (< 0.12) indicates normal state.
+        Step3要求：Normal两阶段判决必须用"证据阈值"而不是"softmax最大概率"。
+        使用z-score归一化，低分（< 0.12）表示正常状态。
         """
-        # Feature normalization parameters - 调整范围以匹配实际数据分布
-        norm_params = {
-            'X1': (-15, -5),      # amplitude offset (raw mean dB)
-            'X2': (0.0, 0.2),     # inband flatness
-            'X4': (0.0, 0.5),     # frequency nonlinearity (std)
-            'X5': (0.1, 0.7),     # scale consistency
-            'X11': (0.0, 0.1),    # envelope overrun rate
-            'X12': (0.0, 2.0),    # max envelope violation
-            'X13': (0.0, 20.0),   # envelope violation energy
-        }
-        
         # Weights for overall anomaly score
+        # 重点使用envelope相关特征和residual-based特征
         weights = {
-            'X1': 0.15, 'X2': 0.15, 'X4': 0.10, 'X5': 0.10,
-            'X11': 0.20, 'X12': 0.15, 'X13': 0.15,
+            'X1': 0.15,  # 幅度偏移（residual）
+            'X2': 0.10,  # 平坦度（residual方差）
+            'X4': 0.10,  # 频率非线性
+            'X5': 0.05,  # 缩放一致性
+            'X11': 0.25, # 包络越界率（关键）
+            'X12': 0.20, # 最大包络违规（关键）
+            'X13': 0.15, # 包络违规能量
         }
         
         weighted_sum = 0.0
@@ -308,8 +330,8 @@ class OursAdapter(MethodAdapter):
         for key, weight in weights.items():
             if key in features:
                 raw_value = float(features.get(key, 0.0))
-                lower, upper = norm_params.get(key, (0.0, 1.0))
-                norm_value = self._normalize_feature(raw_value, lower, upper)
+                median, iqr = self.NORMAL_FEATURE_STATS.get(key, (0.0, 0.1))
+                norm_value = self._zscore_normalize(raw_value, median, iqr)
                 weighted_sum += weight * norm_value
                 total_weight += weight
         
@@ -322,23 +344,16 @@ class OursAdapter(MethodAdapter):
         
         Features unique to frequency faults: X4, X16, X17, X18.
         """
-        norm_params = {
-            'X4': (0.0, 0.5),     # frequency nonlinearity (std)
-            'X16': (0.0, 0.01),   # correlation shift
-            'X17': (0.0, 0.01),   # warp scale
-            'X18': (0.0, 0.01),   # warp bias
-        }
-        
-        weights = {'X4': 0.50, 'X16': 0.20, 'X17': 0.15, 'X18': 0.15}
+        weights = {'X4': 0.40, 'X16': 0.25, 'X17': 0.20, 'X18': 0.15}
         
         weighted_sum = 0.0
         total_weight = 0.0
         
         for key, weight in weights.items():
             if key in features:
-                raw_value = abs(float(features.get(key, 0.0)))
-                lower, upper = norm_params.get(key, (0.0, 1.0))
-                norm_value = self._normalize_feature(raw_value, lower, upper)
+                raw_value = float(features.get(key, 0.0))
+                median, iqr = self.NORMAL_FEATURE_STATS.get(key, (0.0, 0.01))
+                norm_value = self._zscore_normalize(raw_value, median, iqr)
                 weighted_sum += weight * norm_value
                 total_weight += weight
         
@@ -350,12 +365,12 @@ class OursAdapter(MethodAdapter):
         """Compute reference-level-specific anomaly score.
         
         Features unique to reference level faults: X3, X10.
-        X3: High-frequency attenuation slope (reference level affects this)
-        X10: Band amplitude consistency (reference level mismatch between bands)
         """
-        norm_params = {
-            'X3': (-0.005, 0.005),  # HF attenuation slope
-            'X10': (0.0, 0.2),      # band amplitude consistency
+        # X3: High-frequency attenuation slope
+        # X10: Band amplitude consistency
+        stats = {
+            'X3': (0.0, 0.001),
+            'X10': (0.02, 0.02),
         }
         
         weights = {'X3': 0.50, 'X10': 0.50}
@@ -365,9 +380,9 @@ class OursAdapter(MethodAdapter):
         
         for key, weight in weights.items():
             if key in features:
-                raw_value = abs(float(features.get(key, 0.0)))
-                lower, upper = norm_params.get(key, (0.0, 1.0))
-                norm_value = self._normalize_feature(raw_value, lower, upper)
+                raw_value = float(features.get(key, 0.0))
+                median, iqr = stats.get(key, (0.0, 0.01))
+                norm_value = self._zscore_normalize(raw_value, median, iqr)
                 weighted_sum += weight * norm_value
                 total_weight += weight
         
