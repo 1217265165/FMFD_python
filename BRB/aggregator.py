@@ -164,11 +164,15 @@ def aggregate_system_results(
     freq_result = freq_brb_infer(features, alpha)
     ref_result = ref_brb_infer(features, alpha)
     
-    # 获取各子BRB的激活度
+    # 获取各子BRB的激活度，并应用相对权重
+    # 问题：频率子BRB的激活度对所有类别都偏高，需要降低其影响力
+    # 权重比例：amp:freq:ref = 1.2:0.7:1.0
+    sub_brb_weights = [1.2, 0.7, 1.0]  # amp, freq, ref
+    
     activations = [
-        amp_result['activation'],
-        freq_result['activation'],
-        ref_result['activation']
+        amp_result['activation'] * sub_brb_weights[0],
+        freq_result['activation'] * sub_brb_weights[1],
+        ref_result['activation'] * sub_brb_weights[2]
     ]
     
     # 计算整体异常度
@@ -281,11 +285,13 @@ def system_level_infer_with_sub_brbs(
             freq_result = freq_brb_infer(freq_features, alpha)
             ref_result = ref_brb_infer(ref_features, alpha)
             
-            # 聚合结果
+            # 聚合结果 - 应用子BRB权重
+            # 问题：频率子BRB的激活度对所有类别都偏高，需要降低其影响力
+            sub_brb_weights = [1.2, 0.7, 1.0]  # amp, freq, ref
             activations = [
-                amp_result['activation'],
-                freq_result['activation'],
-                ref_result['activation']
+                amp_result['activation'] * sub_brb_weights[0],
+                freq_result['activation'] * sub_brb_weights[1],
+                ref_result['activation'] * sub_brb_weights[2]
             ]
             
             overall_score = compute_overall_score(features)

@@ -127,11 +127,14 @@ def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
 def inject_freq_miscal(frequency, amp, delta_f=None, rng=None):
     """
     频率失准：频率轴整体平移后重采样；delta_f 未给出时按带宽 ppm 生成。
+    
+    注意：原始 ±150 ppm 对于10MHz步进太小，增大到 ±1000 ppm 以产生可检测的频移。
     """
     rng = rng or np.random.default_rng()
     bw = frequency[-1] - frequency[0]
     if delta_f is None:
-        ppm = rng.uniform(-150e-6, 150e-6)
+        # 增大频移范围到 ±1000 ppm（约 8MHz，接近一个步进）
+        ppm = rng.uniform(-1000e-6, 1000e-6)
         delta_f = ppm * bw
     f_shift = frequency + delta_f
     interp = interp1d(f_shift, amp, kind="linear", bounds_error=False, fill_value="extrapolate")
