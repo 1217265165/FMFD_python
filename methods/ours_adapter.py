@@ -70,9 +70,11 @@ class OursAdapter(MethodAdapter):
         self.n_module_rules = 33  # Configured per-module rules
         self.n_params = 68  # 增加：22个特征权重 + 3个规则权重 + 33个belief参数 + 10个子BRB参数
         self.kd_features = [f'X{i}' for i in range(1, 23)]  # X1-X22
+    # 配置开关：Normal锚点和证据门控默认禁用，等待校准文件启用
+        # 这些可以通过calibration.json配置：{"use_normal_anchor": true, "use_evidence_gating": true}
         self.use_sub_brb = True  # 启用子BRB架构以提高准确率
-        self.use_normal_anchor = False  # 暂时禁用Normal锚点，等待calibration
-        self.use_evidence_gating = False  # 暂时禁用证据门控，等待calibration
+        self.use_normal_anchor = False  # 默认禁用，通过calibration.json启用
+        self.use_evidence_gating = False  # 默认禁用，通过calibration.json启用
         
         # Calibrated thresholds - will be loaded from calibration.json if available
         self.normal_anchor_threshold = self.DEFAULT_NORMAL_ANCHOR_THRESHOLD
@@ -123,6 +125,10 @@ class OursAdapter(MethodAdapter):
                         calib = json.load(f)
                     
                     # Load calibrated thresholds
+                    if 'use_normal_anchor' in calib:
+                        self.use_normal_anchor = bool(calib['use_normal_anchor'])
+                    if 'use_evidence_gating' in calib:
+                        self.use_evidence_gating = bool(calib['use_evidence_gating'])
                     if 'normal_anchor_threshold' in calib:
                         self.normal_anchor_threshold = float(calib['normal_anchor_threshold'])
                     if 'fault_confirmation_threshold' in calib:
