@@ -39,6 +39,16 @@ class OursAdapter(MethodAdapter):
     NORMAL_ANCHOR_SCORE_THRESHOLD = 0.12  # Below this = definitely normal
     FAULT_CONFIRMATION_THRESHOLD = 0.25   # Above this = definitely fault
     
+    # Normal anchor probability distribution (used when sample is classified as Normal)
+    NORMAL_ANCHOR_PROBS = np.array([0.8, 0.067, 0.067, 0.066])
+    
+    # Class balancing parameters
+    AMP_DOMINANCE_THRESHOLD = 0.5  # Threshold to detect Amp dominance
+    CLASS_BOOST_THRESHOLD = 0.3    # Threshold for class-specific score to trigger boost
+    MAX_BOOST_AMOUNT = 0.2         # Maximum probability boost
+    BOOST_SCALE_FACTOR = 0.3      # Scale factor for boost calculation
+    AMP_REDUCTION_RATIO = 0.7     # Ratio to reduce Amp probability during boost
+    
     def __init__(self):
         self.config = SystemBRBConfig(
             alpha=3.0,  # Higher temperature for sharper distribution
@@ -128,7 +138,7 @@ class OursAdapter(MethodAdapter):
                 # Stage 1: Normal anchor check
                 if overall_score < self.NORMAL_ANCHOR_SCORE_THRESHOLD:
                     # Low anomaly score -> classify as Normal
-                    sys_proba[i] = np.array([0.8, 0.067, 0.067, 0.066])
+                    sys_proba[i] = self.NORMAL_ANCHOR_PROBS.copy()
                     sys_pred[i] = 0  # Normal
                     continue
             
@@ -147,21 +157,21 @@ class OursAdapter(MethodAdapter):
             # ==================== Fault Type Balancing ====================
             # Apply class-specific calibration to prevent Amp dominance
             # Reduce Amp probability if it's dominating
-            if sys_proba[i, 1] > 0.5 and sys_proba[i, 1] > sys_proba[i, 2] + sys_proba[i, 3]:
+            if sys_proba[i, 1] > self.AMP_DOMINANCE_THRESHOLD and sys_proba[i, 1] > sys_proba[i, 2] + sys_proba[i, 3]:
                 # Check if Freq or Ref features are significant
                 freq_score = self._compute_freq_specific_score(features)
                 ref_score = self._compute_ref_specific_score(features)
                 
                 # Redistribute probability if other classes have significant features
-                if freq_score > 0.3:
+                if freq_score > self.CLASS_BOOST_THRESHOLD:
                     # Boost Freq probability
-                    boost = min(0.2, freq_score * 0.3)
+                    boost = min(self.MAX_BOOST_AMOUNT, freq_score * self.BOOST_SCALE_FACTOR)
                     sys_proba[i, 2] += boost
-                    sys_proba[i, 1] -= boost * 0.7
+                    sys_proba[i, 1] -= boost * self.AMP_REDUCTION_RATIO
                     
-                if ref_score > 0.3:
+                if ref_score > self.CLASS_BOOST_THRESHOLD:
                     # Boost Ref probability
-                    boost = min(0.2, ref_score * 0.3)
+                    boost = min(self.MAX_BOOST_AMOUNT, ref_score * self.BOOST_SCALE_FACTOR)
                     sys_proba[i, 3] += boost
                     sys_proba[i, 1] -= boost * 0.7
             
