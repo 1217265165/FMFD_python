@@ -131,33 +131,34 @@ def _compute_attribute_scores(features: Dict[str, float]) -> Dict[str, float]:
     x22_raw = _get_feature(features, "X22", "ripple_dom_freq_energy")
 
     scores = {
-        # 基础特征归一化
-        "X1": _normalize_feature(x1_raw, 0.02, 0.5),
-        "X2": _normalize_feature(x2_raw, 0.002, 0.05),
-        "X3": _normalize_feature(x3_raw, 1e-12, 1e-9),
-        "X4": _normalize_feature(x4_raw, 5e5, 3e7),
-        "X5": _normalize_feature(x5_raw, 0.01, 0.35),
+        # 基础特征归一化 - 调整范围以匹配实际数据分布
+        # X1: mean dB value, typically around -10 dB
+        "X1": _normalize_feature(x1_raw, -15, -5),  # Raw mean dB value
+        "X2": _normalize_feature(x2_raw, 0.0, 0.2),  # Inband flatness variance
+        "X3": _normalize_feature(x3_raw, -0.005, 0.005),  # HF attenuation slope
+        "X4": _normalize_feature(x4_raw, 0.0, 0.5),  # Frequency scale nonlinearity (std)
+        "X5": _normalize_feature(x5_raw, 0.1, 0.7),  # Scale consistency
         # 模块症状归一化
-        "X6": _normalize_feature(x6_raw, 0.001, 0.03),
-        "X7": _normalize_feature(x7_raw, 0.05, 2.0),
-        "X8": _normalize_feature(x8_raw, 0.01, 1.0),
-        "X9": _normalize_feature(x9_raw, 1e3, 1e5),
-        "X10": _normalize_feature(x10_raw, 0.02, 0.5),
+        "X6": _normalize_feature(x6_raw, 0.0, 0.2),  # Ripple variance
+        "X7": _normalize_feature(x7_raw, 0.0, 0.3),  # Gain nonlinearity (step score)
+        "X8": _normalize_feature(x8_raw, 0.0, 0.5),  # LO leakage
+        "X9": _normalize_feature(x9_raw, 0.0, 0.5),  # Tuning linearity residual
+        "X10": _normalize_feature(x10_raw, 0.0, 0.2),  # Band amplitude consistency
         # 包络/残差特征归一化
-        "X11": _normalize_feature(x11_raw, 0.01, 0.3),
-        "X12": _normalize_feature(x12_raw, 0.5, 5.0),
-        "X13": _normalize_feature(x13_raw, 0.1, 10.0),
-        "X14": _normalize_feature(x14_raw, 0.01, 1.0),
-        "X15": _normalize_feature(x15_raw, 0.01, 0.5),
-        # 频率对齐特征归一化
-        "X16": _normalize_feature(x16_raw, 0.001, 0.1),
-        "X17": _normalize_feature(x17_raw, 0.001, 0.05),
-        "X18": _normalize_feature(x18_raw, 0.001, 0.05),
+        "X11": _normalize_feature(x11_raw, 0.0, 0.1),  # Envelope overrun rate
+        "X12": _normalize_feature(x12_raw, 0.0, 2.0),  # Max envelope violation
+        "X13": _normalize_feature(x13_raw, 0.0, 20.0),  # Envelope violation energy
+        "X14": _normalize_feature(x14_raw, -0.1, 0.1),  # Band residual low
+        "X15": _normalize_feature(x15_raw, 0.0, 0.1),  # Band residual high std
+        # 频率对齐特征归一化 - 这些特征当前为0，需要重新计算
+        "X16": _normalize_feature(x16_raw, 0.0, 0.01),  # Correlation shift bins
+        "X17": _normalize_feature(x17_raw, 0.0, 0.01),  # Warp scale
+        "X18": _normalize_feature(x18_raw, 0.0, 0.01),  # Warp bias
         # 幅度细粒度特征归一化
-        "X19": _normalize_feature(x19_raw, 1e-12, 1e-10),
-        "X20": _normalize_feature(x20_raw, 0.5, 5.0),
-        "X21": _normalize_feature(x21_raw, 1, 20),
-        "X22": _normalize_feature(x22_raw, 0.1, 0.8),
+        "X19": _normalize_feature(x19_raw, -0.001, 0.001),  # Slope low
+        "X20": _normalize_feature(x20_raw, -1.0, 1.0),  # Kurtosis detrended
+        "X21": _normalize_feature(x21_raw, 0, 10),  # Peak count residual
+        "X22": _normalize_feature(x22_raw, 0.0, 0.1),  # Ripple dom freq energy
     }
     return scores
 

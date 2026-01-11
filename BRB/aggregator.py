@@ -75,15 +75,15 @@ def compute_overall_score(features: Dict[str, float]) -> float:
         'X19': 0.02, 'X20': 0.02, 'X21': 0.01, 'X22': 0.01,
     }
     
-    # 归一化参数
+    # 归一化参数 - 调整范围以匹配实际数据分布
     norm_params = {
-        'X1': (0.02, 0.5), 'X2': (0.002, 0.05), 'X3': (1e-12, 1e-9),
-        'X4': (5e5, 3e7), 'X5': (0.01, 0.35), 'X6': (0.001, 0.03),
-        'X7': (0.05, 2.0), 'X8': (0.01, 1.0), 'X9': (1e3, 1e5),
-        'X10': (0.02, 0.5), 'X11': (0.01, 0.3), 'X12': (0.5, 5.0),
-        'X13': (0.1, 10.0), 'X14': (0.01, 1.0), 'X15': (0.01, 0.5),
-        'X16': (0.001, 0.1), 'X17': (0.001, 0.05), 'X18': (0.001, 0.05),
-        'X19': (1e-12, 1e-10), 'X20': (0.5, 5.0), 'X21': (1, 20), 'X22': (0.1, 0.8),
+        'X1': (-15, -5), 'X2': (0.0, 0.2), 'X3': (-0.005, 0.005),
+        'X4': (0.0, 0.5), 'X5': (0.1, 0.7), 'X6': (0.0, 0.2),
+        'X7': (0.0, 0.3), 'X8': (0.0, 0.5), 'X9': (0.0, 0.5),
+        'X10': (0.0, 0.2), 'X11': (0.0, 0.1), 'X12': (0.0, 2.0),
+        'X13': (0.0, 20.0), 'X14': (-0.1, 0.1), 'X15': (0.0, 0.1),
+        'X16': (0.0, 0.01), 'X17': (0.0, 0.01), 'X18': (0.0, 0.01),
+        'X19': (-0.001, 0.001), 'X20': (-1.0, 1.0), 'X21': (0, 10), 'X22': (0.0, 0.1),
     }
     
     weighted_sum = 0.0
@@ -107,9 +107,9 @@ def compute_overall_score(features: Dict[str, float]) -> float:
 
 def aggregate_system_results(
     features: Dict[str, float],
-    alpha: float = 2.0,
-    overall_threshold: float = 0.15,
-    max_prob_threshold: float = 0.3
+    alpha: float = 3.0,  # Higher temperature for sharper distribution
+    overall_threshold: float = 0.12,  # Lower threshold for better normal detection
+    max_prob_threshold: float = 0.25  # Lower threshold for better fault confirmation
 ) -> Dict:
     """聚合三个子BRB的推理结果，输出系统级诊断。
     
@@ -215,9 +215,9 @@ def aggregate_system_results(
 
 def system_level_infer_with_sub_brbs(
     features: Dict[str, float],
-    alpha: float = 2.0,
-    overall_threshold: float = 0.15,
-    max_prob_threshold: float = 0.3,
+    alpha: float = 3.0,  # Higher temperature for sharper distribution
+    overall_threshold: float = 0.12,  # Lower threshold for better normal detection
+    max_prob_threshold: float = 0.25,  # Lower threshold for better fault confirmation
     use_feature_routing: bool = True
 ) -> Dict:
     """使用子BRB架构的系统级推理入口。

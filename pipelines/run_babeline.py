@@ -83,9 +83,9 @@ def main():
         print("\n[包络覆盖率检查]")
         lower, upper, coverage_stats, k_widen = auto_widen_envelope(
             traces, lower, upper, mad,
-            target_coverage=0.95,
-            min_coverage=0.90,
-            max_iterations=5
+            target_coverage=0.97,  # Increased from 0.95 to 0.97 per user request
+            min_coverage=0.92,     # Increased from 0.90 to 0.92
+            max_iterations=8       # More iterations to reach target
         )
         
         print(f"  最终覆盖率: mean={coverage_stats['coverage_mean']:.4f}, min={coverage_stats['coverage_min']:.4f}")

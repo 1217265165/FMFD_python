@@ -19,6 +19,7 @@ class OursAdapter(MethodAdapter):
     - System result gating: only activate physically-related module subset
     - Knowledge mapping: modules use relevant frequency bands/features only
     - Sub-BRB architecture: separate BRBs for amp/freq/ref faults
+    - Normal anchor: Two-stage classification (Normal vs Fault first, then fault type)
     
     Enhanced with X1-X22 features for improved accuracy while maintaining framework.
     
@@ -34,14 +35,23 @@ class OursAdapter(MethodAdapter):
     FALLBACK_NORMAL_PROBS = np.array([0.7, 0.1, 0.1, 0.1])  # High normal, low fault
     FALLBACK_FAULT_PROBS = np.array([0.1, 0.3, 0.3, 0.3])   # Low normal, uniform fault
     
+    # Normal anchor thresholds - calibrated for better class separation
+    NORMAL_ANCHOR_SCORE_THRESHOLD = 0.12  # Below this = definitely normal
+    FAULT_CONFIRMATION_THRESHOLD = 0.25   # Above this = definitely fault
+    
     def __init__(self):
-        self.config = SystemBRBConfig()  # 默认启用扩展特征
+        self.config = SystemBRBConfig(
+            alpha=3.0,  # Higher temperature for sharper distribution
+            overall_threshold=0.12,  # Lower threshold for better normal detection
+            max_prob_threshold=0.25,  # Lower threshold for better fault confirmation
+        )
         self.feature_names = None
         self.n_system_rules = 15  # 3 sub-BRBs with 5 rules each
         self.n_module_rules = 33  # Configured per-module rules
         self.n_params = 68  # 增加：22个特征权重 + 3个规则权重 + 33个belief参数 + 10个子BRB参数
         self.kd_features = [f'X{i}' for i in range(1, 23)]  # X1-X22
         self.use_sub_brb = True  # 启用子BRB架构以提高准确率
+        self.use_normal_anchor = True  # 启用Normal锚点两阶段判定
         # 添加别名映射
         self.kd_features_aliases = {
             'bias': 'X1', 'ripple_var': 'X2', 'res_slope': 'X3', 
@@ -73,7 +83,12 @@ class OursAdapter(MethodAdapter):
         pass
     
     def predict(self, X_test: np.ndarray, meta: Optional[Dict] = None) -> Dict:
-        """Predict on test data using hierarchical BRB with extended features and sub-BRB architecture."""
+        """Predict on test data using hierarchical BRB with extended features and sub-BRB architecture.
+        
+        Uses a two-stage Normal Anchor approach:
+        1. First determine if sample is Normal vs Fault based on overall anomaly score
+        2. If Fault, use sub-BRB architecture to classify among Amp/Freq/Ref
+        """
         n_test = len(X_test)
         n_sys_classes = 4  # Normal, Amp, Freq, Ref
         
@@ -104,6 +119,20 @@ class OursAdapter(MethodAdapter):
             # Convert sample to feature dict (支持X1-X22)
             features = self._array_to_dict(X_test[i])
             
+            # ==================== Normal Anchor Stage ====================
+            # Two-stage classification: First determine Normal vs Fault
+            if self.use_normal_anchor:
+                # Compute overall anomaly score for normal anchor
+                overall_score = self._compute_overall_anomaly_score(features)
+                
+                # Stage 1: Normal anchor check
+                if overall_score < self.NORMAL_ANCHOR_SCORE_THRESHOLD:
+                    # Low anomaly score -> classify as Normal
+                    sys_proba[i] = np.array([0.8, 0.067, 0.067, 0.066])
+                    sys_pred[i] = 0  # Normal
+                    continue
+            
+            # ==================== Fault Classification Stage ====================
             # System-level inference - 使用sub_brb模式
             sys_result = system_level_infer(features, self.config, mode=inference_mode)
             probs = sys_result.get('probabilities', {})
@@ -114,6 +143,27 @@ class OursAdapter(MethodAdapter):
                 if key in prob_key_map:
                     idx = prob_key_map[key]
                     sys_proba[i, idx] = float(value)
+            
+            # ==================== Fault Type Balancing ====================
+            # Apply class-specific calibration to prevent Amp dominance
+            # Reduce Amp probability if it's dominating
+            if sys_proba[i, 1] > 0.5 and sys_proba[i, 1] > sys_proba[i, 2] + sys_proba[i, 3]:
+                # Check if Freq or Ref features are significant
+                freq_score = self._compute_freq_specific_score(features)
+                ref_score = self._compute_ref_specific_score(features)
+                
+                # Redistribute probability if other classes have significant features
+                if freq_score > 0.3:
+                    # Boost Freq probability
+                    boost = min(0.2, freq_score * 0.3)
+                    sys_proba[i, 2] += boost
+                    sys_proba[i, 1] -= boost * 0.7
+                    
+                if ref_score > 0.3:
+                    # Boost Ref probability
+                    boost = min(0.2, ref_score * 0.3)
+                    sys_proba[i, 3] += boost
+                    sys_proba[i, 1] -= boost * 0.7
             
             # Normalize if sum > 0, otherwise use fallback priors
             row_sum = np.sum(sys_proba[i])
@@ -213,3 +263,104 @@ class OursAdapter(MethodAdapter):
         feature_dict.setdefault('scale_consistency', feature_dict.get('X5', 0.0))
         
         return feature_dict
+    
+    def _normalize_feature(self, value: float, lower: float, upper: float) -> float:
+        """Normalize feature value to [0, 1] range."""
+        value = max(lower, min(value, upper))
+        return (value - lower) / (upper - lower + 1e-12)
+    
+    def _compute_overall_anomaly_score(self, features: Dict[str, float]) -> float:
+        """Compute overall anomaly score for Normal anchor detection.
+        
+        Uses weighted combination of key anomaly indicators.
+        Low score (< 0.12) indicates normal state.
+        """
+        # Feature normalization parameters - 调整范围以匹配实际数据分布
+        norm_params = {
+            'X1': (-15, -5),      # amplitude offset (raw mean dB)
+            'X2': (0.0, 0.2),     # inband flatness
+            'X4': (0.0, 0.5),     # frequency nonlinearity (std)
+            'X5': (0.1, 0.7),     # scale consistency
+            'X11': (0.0, 0.1),    # envelope overrun rate
+            'X12': (0.0, 2.0),    # max envelope violation
+            'X13': (0.0, 20.0),   # envelope violation energy
+        }
+        
+        # Weights for overall anomaly score
+        weights = {
+            'X1': 0.15, 'X2': 0.15, 'X4': 0.10, 'X5': 0.10,
+            'X11': 0.20, 'X12': 0.15, 'X13': 0.15,
+        }
+        
+        weighted_sum = 0.0
+        total_weight = 0.0
+        
+        for key, weight in weights.items():
+            if key in features:
+                raw_value = float(features.get(key, 0.0))
+                lower, upper = norm_params.get(key, (0.0, 1.0))
+                norm_value = self._normalize_feature(raw_value, lower, upper)
+                weighted_sum += weight * norm_value
+                total_weight += weight
+        
+        if total_weight > 0:
+            return weighted_sum / total_weight
+        return 0.0
+    
+    def _compute_freq_specific_score(self, features: Dict[str, float]) -> float:
+        """Compute frequency-specific anomaly score.
+        
+        Features unique to frequency faults: X4, X16, X17, X18.
+        """
+        norm_params = {
+            'X4': (0.0, 0.5),     # frequency nonlinearity (std)
+            'X16': (0.0, 0.01),   # correlation shift
+            'X17': (0.0, 0.01),   # warp scale
+            'X18': (0.0, 0.01),   # warp bias
+        }
+        
+        weights = {'X4': 0.50, 'X16': 0.20, 'X17': 0.15, 'X18': 0.15}
+        
+        weighted_sum = 0.0
+        total_weight = 0.0
+        
+        for key, weight in weights.items():
+            if key in features:
+                raw_value = abs(float(features.get(key, 0.0)))
+                lower, upper = norm_params.get(key, (0.0, 1.0))
+                norm_value = self._normalize_feature(raw_value, lower, upper)
+                weighted_sum += weight * norm_value
+                total_weight += weight
+        
+        if total_weight > 0:
+            return weighted_sum / total_weight
+        return 0.0
+    
+    def _compute_ref_specific_score(self, features: Dict[str, float]) -> float:
+        """Compute reference-level-specific anomaly score.
+        
+        Features unique to reference level faults: X3, X10.
+        X3: High-frequency attenuation slope (reference level affects this)
+        X10: Band amplitude consistency (reference level mismatch between bands)
+        """
+        norm_params = {
+            'X3': (-0.005, 0.005),  # HF attenuation slope
+            'X10': (0.0, 0.2),      # band amplitude consistency
+        }
+        
+        weights = {'X3': 0.50, 'X10': 0.50}
+        
+        weighted_sum = 0.0
+        total_weight = 0.0
+        
+        for key, weight in weights.items():
+            if key in features:
+                raw_value = abs(float(features.get(key, 0.0)))
+                lower, upper = norm_params.get(key, (0.0, 1.0))
+                norm_value = self._normalize_feature(raw_value, lower, upper)
+                weighted_sum += weight * norm_value
+                total_weight += weight
+        
+        if total_weight > 0:
+            return weighted_sum / total_weight
+        return 0.0

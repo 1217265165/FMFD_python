@@ -252,10 +252,19 @@ def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np
         y_mod_val = extract_module_label(label_entry)
         y_mod_list.append(y_mod_val if y_mod_val is not None else -1)
     
-    # Convert system labels to numeric
-    unique_sys_labels = sorted(set(y_sys_list))
-    sys_label_to_idx = {label: idx for idx, label in enumerate(unique_sys_labels)}
-    y_sys = np.array([sys_label_to_idx[label] for label in y_sys_list])
+    # Convert system labels to numeric using FIXED mapping
+    # IMPORTANT: Must match the order used in sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref']
+    # FIX: Use fixed mapping instead of sorted() to avoid Chinese character sorting issues
+    FIXED_SYS_LABEL_TO_IDX = {
+        '正常': 0, 'Normal': 0, 'normal': 0,
+        '幅度失准': 1, 'Amp': 1, 'amp': 1, 'amp_error': 1, 'amplitude_error': 1,
+        '频率失准': 2, 'Freq': 2, 'freq': 2, 'freq_error': 2, 'frequency_error': 2,
+        '参考电平失准': 3, 'Ref': 3, 'ref': 3, 'ref_error': 3, 'reference_level_error': 3,
+    }
+    
+    # Map labels using the fixed mapping
+    y_sys = np.array([FIXED_SYS_LABEL_TO_IDX.get(label, 0) for label in y_sys_list])
+    unique_sys_labels = ['正常', '幅度失准', '频率失准', '参考电平失准']  # Fixed order
     
     # Module labels (may have -1 for missing)
     y_mod = np.array(y_mod_list)
