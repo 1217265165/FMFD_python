@@ -144,9 +144,13 @@ class OursAdapter(MethodAdapter):
                     if 'alpha' in calib:
                         self.config.alpha = float(calib['alpha'])
                     if 'overall_threshold' in calib:
-                        self.config.overall_threshold = float(calib['overall_threshold'])
+                        val = float(calib['overall_threshold'])
+                        if 0.0 <= val <= 1.0:
+                            self.config.overall_threshold = val
                     if 'max_prob_threshold' in calib:
-                        self.config.max_prob_threshold = float(calib['max_prob_threshold'])
+                        val = float(calib['max_prob_threshold'])
+                        if 0.0 <= val <= 1.0:
+                            self.config.max_prob_threshold = val
                     
                     print(f"[OursAdapter] Loaded calibration from {calib_path}")
                     break
@@ -178,6 +182,9 @@ class OursAdapter(MethodAdapter):
                             if iqr < 1e-9:
                                 std = stats_df.loc['std', col] if 'std' in stats_df.index else 0.0
                                 iqr = float(std) * 1.35  # Approx IQR for normal distribution
+                            # Ensure IQR is never zero to avoid division by zero
+                            if iqr < 1e-9:
+                                iqr = 0.1  # Use default small value
                             p95 = stats_df.loc['95%', col] if '95%' in stats_df.index else 0.0
                             p97 = stats_df.loc['97%', col] if '97%' in stats_df.index else p95
                             self.normal_feature_stats[col] = {
