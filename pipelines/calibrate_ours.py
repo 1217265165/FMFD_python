@@ -272,13 +272,16 @@ def grid_search_calibration_v2(
     labels_dict: Dict[str, Dict],
     verbose: bool = True
 ) -> Tuple[Dict, float, float]:
-    """Perform grid search to find optimal v2 calibration parameters.
+    """Perform grid search to find optimal v3 calibration parameters.
     
-    v3: Changed optimization objective to BALANCED ACCURACY (mean recall)
-    as primary metric, macro-F1 as secondary.
+    v3 improvements:
+    - Changed optimization objective to BALANCED ACCURACY (mean recall)
+      as primary metric, macro-F1 as secondary.
+    - Uses grouped-max anchor scoring
+    - Saves calibration_leaderboard.csv with top configurations
     
     Returns:
-        (best_params, best_balanced_accuracy, best_f1)
+        (best_params, best_balanced_accuracy, best_f1, leaderboard)
     """
     # First compute anchor scores to determine T_low/T_high ranges
     from BRB.normal_anchor import compute_anchor_score, NormalAnchorConfig

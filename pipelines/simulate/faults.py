@@ -75,7 +75,8 @@ def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=Fal
         ppm = rng.uniform(-3000e-6, 3000e-6)
         # Ensure minimum absolute ppm for detectability
         if abs(ppm) < 500e-6:
-            ppm = 500e-6 * np.sign(ppm) if ppm != 0 else rng.choice([-1, 1]) * 500e-6
+            # If ppm is too small, set it to ±500ppm with random sign
+            ppm = rng.choice([-1, 1]) * 500e-6
         delta_f = ppm * bw
     else:
         ppm = delta_f / bw if bw > 0 else 0

@@ -368,14 +368,20 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             try:
                 optimal_lag = int(round(x16))
                 if optimal_lag != 0:
+                    abs_lag = abs(optimal_lag)
                     if optimal_lag > 0:
-                        arr_shifted = arr[optimal_lag:]
-                        baseline_shifted = baseline[:-optimal_lag]
+                        # Signal shifted right relative to baseline
+                        arr_shifted = arr[abs_lag:]
+                        baseline_shifted = baseline[:-abs_lag]
                     else:
-                        arr_shifted = arr[:optimal_lag]
-                        baseline_shifted = baseline[-optimal_lag:]
-                    if len(arr_shifted) > 10:
-                        x25 = float(np.mean((arr_shifted - baseline_shifted) ** 2))
+                        # Signal shifted left relative to baseline
+                        arr_shifted = arr[:-abs_lag]
+                        baseline_shifted = baseline[abs_lag:]
+                    
+                    # Ensure same length before MSE calculation
+                    min_len = min(len(arr_shifted), len(baseline_shifted))
+                    if min_len > 10:
+                        x25 = float(np.mean((arr_shifted[:min_len] - baseline_shifted[:min_len]) ** 2))
                     else:
                         x25 = 0.0
                 else:
