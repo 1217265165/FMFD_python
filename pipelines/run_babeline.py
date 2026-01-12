@@ -11,7 +11,7 @@ from baseline.config import (
     BAND_RANGES, K_LIST, SWITCH_TOL,
     BASELINE_ARTIFACTS, BASELINE_META,
     NORMAL_FEATURE_STATS, SWITCH_CSV, SWITCH_JSON, PLOT_PATH,
-    OUTPUT_DIR,
+    OUTPUT_DIR, SINGLE_BAND_MODE, COVERAGE_MEAN_MIN, COVERAGE_MIN_MIN,
 )
 from baseline.viz import plot_rrs_envelope_switch
 from features.extract import extract_system_features
@@ -40,13 +40,36 @@ def main():
 
     # 1) 加载并对齐正常数据（仓库根下 normal_response_data）
     folder_path = repo_root / "normal_response_data"
-    frequency, traces, names = load_and_align(folder_path)
+    print(f"Loading normal response data from: {folder_path}")
+    frequency, traces, names = load_and_align(folder_path, use_spectrum_column=True)
+    print(f"Loaded {len(names)} traces, frequency points: {len(frequency)}")
+    print(f"Frequency range: {frequency[0]:.2e} Hz to {frequency[-1]:.2e} Hz")
 
-    # 2) 计算 RRS 与分段包络
-    rrs, bounds = compute_rrs_bounds(frequency, traces, BAND_RANGES, K_LIST)
+    # 2) 计算 RRS 与分段包络 (with coverage validation in single-band mode)
+    result = compute_rrs_bounds(frequency, traces, BAND_RANGES, K_LIST, validate_coverage=True)
+    
+    # Handle both old (2-tuple) and new (3-tuple with coverage) return formats
+    if len(result) == 3:
+        rrs, bounds, coverage_info = result
+    else:
+        rrs, bounds = result
+        coverage_info = {'coverage_mean': 1.0, 'coverage_min': 1.0}  # Assume OK if not computed
+    
+    print(f"RRS computed, coverage_mean: {coverage_info.get('coverage_mean', 'N/A'):.4f}, "
+          f"coverage_min: {coverage_info.get('coverage_min', 'N/A'):.4f}")
+    
+    # Verify coverage meets requirements
+    if coverage_info.get('coverage_mean', 0) < COVERAGE_MEAN_MIN:
+        print(f"WARNING: coverage_mean {coverage_info['coverage_mean']:.4f} < {COVERAGE_MEAN_MIN}")
+    if coverage_info.get('coverage_min', 0) < COVERAGE_MIN_MIN:
+        print(f"WARNING: coverage_min {coverage_info['coverage_min']:.4f} < {COVERAGE_MIN_MIN}")
 
-    # 3) 切换点步进
+    # 3) 切换点步进 (empty in single-band mode)
     switch_feats = detect_switch_steps(frequency, traces, BAND_RANGES, tol=SWITCH_TOL)
+    if SINGLE_BAND_MODE:
+        print("Single-band mode: no switch points detected (disabled)")
+    else:
+        print(f"Detected {len(switch_feats)} switch points")
 
     # 4) 可视化
     plot_rrs_envelope_switch(frequency, traces, rrs, bounds, switch_feats, plot_path)
@@ -60,13 +83,36 @@ def main():
         upper=bounds[0],
         lower=bounds[1],
     )
+    
+    # Build comprehensive metadata
+    meta_dict = {
+        "band_ranges": BAND_RANGES,
+        "k_list": K_LIST,
+        "single_band_mode": SINGLE_BAND_MODE,
+        "coverage_mean": coverage_info.get('coverage_mean'),
+        "coverage_min": coverage_info.get('coverage_min'),
+        "k_final": coverage_info.get('k_final'),
+        "n_traces": len(names),
+        "n_frequency_points": len(frequency),
+        "freq_start_hz": float(frequency[0]),
+        "freq_end_hz": float(frequency[-1]),
+        "freq_step_hz": float(np.median(np.diff(frequency))),
+    }
+    
     with open(baseline_meta, "w", encoding="utf-8") as f:
-        json.dump({"band_ranges": BAND_RANGES, "k_list": K_LIST}, f, ensure_ascii=False, indent=2)
+        json.dump(meta_dict, f, ensure_ascii=False, indent=2)
 
     # 6) 保存切换点特性
-    pd.DataFrame(switch_feats).to_csv(switch_csv, index=False)
-    with open(switch_json, "w", encoding="utf-8") as f:
-        json.dump(switch_feats, f, indent=4, ensure_ascii=False)
+    if switch_feats:
+        pd.DataFrame(switch_feats).to_csv(switch_csv, index=False)
+        with open(switch_json, "w", encoding="utf-8") as f:
+            json.dump(switch_feats, f, indent=4, ensure_ascii=False)
+    else:
+        # Write empty files in single-band mode
+        with open(switch_csv, 'w') as f:
+            f.write('')
+        with open(switch_json, "w", encoding="utf-8") as f:
+            json.dump([], f)
 
     # 7) 正常特征统计（用于阈值初设）
     feats_list = []
@@ -77,9 +123,15 @@ def main():
     stats_df = pd.DataFrame(feats_list)
     stats_df.describe(percentiles=[0.5, 0.9, 0.95, 0.99]).to_csv(normal_feat_stats)
 
+    print("\n" + "="*60)
     print("基线包络与RRS已保存:", baseline_artifacts, baseline_meta)
     print("切换点特性已保存:", switch_csv, switch_json)
     print("正常特征统计已保存:", normal_feat_stats)
+    print("="*60)
+    print(f"\nCoverage validation: mean={coverage_info.get('coverage_mean', 'N/A'):.4f}, "
+          f"min={coverage_info.get('coverage_min', 'N/A'):.4f}")
+    if SINGLE_BAND_MODE:
+        print("Mode: SINGLE_BAND (10MHz-8.2GHz, preamp OFF)")
 
 
 if __name__ == "__main__":
