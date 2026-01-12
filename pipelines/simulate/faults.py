@@ -2,6 +2,86 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
+# =============================================================================
+# 模块列表定义（排除前置放大器，因为采集数据为前放OFF模式）
+# =============================================================================
+# 所有可用模块（19个模块，不含前置放大器）
+ENABLED_MODULES = [
+    "衰减器",
+    "低频段前置低通滤波器",
+    "低频段第一混频器",
+    "高频段YTF滤波器",
+    "高频段混频器",
+    "时钟振荡器",
+    "时钟合成与同步网络",
+    "本振源（谐波发生器）",
+    "本振混频组件",
+    "校准源",
+    "存储器",
+    "校准信号开关",
+    "中频放大器",
+    "ADC",
+    "数字RBW",
+    "数字放大器",
+    "数字检波器",
+    "VBW滤波器",
+    "电源模块",
+]
+
+# 明确排除的模块（禁止生成）
+DISABLED_MODULES = ["前置放大器"]
+
+# 模块 → 注入函数映射表
+# 每个模块对应一个或多个故障注入函数
+MODULE_TO_INJECTION_MAP = {
+    "衰减器": ("inject_reflevel_miscal", "ref_error"),
+    "低频段前置低通滤波器": ("inject_lpf_shift", "amp_error"),
+    "低频段第一混频器": ("inject_mixer_ripple", "amp_error"),
+    "高频段YTF滤波器": ("inject_ytf_variation", "amp_error"),
+    "高频段混频器": ("inject_mixer_ripple", "amp_error"),
+    "时钟振荡器": ("inject_clock_drift", "freq_error"),
+    "时钟合成与同步网络": ("inject_clock_drift", "freq_error"),
+    "本振源（谐波发生器）": ("inject_lo_path_error", "freq_error"),
+    "本振混频组件": ("inject_lo_path_error", "freq_error"),
+    "校准源": ("inject_amplitude_miscal", "amp_error"),
+    "存储器": ("inject_adc_bias", "amp_error"),
+    "校准信号开关": ("inject_amplitude_miscal", "amp_error"),
+    "中频放大器": ("inject_amplitude_miscal", "amp_error"),
+    "ADC": ("inject_adc_bias", "amp_error"),
+    "数字RBW": ("inject_vbw_smoothing", "amp_error"),
+    "数字放大器": ("inject_amplitude_miscal", "amp_error"),
+    "数字检波器": ("inject_vbw_smoothing", "amp_error"),
+    "VBW滤波器": ("inject_vbw_smoothing", "amp_error"),
+    "电源模块": ("inject_power_noise", "amp_error"),
+}
+
+# 系统级分类 → 模块列表
+SYSTEM_CLASS_TO_MODULES = {
+    "amp_error": [
+        "低频段前置低通滤波器", "低频段第一混频器", "高频段YTF滤波器",
+        "高频段混频器", "校准源", "存储器", "校准信号开关",
+        "中频放大器", "ADC", "数字RBW", "数字放大器",
+        "数字检波器", "VBW滤波器", "电源模块",
+    ],
+    "freq_error": [
+        "时钟振荡器", "时钟合成与同步网络", "本振源（谐波发生器）", "本振混频组件",
+    ],
+    "ref_error": [
+        "衰减器",
+    ],
+}
+
+
+def validate_module_not_disabled(module_name: str) -> None:
+    """验证模块未被禁用，若被禁用则抛出异常（Fail Fast）"""
+    if module_name in DISABLED_MODULES:
+        raise ValueError(
+            f"禁止生成 '{module_name}' 模块的故障数据！"
+            f"该模块已被禁用（原因：采集数据为前放OFF模式）。"
+            f"可用模块列表: {ENABLED_MODULES}"
+        )
+
+
 # 辅助：估计局部/全局 sigma，用于自适应幅度/噪声
 def _estimate_sigma(amp, window_frac=0.02, min_window=21):
     x = np.asarray(amp, dtype=float)
@@ -24,8 +104,12 @@ def _estimate_sigma(amp, window_frac=0.02, min_window=21):
 # -------------------------
 def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
     """
-    幅度失准：A' = gain*A + bias + comp*A^2
+    幅度失准：A' = gain*A + bias + comp*(A - mean(A))^2
     若 gain/bias/comp 未给出，则基于当前曲线的 σ 自适应随机生成。
+    
+    注意：非线性压缩项使用去中心化的幅度 (A - mean(A))^2，
+    而不是原始 A^2。这样可以保证对任意幅度基线（如 0dBm 或 -10dBm）
+    都有一致的效果，避免因基线幅度不同导致的异常偏移。
     """
     rng = rng or np.random.default_rng()
     _, sig_med = _estimate_sigma(amp)
@@ -35,16 +119,22 @@ def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
         bias = rng.normal(0, 0.5 * max(0.2, sig_med))
     if comp is None:
         comp = rng.normal(0.02, 0.01)
-    return gain * amp + bias + comp * (amp ** 2)
+    
+    # 使用去中心化的幅度计算非线性项，避免基线幅度差异导致的问题
+    amp_centered = amp - np.mean(amp)
+    return gain * amp + bias + comp * (amp_centered ** 2)
 
 def inject_freq_miscal(frequency, amp, delta_f=None, rng=None):
     """
     频率失准：频率轴整体平移后重采样；delta_f 未给出时按带宽 ppm 生成。
+    
+    注意：原始 ±150 ppm 对于10MHz步进太小，增大到 ±1000 ppm 以产生可检测的频移。
     """
     rng = rng or np.random.default_rng()
     bw = frequency[-1] - frequency[0]
     if delta_f is None:
-        ppm = rng.uniform(-150e-6, 150e-6)
+        # 增大频移范围到 ±1000 ppm（约 8MHz，接近一个步进）
+        ppm = rng.uniform(-1000e-6, 1000e-6)
         delta_f = ppm * bw
     f_shift = frequency + delta_f
     interp = interp1d(f_shift, amp, kind="linear", bounds_error=False, fill_value="extrapolate")
@@ -55,22 +145,49 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     """
     参考电平失准：在切换点施加错误步进；高幅度区压缩。
     step_biases/compression_coef 未给出时按 σ 自适应随机生成。
+    
+    单频段模式（len(band_ranges) <= 1）：只施加压缩效果，不施加步进。
     """
+    # Import offset parameters from config
+    try:
+        from baseline.config import (
+            SINGLE_BAND_REFLEVEL_OFFSET_SCALE,
+            SINGLE_BAND_REFLEVEL_OFFSET_STD,
+        )
+    except ImportError:
+        # Fallback values if config is not available
+        SINGLE_BAND_REFLEVEL_OFFSET_SCALE = 0.3
+        SINGLE_BAND_REFLEVEL_OFFSET_STD = 0.1
+    
     rng = rng or np.random.default_rng()
     out = amp.copy()
     _, sig_med = _estimate_sigma(amp)
-    if step_biases is None:
-        step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
-                       for _ in range(len(band_ranges) - 1)]
-    for i in range(len(band_ranges) - 1):
-        end_f = band_ranges[i][1]
-        m_end = np.argmin(np.abs(frequency - end_f))
-        out[m_end:] += step_biases[i]
+    
+    # Only apply step transitions for multi-band mode
+    if len(band_ranges) > 1:
+        if step_biases is None:
+            step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
+                           for _ in range(len(band_ranges) - 1)]
+        for i in range(len(band_ranges) - 1):
+            end_f = band_ranges[i][1]
+            m_end = np.argmin(np.abs(frequency - end_f))
+            out[m_end:] += step_biases[i]
+    
+    # Apply compression effect (works for both single and multi-band)
     if compression_coef is None:
         compression_coef = abs(rng.normal(0.15, 0.05))
     thr = np.percentile(out, 100 * compression_start_percent)
     mask = out >= thr
     out[mask] = out[mask] - compression_coef * (out[mask] - thr)
+    
+    # Single-band mode: apply overall offset to simulate reference level drift
+    if len(band_ranges) <= 1:
+        offset = rng.normal(
+            SINGLE_BAND_REFLEVEL_OFFSET_SCALE * sig_med,
+            SINGLE_BAND_REFLEVEL_OFFSET_STD * max(0.1, sig_med)
+        )
+        out += offset
+    
     return out
 
 # -------------------------
@@ -127,11 +244,21 @@ def inject_clock_drift(frequency, amp, delta_f=None, rng=None):
     return inject_freq_miscal(frequency, amp, delta_f=delta_f, rng=rng)
 
 def inject_lo_path_error(frequency, amp, band_ranges, band_shifts=None, rng=None):
-    """本振/路径相关：分段 Δf，分频段重采样。"""
+    """本振/路径相关：分段 Δf，分频段重采样。
+    
+    单频段模式：对整个频段施加单个频率偏移。
+    """
     rng = rng or np.random.default_rng()
     out = amp.copy()
+    bw = frequency[-1] - frequency[0]
+    
+    # 单频段模式：直接施加全局频偏
+    if len(band_ranges) <= 1:
+        delta_f = rng.uniform(-0.02 * bw, 0.02 * bw)
+        return inject_freq_miscal(frequency, amp, delta_f=delta_f, rng=rng)
+    
+    # 多频段模式：分段施加
     if band_shifts is None:
-        bw = frequency[-1] - frequency[0]
         band_shifts = [rng.uniform(-0.02 * bw, 0.02 * bw) for _ in band_ranges]
     for (start, end), df in zip(band_ranges, band_shifts):
         mask = (frequency >= start) & (frequency <= end)

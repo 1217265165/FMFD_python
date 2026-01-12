@@ -1,4 +1,20 @@
 # 频段划分与容差配置
+# 单频段模式：只有一个频段范围
+# 注意：真实数据只有一个频段（10MHz~8.2GHz），不需要切换点检测
+SINGLE_BAND_MODE = True  # 启用单频段模式
+
+# 单频段范围（真实数据）
+SINGLE_BAND_RANGE = (1e7, 8.2e9)  # 10MHz ~ 8.2GHz
+
+# ========== 固定频率网格（820点，10MHz步进）==========
+# 真实数据格式：10 MHz ~ 8.2 GHz，步进 10 MHz，严格 820 个点
+F_START = 1e7       # 10 MHz
+F_STOP = 8.2e9      # 8.2 GHz
+F_STEP = 1e7        # 10 MHz
+# 理论点数: (8.2e9 - 1e7) / 1e7 + 1 = 820
+N_POINTS_FIXED = 820  # 固定820点，不允许变化
+
+# 多频段范围（仿真数据，向后兼容）
 BAND_RANGES = [
     (9e3, 1.3e10),
     (1.3e10, 4.6e10),
@@ -6,7 +22,25 @@ BAND_RANGES = [
 ]
 K_LIST = [3, 4, 5]            # 每段包络系数
 SWITCH_TOL = 0.2              # 切换点步进容差 (dB)
-N_POINTS = 10000              # 基线频率网格点数
+N_POINTS = 10000              # 基线频率网格点数（原值，兼容旧代码）
+N_POINTS_REAL = N_POINTS_FIXED  # 真实数据必须是820点
+
+# 包络参数（单频段模式使用）
+ENVELOPE_Q_LOW = 0.02         # 下包络分位数
+ENVELOPE_Q_HIGH = 0.98        # 上包络分位数
+ENVELOPE_SMOOTH_WINDOW = 21   # 平滑窗口大小
+
+# 突变检测参数
+ABRUPT_Q_DR = 0.995           # 一阶差分阈值分位数
+ABRUPT_Q_D2R = 0.995          # 二阶差分阈值分位数
+
+# 单频段参考电平失准偏移参数（用于faults.py中的inject_reflevel_miscal）
+SINGLE_BAND_REFLEVEL_OFFSET_SCALE = 0.3   # Offset magnitude relative to sigma
+SINGLE_BAND_REFLEVEL_OFFSET_STD = 0.1     # Offset variation relative to sigma
+
+# 禁用的故障模块（单频段真实数据模式）
+# 前置放大器在前放OFF模式下不是诊断对象
+DISABLED_FAULT_MODULES = ['前置放大器']
 
 # 字体配置（中文）
 FONT_FAMILY = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]

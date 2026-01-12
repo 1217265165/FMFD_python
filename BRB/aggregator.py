@@ -22,6 +22,14 @@ from .system_brb_freq import freq_brb_infer
 from .system_brb_ref import ref_brb_infer
 
 
+# 子BRB权重常量
+# 频率子BRB的激活度对所有类别都偏高，需要降低其影响力
+# 这些权重用于在聚合时平衡各子BRB的贡献
+SUB_BRB_WEIGHT_AMP = 1.2   # 幅度子BRB权重
+SUB_BRB_WEIGHT_FREQ = 0.7  # 频率子BRB权重（降低以避免过度分类为Freq）
+SUB_BRB_WEIGHT_REF = 1.0   # 参考电平子BRB权重
+
+
 def softmax_with_temperature(values: list, alpha: float = 2.0) -> list:
     """带温度参数的softmax函数。
     
@@ -52,9 +60,10 @@ def softmax_with_temperature(values: list, alpha: float = 2.0) -> list:
 
 
 def compute_overall_score(features: Dict[str, float]) -> float:
-    """计算整体异常度分数。
+    """计算整体异常度分数（使用z-score归一化）。
     
     用于正常状态识别，综合评估所有特征的异常程度。
+    使用正常样本的统计数据进行z-score归一化，而不是硬编码的min/max区间。
     
     Parameters
     ----------
@@ -66,24 +75,39 @@ def compute_overall_score(features: Dict[str, float]) -> float:
     float
         整体异常度分数 [0, 1]。
     """
-    # 特征权重
+    # 特征权重 - 重点使用envelope相关特征
     weights = {
-        'X1': 0.15, 'X2': 0.12, 'X3': 0.08, 'X4': 0.10, 'X5': 0.10,
-        'X6': 0.05, 'X7': 0.08, 'X8': 0.05, 'X9': 0.03, 'X10': 0.04,
-        'X11': 0.08, 'X12': 0.05, 'X13': 0.05, 'X14': 0.02, 'X15': 0.02,
-        'X16': 0.03, 'X17': 0.02, 'X18': 0.02,
-        'X19': 0.02, 'X20': 0.02, 'X21': 0.01, 'X22': 0.01,
+        'X1': 0.10, 'X2': 0.08, 'X3': 0.05, 'X4': 0.08, 'X5': 0.05,
+        'X6': 0.03, 'X7': 0.05, 'X8': 0.03, 'X9': 0.02, 'X10': 0.03,
+        'X11': 0.18, 'X12': 0.15, 'X13': 0.10, 'X14': 0.02, 'X15': 0.02,
+        'X16': 0.02, 'X17': 0.01, 'X18': 0.01,
+        'X19': 0.01, 'X20': 0.01, 'X21': 0.01, 'X22': 0.01,
     }
     
-    # 归一化参数
-    norm_params = {
-        'X1': (0.02, 0.5), 'X2': (0.002, 0.05), 'X3': (1e-12, 1e-9),
-        'X4': (5e5, 3e7), 'X5': (0.01, 0.35), 'X6': (0.001, 0.03),
-        'X7': (0.05, 2.0), 'X8': (0.01, 1.0), 'X9': (1e3, 1e5),
-        'X10': (0.02, 0.5), 'X11': (0.01, 0.3), 'X12': (0.5, 5.0),
-        'X13': (0.1, 10.0), 'X14': (0.01, 1.0), 'X15': (0.01, 0.5),
-        'X16': (0.001, 0.1), 'X17': (0.001, 0.05), 'X18': (0.001, 0.05),
-        'X19': (1e-12, 1e-10), 'X20': (0.5, 5.0), 'X21': (1, 20), 'X22': (0.1, 0.8),
+    # 正常特征统计 (median, iqr) - 来自实际正常样本
+    normal_stats = {
+        'X1': (0.003152, 0.067323),
+        'X2': (0.000094, 0.000115),
+        'X3': (-0.000018, 0.000228),
+        'X4': (0.010546, 0.005289),
+        'X5': (0.255391, 0.101644),
+        'X6': (0.000135, 0.000121),
+        'X7': (0.040000, 0.025000),
+        'X8': (0.008982, 0.004616),
+        'X9': (0.000111, 0.000107),
+        'X10': (0.005749, 0.003149),
+        'X11': (0.003659, 0.001220),
+        'X12': (0.030000, 0.010000),
+        'X13': (6.394475, 23.550748),
+        'X14': (0.023388, 0.039121),
+        'X15': (0.008679, 0.008099),
+        'X16': (0.000000, 0.001000),
+        'X17': (0.000000, 0.001000),
+        'X18': (0.000000, 0.001000),
+        'X19': (-0.000036, 0.000172),
+        'X20': (0.207247, 1.282695),
+        'X21': (23.000000, 12.000000),
+        'X22': (0.249534, 0.222095),
     }
     
     weighted_sum = 0.0
@@ -91,11 +115,16 @@ def compute_overall_score(features: Dict[str, float]) -> float:
     
     for key, weight in weights.items():
         if key in features:
-            raw_value = abs(float(features[key]))
-            lower, upper = norm_params.get(key, (0.0, 1.0))
+            raw_value = float(features[key])
+            median, iqr = normal_stats.get(key, (0.0, 0.1))
             
-            # 归一化到 [0, 1]
-            norm_value = max(0.0, min(1.0, (raw_value - lower) / (upper - lower + 1e-12)))
+            # 使用z-score归一化，|z|越大表示越异常
+            if iqr < 1e-6:
+                iqr = 1e-6
+            z = (raw_value - median) / (iqr + 1e-6)
+            
+            # 将|z|映射到[0,1]的异常分数，|z|=3 -> score=1.0
+            norm_value = min(1.0, abs(z) / 3.0)
             
             weighted_sum += weight * norm_value
             total_weight += weight
@@ -107,9 +136,9 @@ def compute_overall_score(features: Dict[str, float]) -> float:
 
 def aggregate_system_results(
     features: Dict[str, float],
-    alpha: float = 2.0,
-    overall_threshold: float = 0.15,
-    max_prob_threshold: float = 0.3
+    alpha: float = 3.0,  # Higher temperature for sharper distribution
+    overall_threshold: float = 0.35,  # Higher threshold to capture more normal samples
+    max_prob_threshold: float = 0.25  # Lower threshold for better fault confirmation
 ) -> Dict:
     """聚合三个子BRB的推理结果，输出系统级诊断。
     
@@ -143,11 +172,11 @@ def aggregate_system_results(
     freq_result = freq_brb_infer(features, alpha)
     ref_result = ref_brb_infer(features, alpha)
     
-    # 获取各子BRB的激活度
+    # 获取各子BRB的激活度，并应用相对权重
     activations = [
-        amp_result['activation'],
-        freq_result['activation'],
-        ref_result['activation']
+        amp_result['activation'] * SUB_BRB_WEIGHT_AMP,
+        freq_result['activation'] * SUB_BRB_WEIGHT_FREQ,
+        ref_result['activation'] * SUB_BRB_WEIGHT_REF
     ]
     
     # 计算整体异常度
@@ -215,9 +244,9 @@ def aggregate_system_results(
 
 def system_level_infer_with_sub_brbs(
     features: Dict[str, float],
-    alpha: float = 2.0,
-    overall_threshold: float = 0.15,
-    max_prob_threshold: float = 0.3,
+    alpha: float = 3.0,  # Higher temperature for sharper distribution
+    overall_threshold: float = 0.35,  # Higher threshold to capture more normal samples
+    max_prob_threshold: float = 0.25,  # Lower threshold for better fault confirmation
     use_feature_routing: bool = True
 ) -> Dict:
     """使用子BRB架构的系统级推理入口。
@@ -260,11 +289,11 @@ def system_level_infer_with_sub_brbs(
             freq_result = freq_brb_infer(freq_features, alpha)
             ref_result = ref_brb_infer(ref_features, alpha)
             
-            # 聚合结果
+            # 聚合结果 - 应用子BRB权重
             activations = [
-                amp_result['activation'],
-                freq_result['activation'],
-                ref_result['activation']
+                amp_result['activation'] * SUB_BRB_WEIGHT_AMP,
+                freq_result['activation'] * SUB_BRB_WEIGHT_FREQ,
+                ref_result['activation'] * SUB_BRB_WEIGHT_REF
             ]
             
             overall_score = compute_overall_score(features)

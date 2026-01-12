@@ -384,3 +384,120 @@ def get_top_k_modules(module_probs: Dict[str, float], k: int = 3) -> List[tuple]
     """
     sorted_modules = sorted(module_probs.items(), key=lambda x: x[1], reverse=True)
     return sorted_modules[:k]
+
+
+def module_level_infer_with_evidence_routing(
+    features: Dict[str, float],
+    sys_probs: Dict[str, float],
+    evidence: Optional[Dict] = None,
+    exclude_preamp: bool = True
+) -> Dict:
+    """
+    使用证据路由的模块级推理（增强版）。
+    
+    将检测证据映射到候选模块集合，然后仅对候选模块执行推理，
+    非候选模块概率置为0，从而提高Top-K稳定性。
+    
+    Parameters
+    ----------
+    features : dict
+        模块层特征字典。
+    sys_probs : dict
+        系统级诊断概率分布。
+    evidence : dict, optional
+        检测证据字典，包含jump_flag, jump_type, env_violation等字段。
+        如果为None，回退到module_level_infer_with_activation。
+    exclude_preamp : bool
+        是否排除前置放大器（前放OFF模式）。
+        
+    Returns
+    -------
+    dict
+        包含：
+        - module_probs: 21个模块的概率分布
+        - routing_result: 路由结果（如果使用了证据路由）
+        - routing_explanation: 路由解释文本
+    """
+    # 如果没有证据，回退到基础版本
+    if evidence is None:
+        base_probs = module_level_infer_with_activation(features, sys_probs)
+        return {
+            'module_probs': base_probs,
+            'routing_result': None,
+            'routing_explanation': '未使用证据路由',
+        }
+    
+    try:
+        # 导入证据路由器
+        from features.evidence_router import (
+            route_modules_by_evidence,
+            apply_routing_to_module_probs,
+            format_routing_explanation
+        )
+        
+        # 构建系统级结果格式
+        probs_dict = sys_probs.get('probabilities', sys_probs) if isinstance(sys_probs, dict) else sys_probs
+        max_prob_key = max(probs_dict, key=probs_dict.get) if probs_dict else ''
+        
+        # 标准化类名
+        class_mapping = {
+            '幅度失准': 'amp', '频率失准': 'freq', '参考电平失准': 'ref',
+            'amp': 'amp', 'freq': 'freq', 'ref': 'ref',
+        }
+        top_class = class_mapping.get(max_prob_key, max_prob_key)
+        
+        system_result = {
+            'top_class': top_class,
+            'probabilities': probs_dict,
+        }
+        
+        # 路由配置
+        router_config = {
+            'exclude_preamp': exclude_preamp,
+            'system_prob_threshold': 0.35,
+            'evidence_score_threshold': 0.3,
+            'max_candidates': 10,
+            'enable_prior_weights': True,
+        }
+        
+        # 执行证据路由
+        routing_result = route_modules_by_evidence(evidence, system_result, router_config)
+        
+        # 使用基础推理获取原始概率
+        base_probs = module_level_infer_with_activation(features, sys_probs)
+        
+        # 应用路由结果：非候选模块概率置为0
+        adjusted_probs = apply_routing_to_module_probs(base_probs, routing_result, deactivated_prob=0.0)
+        
+        # 使用先验权重调整概率
+        weights = routing_result.get('weights', {})
+        if weights:
+            for idx, weight in weights.items():
+                if 0 <= idx < len(MODULE_LABELS):
+                    name = MODULE_LABELS[idx]
+                    if name in adjusted_probs and adjusted_probs[name] > 0:
+                        # 轻微增强候选模块的概率
+                        adjusted_probs[name] *= (1.0 + weight * 0.3)
+        
+        # 重新归一化
+        total = sum(v for v in adjusted_probs.values() if v > 0)
+        if total > 0:
+            adjusted_probs = {k: v / total for k, v in adjusted_probs.items()}
+        
+        # 生成解释文本
+        explanation = format_routing_explanation(routing_result)
+        
+        return {
+            'module_probs': adjusted_probs,
+            'routing_result': routing_result,
+            'routing_explanation': explanation,
+        }
+        
+    except ImportError as e:
+        # 证据路由器未安装，回退到基础版本
+        base_probs = module_level_infer_with_activation(features, sys_probs)
+        return {
+            'module_probs': base_probs,
+            'routing_result': None,
+            'routing_explanation': f'证据路由不可用: {e}',
+        }

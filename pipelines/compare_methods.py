@@ -252,10 +252,19 @@ def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np
         y_mod_val = extract_module_label(label_entry)
         y_mod_list.append(y_mod_val if y_mod_val is not None else -1)
     
-    # Convert system labels to numeric
-    unique_sys_labels = sorted(set(y_sys_list))
-    sys_label_to_idx = {label: idx for idx, label in enumerate(unique_sys_labels)}
-    y_sys = np.array([sys_label_to_idx[label] for label in y_sys_list])
+    # Convert system labels to numeric using FIXED mapping
+    # IMPORTANT: Must match the order used in sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref']
+    # FIX: Use fixed mapping instead of sorted() to avoid Chinese character sorting issues
+    FIXED_SYS_LABEL_TO_IDX = {
+        '正常': 0, 'Normal': 0, 'normal': 0,
+        '幅度失准': 1, 'Amp': 1, 'amp': 1, 'amp_error': 1, 'amplitude_error': 1,
+        '频率失准': 2, 'Freq': 2, 'freq': 2, 'freq_error': 2, 'frequency_error': 2,
+        '参考电平失准': 3, 'Ref': 3, 'ref': 3, 'ref_error': 3, 'reference_level_error': 3,
+    }
+    
+    # Map labels using the fixed mapping
+    y_sys = np.array([FIXED_SYS_LABEL_TO_IDX.get(label, 0) for label in y_sys_list])
+    unique_sys_labels = ['正常', '幅度失准', '频率失准', '参考电平失准']  # Fixed order
     
     # Module labels (may have -1 for missing)
     y_mod = np.array(y_mod_list)
@@ -660,6 +669,208 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
     return results
 
 
+def save_diagnostic_outputs(output_dir: Path, y_sys: np.ndarray, y_sys_test: np.ndarray,
+                           all_results: List[Dict], class_names: List[str],
+                           X_test: Optional[np.ndarray] = None, feature_names: Optional[List[str]] = None):
+    """Save diagnostic outputs to help debug accuracy issues.
+    
+    Section A of the fix: Generate diagnostic files to understand why ours 
+    accuracy is below majority-class baseline.
+    
+    Step0 requirements:
+    1) ours_per_class_metrics.csv: each class precision/recall/F1 + support
+    2) ours_error_breakdown.csv: Normal→fault误报数, fault→Normal漏报数, 三类互混数
+    3) feature_sanity_by_class.csv: X1~X22 median/IQR by class, X16/X17/X18 non-zero ratio
+    """
+    # A1: Dataset class distribution and majority baseline
+    unique, counts = np.unique(y_sys, return_counts=True)
+    total = len(y_sys)
+    majority_class = unique[np.argmax(counts)]
+    majority_count = np.max(counts)
+    majority_baseline_acc = majority_count / total
+    
+    distribution_data = []
+    for i, (cls, cnt) in enumerate(zip(unique, counts)):
+        cls_name = class_names[cls] if cls < len(class_names) else f"Class_{cls}"
+        distribution_data.append({
+            'class_id': int(cls),
+            'class_name': cls_name,
+            'count': int(cnt),
+            'percentage': float(cnt / total * 100),
+        })
+    
+    distribution_data.append({
+        'class_id': -1,
+        'class_name': 'MAJORITY_BASELINE',
+        'count': int(majority_count),
+        'percentage': float(majority_baseline_acc * 100),
+    })
+    
+    dist_path = output_dir / "dataset_class_distribution.csv"
+    with open(dist_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['class_id', 'class_name', 'count', 'percentage'])
+        writer.writeheader()
+        writer.writerows(distribution_data)
+    print(f"Saved class distribution to: {dist_path}")
+    print(f"  Majority class baseline accuracy: {majority_baseline_acc:.4f} ({majority_baseline_acc*100:.2f}%)")
+    
+    # A2 & A3: Per-method diagnostics (focus on "ours")
+    for result in all_results:
+        method_name = result['method']
+        cm = result.get('confusion_matrix')
+        
+        if cm is None:
+            continue
+        
+        # Per-class metrics
+        n_classes = len(cm)
+        per_class_metrics = []
+        for c in range(n_classes):
+            tp = cm[c, c]
+            fp = cm[:, c].sum() - tp
+            fn = cm[c, :].sum() - tp
+            
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+            support = int(cm[c, :].sum())
+            
+            cls_name = class_names[c] if c < len(class_names) else f"Class_{c}"
+            per_class_metrics.append({
+                'class_id': c,
+                'class_name': cls_name,
+                'precision': float(precision),
+                'recall': float(recall),
+                'f1': float(f1),
+                'support': support,
+            })
+        
+        metrics_path = output_dir / f"{method_name}_per_class_metrics.csv"
+        with open(metrics_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['class_id', 'class_name', 'precision', 'recall', 'f1', 'support'])
+            writer.writeheader()
+            writer.writerows(per_class_metrics)
+        print(f"Saved per-class metrics for {method_name} to: {metrics_path}")
+        
+        # Error breakdown (Step0 requirement 2)
+        if method_name == 'ours':
+            error_breakdown = []
+            # Normal → Fault误报
+            normal_to_fault = cm[0, 1:].sum() if n_classes > 1 else 0
+            error_breakdown.append({
+                'error_type': 'Normal→Fault (误报)',
+                'count': int(normal_to_fault),
+                'percentage': float(normal_to_fault / cm.sum() * 100) if cm.sum() > 0 else 0.0,
+            })
+            # Fault → Normal漏报
+            fault_to_normal = cm[1:, 0].sum() if n_classes > 1 else 0
+            error_breakdown.append({
+                'error_type': 'Fault→Normal (漏报)',
+                'count': int(fault_to_normal),
+                'percentage': float(fault_to_normal / cm.sum() * 100) if cm.sum() > 0 else 0.0,
+            })
+            # 三类故障互混
+            fault_misclass = 0
+            for i in range(1, n_classes):
+                for j in range(1, n_classes):
+                    if i != j:
+                        fault_misclass += cm[i, j]
+            error_breakdown.append({
+                'error_type': '故障类别互混',
+                'count': int(fault_misclass),
+                'percentage': float(fault_misclass / cm.sum() * 100) if cm.sum() > 0 else 0.0,
+            })
+            
+            error_path = output_dir / f"{method_name}_error_breakdown.csv"
+            with open(error_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=['error_type', 'count', 'percentage'])
+                writer.writeheader()
+                writer.writerows(error_breakdown)
+            print(f"Saved error breakdown for {method_name} to: {error_path}")
+        
+        # Prediction distribution
+        pred_counts = cm.sum(axis=0)
+        pred_dist = []
+        for c in range(n_classes):
+            cls_name = class_names[c] if c < len(class_names) else f"Class_{c}"
+            pred_dist.append({
+                'class_id': c,
+                'class_name': cls_name,
+                'pred_count': int(pred_counts[c]),
+                'pred_percentage': float(pred_counts[c] / pred_counts.sum() * 100) if pred_counts.sum() > 0 else 0.0,
+            })
+        
+        pred_path = output_dir / f"{method_name}_pred_distribution.csv"
+        with open(pred_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['class_id', 'class_name', 'pred_count', 'pred_percentage'])
+            writer.writeheader()
+            writer.writerows(pred_dist)
+        
+        # Save confusion matrix
+        cm_path = output_dir / f"{method_name}_confusion_matrix.csv"
+        cm_df_data = []
+        for i in range(n_classes):
+            row = {'true_class': class_names[i] if i < len(class_names) else f"Class_{i}"}
+            for j in range(n_classes):
+                row[class_names[j] if j < len(class_names) else f"Class_{j}"] = int(cm[i, j])
+            cm_df_data.append(row)
+        
+        with open(cm_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['true_class'] + [class_names[j] if j < len(class_names) else f"Class_{j}" for j in range(n_classes)]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(cm_df_data)
+        print(f"Saved confusion matrix for {method_name} to: {cm_path}")
+    
+    # Step0 requirement 3: feature_sanity_by_class.csv
+    if X_test is not None and feature_names is not None:
+        feature_sanity = []
+        # Get X1-X22 feature indices
+        x_indices = {}
+        for i, fname in enumerate(feature_names):
+            if fname.startswith('X') and fname[1:].isdigit():
+                x_indices[fname] = i
+        
+        for c in range(len(class_names)):
+            cls_mask = y_sys_test == c
+            if cls_mask.sum() == 0:
+                continue
+            
+            cls_name = class_names[c] if c < len(class_names) else f"Class_{c}"
+            cls_data = X_test[cls_mask]
+            
+            row = {'class_name': cls_name, 'support': int(cls_mask.sum())}
+            
+            # Calculate median and IQR for each X feature
+            for x_name in [f'X{i}' for i in range(1, 23)]:
+                if x_name in x_indices:
+                    idx = x_indices[x_name]
+                    if idx < cls_data.shape[1]:
+                        vals = cls_data[:, idx]
+                        row[f'{x_name}_median'] = float(np.median(vals))
+                        row[f'{x_name}_iqr'] = float(np.percentile(vals, 75) - np.percentile(vals, 25))
+            
+            # X16/X17/X18 non-zero ratio (频移特征)
+            for x_name in ['X16', 'X17', 'X18']:
+                if x_name in x_indices:
+                    idx = x_indices[x_name]
+                    if idx < cls_data.shape[1]:
+                        vals = cls_data[:, idx]
+                        non_zero_ratio = float(np.mean(np.abs(vals) > 1e-6))
+                        row[f'{x_name}_nonzero_ratio'] = non_zero_ratio
+            
+            feature_sanity.append(row)
+        
+        if feature_sanity:
+            sanity_path = output_dir / "feature_sanity_by_class.csv"
+            with open(sanity_path, 'w', newline='', encoding='utf-8') as f:
+                fieldnames = list(feature_sanity[0].keys())
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(feature_sanity)
+            print(f"Saved feature sanity by class to: {sanity_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comprehensive method comparison")
     parser.add_argument('--data_dir', default='Output/sim_spectrum', 
@@ -671,6 +882,8 @@ def main():
     parser.add_argument('--val_size', type=float, default=0.2, help='Validation set ratio')
     parser.add_argument('--small_sample', action='store_true', 
                        help='Run small-sample adaptability experiments')
+    parser.add_argument('--save_diagnostics', action='store_true',
+                       help='Save diagnostic outputs for debugging accuracy issues (default: enabled)')
     args = parser.parse_args()
     
     # Setup
@@ -779,6 +992,13 @@ def main():
     
     # Plot comprehensive comparison
     plot_comprehensive_comparison(all_results, output_dir)
+    
+    # Save diagnostic outputs (Section A of accuracy fix) - always run by default
+    print("\n" + "="*60)
+    print("Saving diagnostic outputs...")
+    print("="*60)
+    save_diagnostic_outputs(output_dir, y_sys, y_sys_test, all_results, sys_label_names,
+                           X_test=X_test, feature_names=feature_names)
     
     # Small-sample experiments
     if args.small_sample:
