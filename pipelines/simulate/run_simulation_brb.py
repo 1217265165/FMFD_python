@@ -454,13 +454,13 @@ def build_argparser():
     parser.add_argument("--baseline_meta", default=BASELINE_META)
     parser.add_argument("--switch_json", default=SWITCH_JSON)
     parser.add_argument("--out_dir", default=f"{OUTPUT_DIR}/sim_spectrum")
-    parser.add_argument("--n_samples", type=int, default=200, 
-                       help="总样本数（建议4的倍数以便完美平衡）")
+    parser.add_argument("--n_samples", type=int, default=400, 
+                       help="总样本数（默认400，建议4的倍数以便完美平衡）")
     parser.add_argument("--seed", type=int, default=2024)
-    parser.add_argument("--balanced", action="store_true", default=False,
-                       help="生成各类故障均衡的样本（每类相同数量）")
+    parser.add_argument("--balanced", action="store_true", default=True,
+                       help="生成系统级均衡的样本（每类相同数量，默认开启）")
     parser.add_argument("--realistic", dest="balanced", action="store_false",
-                       help="使用真实概率分布（默认，反映模块多样性：幅度58%%,频率20%%,参考14%%,正常8%%）")
+                       help="使用真实概率分布（反映模块多样性：幅度58%%,频率20%%,参考14%%,正常8%%）")
     return parser
 
 
