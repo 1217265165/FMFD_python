@@ -32,6 +32,7 @@ Output/sim_spectrum/*.csv
 Output/sim_spectrum/*.png
 Output/sim_spectrum/*.txt
 Output/sim_spectrum/*.json
+Output/sim_spectrum/raw_curves/
 !Output/sim_spectrum/labels.json
 !Output/sim_spectrum/statistics.json
 Output/comparison_results/

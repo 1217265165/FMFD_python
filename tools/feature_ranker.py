@@ -21,7 +21,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-warnings.filterwarnings('ignore')
+# Suppress only specific warnings related to XGBoost
+import warnings
+warnings.filterwarnings('ignore', category=FutureWarning, module='xgboost')
+warnings.filterwarnings('ignore', category=UserWarning, module='xgboost')
 
 
 def rank_features_xgb(

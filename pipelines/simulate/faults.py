@@ -109,7 +109,7 @@ def inject_preamp_degradation(frequency, amp, hf_drop_db=None, rng=None):
     should NOT be called. It is preserved for backward compatibility only.
     """
     if SINGLE_BAND_MODE:
-        raise RuntimeError(
+        raise ValueError(
             "inject_preamp_degradation is DISABLED in single-band mode. "
             "Preamp is OFF for 10MHz-8.2GHz frequency range."
         )
