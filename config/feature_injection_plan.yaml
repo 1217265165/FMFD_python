@@ -1,0 +1,141 @@
+# Feature Injection Plan Configuration
+# =====================================
+# Defines the staged feature injection strategy for the ours method.
+# Features are grouped by fault type and injected layer-by-layer.
+
+single_band_mode: true
+
+# Frequency axis parameters (single band)
+frequency:
+  start_hz: 1.0e7     # 10 MHz
+  step_hz: 1.0e7      # 10 MHz step
+  n_points: 820       # 820 points → 10MHz to 8.2GHz
+
+system:
+  # Features for Stage-0 Normal Anchor (判断 Normal vs Abnormal)
+  normal_anchor_features:
+    - X11   # env_overrun_rate - 包络超出率
+    - X12   # env_overrun_max - 最大违规幅度
+    - X13   # env_violation_energy - 包络违规能量
+    - X7    # step_score / gain_nonlinearity - 增益跳变
+    - X2    # inband_flatness / ripple_var - 带内平坦度
+  
+  # Thresholds for normal anchor decision
+  thresholds:
+    T_normal_quantile: 0.95   # Quantile for normal threshold
+    T_prob_quantile: 0.95     # Quantile for probability threshold
+    overall_threshold: 0.15   # Overall anomaly score threshold
+    max_prob_threshold: 0.30  # Max probability threshold for normal fallback
+  
+  # Amplitude fault branch - staged injection
+  amp:
+    stage1:
+      # Primary amplitude features (基础幅度偏移/平坦度)
+      - X1    # amplitude_offset / bias - 整体幅度偏移
+      - X2    # inband_flatness / ripple_var - 带内平坦度
+      - X11   # env_overrun_rate - 包络超出率
+    stage2:
+      # Secondary amplitude features (精细幅度特征)
+      - X6    # ripple_variance - 纹波方差
+      - X19   # slope_low - 低频段斜率
+      - X20   # kurtosis_detrended - 去趋势峰度
+    stage3:
+      # Tertiary amplitude features (跳变/能量特征)
+      - X7    # gain_nonlinearity - 增益非线性(最大步进)
+      - X13   # env_violation_energy - 包络违规能量
+      - X21   # peak_count_residual - 残差峰值数
+      - X22   # ripple_dom_freq_energy - 主频能量占比
+  
+  # Frequency fault branch - staged injection
+  freq:
+    stage1:
+      # Primary frequency features (基础频率失准)
+      - X16   # corr_shift_bins - 互相关频移
+      - X17   # warp_scale - 频轴缩放偏差
+    stage2:
+      # Secondary frequency features (形变/残差)
+      - X18   # warp_bias - 频轴平移偏差
+      - X4    # freq_scale_nonlinearity - 频率非线性度
+    stage3:
+      # Tertiary frequency features (能量分布)
+      - X14   # band_residual_low - 低频段残差
+      - X15   # band_residual_high_std - 高频段残差标准差
+
+  # Reference level fault branch - staged injection
+  ref:
+    stage1:
+      # Primary reference level features (基础参考电平偏差)
+      - X3    # hf_attenuation_slope - 高频衰减斜率
+      - X5    # scale_consistency - 幅度缩放一致性
+    stage2:
+      # Secondary reference level features (步进/压缩)
+      - X7    # gain_nonlinearity - 切换点步进
+      - X10   # band_amplitude_consistency - 频段幅度一致性
+    stage3:
+      # Tertiary reference level features (包络特征)
+      - X12   # env_overrun_max - 最大违规幅度
+      - X8    # lo_leakage - 本振泄漏(偏离中位数)
+
+# Module-level configuration
+module:
+  # Candidate routing thresholds
+  routing:
+    uncertain_max_prob_threshold: 0.45   # 如果max_prob低于此值,扩展候选
+    uncertain_top2_diff_threshold: 0.15  # 如果top1和top2差值小于此值,扩展候选
+    expand_top_m: 10                     # 不确定时扩展到Top-M模块
+    contract_top_k: 5                    # 确定性高时收缩到Top-K
+  
+  # Two-layer injection for module level
+  group_layer:
+    # Group-level features (RF/IF/LO/CLK/CAL)
+    features:
+      - X6    # ripple_variance
+      - X7    # gain_nonlinearity
+      - X10   # band_amplitude_consistency
+  
+  specific_layer:
+    # Module-specific features
+    features:
+      - X8    # lo_leakage
+      - X9    # tuning_linearity_residual
+      - X14   # band_residual_low
+      - X15   # band_residual_high_std
+
+# Preamp configuration - DISABLED in single band mode
+preamp:
+  enabled: false
+  module_name: "前置放大器"
+  note: "Preamp is disabled in single-band mode (10MHz-8.2GHz with preamp OFF)"
+
+# Calibration parameters (loaded from/saved to calibration.json)
+calibration:
+  alpha: 2.0              # Softmax temperature
+  beta_freq: 0.5          # Frequency branch evidence gating boost
+  beta_ref: 0.5           # Reference branch evidence gating boost
+  T_normal: 0.15          # Normal detection threshold
+  T_prob: 0.30            # Probability threshold
+
+# Feature aliases mapping (for backward compatibility)
+feature_aliases:
+  X1: ["amplitude_offset", "bias"]
+  X2: ["inband_flatness", "ripple_var"]
+  X3: ["hf_attenuation_slope", "res_slope"]
+  X4: ["freq_scale_nonlinearity", "df"]
+  X5: ["scale_consistency", "amp_scale_consistency", "gain_consistency"]
+  X6: ["ripple_variance"]
+  X7: ["gain_nonlinearity", "step_score"]
+  X8: ["lo_leakage"]
+  X9: ["tuning_linearity_residual"]
+  X10: ["band_amplitude_consistency"]
+  X11: ["env_overrun_rate", "viol_rate"]
+  X12: ["env_overrun_max"]
+  X13: ["env_violation_energy"]
+  X14: ["band_residual_low"]
+  X15: ["band_residual_high_std"]
+  X16: ["corr_shift_bins"]
+  X17: ["warp_scale"]
+  X18: ["warp_bias"]
+  X19: ["slope_low"]
+  X20: ["kurtosis_detrended"]
+  X21: ["peak_count_residual"]
+  X22: ["ripple_dom_freq_energy"]

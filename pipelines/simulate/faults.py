@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
+# Single-band mode flag: When True, preamp is disabled and switch-point step injection is disabled
+SINGLE_BAND_MODE = True
+
 # 辅助：估计局部/全局 sigma，用于自适应幅度/噪声
 def _estimate_sigma(amp, window_frac=0.02, min_window=21):
     x = np.asarray(amp, dtype=float)
@@ -51,21 +54,38 @@ def inject_freq_miscal(frequency, amp, delta_f=None, rng=None):
     return interp(frequency)
 
 def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compression_coef=None,
-                           compression_start_percent=0.8, rng=None):
+                           compression_start_percent=0.8, rng=None, single_band_mode=None):
     """
     参考电平失准：在切换点施加错误步进；高幅度区压缩。
     step_biases/compression_coef 未给出时按 σ 自适应随机生成。
+    
+    In single-band mode (single_band_mode=True or SINGLE_BAND_MODE global):
+    - Switch-point step injection is DISABLED
+    - Only global offset and high-amplitude compression are applied
     """
     rng = rng or np.random.default_rng()
     out = amp.copy()
     _, sig_med = _estimate_sigma(amp)
-    if step_biases is None:
-        step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
-                       for _ in range(len(band_ranges) - 1)]
-    for i in range(len(band_ranges) - 1):
-        end_f = band_ranges[i][1]
-        m_end = np.argmin(np.abs(frequency - end_f))
-        out[m_end:] += step_biases[i]
+    
+    # Determine if single-band mode is active
+    if single_band_mode is None:
+        single_band_mode = SINGLE_BAND_MODE
+    
+    # Step injection at switch points (DISABLED in single-band mode)
+    if not single_band_mode and len(band_ranges) > 1:
+        if step_biases is None:
+            step_biases = [rng.normal(0.6 * sig_med, 0.2 * max(0.2, sig_med))
+                           for _ in range(len(band_ranges) - 1)]
+        for i in range(len(band_ranges) - 1):
+            end_f = band_ranges[i][1]
+            m_end = np.argmin(np.abs(frequency - end_f))
+            out[m_end:] += step_biases[i]
+    else:
+        # Single-band mode: apply global offset instead of step injection
+        global_offset = rng.normal(0.3 * sig_med, 0.1 * max(0.1, sig_med))
+        out = out + global_offset
+    
+    # High-amplitude compression (always applied)
     if compression_coef is None:
         compression_coef = abs(rng.normal(0.15, 0.05))
     thr = np.percentile(out, 100 * compression_start_percent)
@@ -76,8 +96,24 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
 # -------------------------
 # 模块级示例畸变（自适应幅度）
 # -------------------------
+
+# PREAMP DISABLED: inject_preamp_degradation is kept for backward compatibility
+# but will raise an error in single-band mode and should not be called
 def inject_preamp_degradation(frequency, amp, hf_drop_db=None, rng=None):
-    """前置放大器衰减：随频率线性下滑，高频端下降 hf_drop_db。"""
+    """
+    前置放大器衰减：随频率线性下滑，高频端下降 hf_drop_db。
+    
+    **DISABLED IN SINGLE-BAND MODE**
+    
+    In single-band mode (10MHz-8.2GHz with preamp OFF), this function
+    should NOT be called. It is preserved for backward compatibility only.
+    """
+    if SINGLE_BAND_MODE:
+        raise RuntimeError(
+            "inject_preamp_degradation is DISABLED in single-band mode. "
+            "Preamp is OFF for 10MHz-8.2GHz frequency range."
+        )
+    
     rng = rng or np.random.default_rng()
     _, sig_med = _estimate_sigma(amp)
     if hf_drop_db is None:

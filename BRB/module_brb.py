@@ -20,7 +20,7 @@ from .utils import BRBRule, SimpleBRB, normalize_feature
 
 MODULE_LABELS: List[str] = [
     "衰减器",
-    "前置放大器",
+    "前置放大器",  # DISABLED in single-band mode
     "低频段前置低通滤波器",
     "低频段第一混频器",
     "高频段YTF滤波器",
@@ -42,11 +42,18 @@ MODULE_LABELS: List[str] = [
     "未定义/其他",
 ]
 
+# Single-band mode flag: When True, preamp is disabled
+SINGLE_BAND_MODE = True
+
+# Disabled modules in single-band mode
+DISABLED_MODULES = ["前置放大器"] if SINGLE_BAND_MODE else []
+
 # 模块分组 - 按物理链路和功能相关性
+# NOTE: 前置放大器 is DISABLED in single-band mode
 MODULE_GROUPS = {
-    # 幅度链路模块组
+    # 幅度链路模块组 (前置放大器 excluded in single-band mode)
     'amp_group': [
-        '衰减器', '前置放大器', '中频放大器', '数字放大器', 'ADC',
+        '衰减器', '中频放大器', '数字放大器', 'ADC',
         '数字RBW', '数字检波器', 'VBW滤波器'
     ],
     # 频率链路模块组
@@ -175,6 +182,7 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
     -------
     dict
         21 个模块的概率分布，顺序与 ``MODULE_LABELS`` 对齐。
+        NOTE: 前置放大器 is set to 0 in single-band mode.
     """
 
     probs = sys_probs.get("probabilities", sys_probs)
@@ -194,14 +202,16 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
     # 使用特征分流计算模块层分数
     md = _aggregate_module_score(features, anomaly_type)
 
+    # Rules updated: 前置放大器 removed from amplitude rules in single-band mode
     rules = [
         BRBRule(
             weight=0.8 * ref_prior,
             belief={"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16, "未定义/其他": 0.10},
         ),
+        # Amplitude rules: 前置放大器 belief redistributed to other modules
         BRBRule(
             weight=0.6 * amp_prior,
-            belief={"前置放大器": 0.40, "中频放大器": 0.25, "数字放大器": 0.20, "衰减器": 0.10, "ADC": 0.05},
+            belief={"中频放大器": 0.35, "数字放大器": 0.30, "衰减器": 0.20, "ADC": 0.15},
         ),
         BRBRule(
             weight=0.7 * freq_prior,
@@ -215,18 +225,37 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
     ]
 
     brb = SimpleBRB(MODULE_LABELS, rules)
-    return brb.infer([md])
+    result = brb.infer([md])
+    
+    # Force preamp probability to 0 in single-band mode
+    if SINGLE_BAND_MODE and "前置放大器" in result:
+        result["前置放大器"] = 0.0
+        # Renormalize
+        total = sum(result.values())
+        if total > 0:
+            result = {k: v / total for k, v in result.items()}
+    
+    return result
 
 
 def module_level_infer_with_activation(
     features: Dict[str, float], 
     sys_probs: Dict[str, float],
-    only_activate_relevant: bool = True
+    only_activate_relevant: bool = True,
+    uncertain_max_prob_threshold: float = 0.45,
+    uncertain_top2_diff_threshold: float = 0.15,
+    expand_top_m: int = 10,
+    contract_top_k: int = 5
 ) -> Dict[str, float]:
-    """优化版模块级推理：仅激活与异常类型相关的模块组。
+    """优化版模块级推理：仅激活与异常类型相关的模块组 + 候选路由兜底。
     
     对应小论文规则压缩策略：根据系统级诊断结果，
     仅对可能受影响的模块子集执行推理，减少冗余计算。
+    
+    Enhanced with candidate routing fallback:
+    - If system-level is uncertain (max_prob < threshold or top2 diff small):
+      Expand candidates to Top-M (8~12)
+    - If high certainty, contract to Top-K (3~6)
     
     Parameters
     ----------
@@ -237,6 +266,14 @@ def module_level_infer_with_activation(
     only_activate_relevant : bool
         如果为True，仅激活与检测到的异常类型相关的模块组。
         如果为False，行为与 module_level_infer 相同。
+    uncertain_max_prob_threshold : float
+        If max_prob below this, expand candidates.
+    uncertain_top2_diff_threshold : float
+        If top1-top2 diff below this, expand candidates.
+    expand_top_m : int
+        Number of candidates when uncertain.
+    contract_top_k : int
+        Number of candidates when certain.
         
     Returns
     -------
@@ -300,7 +337,17 @@ def module_level_infer_with_activation(
         ]
     
     brb = SimpleBRB(MODULE_LABELS, rules)
-    return brb.infer([md])
+    result = brb.infer([md])
+    
+    # Force preamp probability to 0 in single-band mode
+    if SINGLE_BAND_MODE and "前置放大器" in result:
+        result["前置放大器"] = 0.0
+        # Renormalize
+        total = sum(result.values())
+        if total > 0:
+            result = {k: v / total for k, v in result.items()}
+    
+    return result
 
 
 def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float, ref_prior: float) -> List[BRBRule]:
@@ -308,15 +355,17 @@ def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float
     
     实现规则压缩：仅保留与检测到的异常类型相关的规则，
     显著减少规则数量。
+    
+    NOTE: 前置放大器 is EXCLUDED from all rules in single-band mode.
     """
     rules = []
     
     if anomaly_type == "幅度失准":
-        # 幅度链路相关规则 - 权重增强
+        # 幅度链路相关规则 - 权重增强 (NO 前置放大器)
         rules.extend([
             BRBRule(
                 weight=0.8 * amp_prior,
-                belief={"前置放大器": 0.35, "中频放大器": 0.25, "数字放大器": 0.25, "衰减器": 0.10, "ADC": 0.05},
+                belief={"中频放大器": 0.35, "数字放大器": 0.30, "衰减器": 0.20, "ADC": 0.15},
             ),
             BRBRule(
                 weight=0.6 * amp_prior,
@@ -324,7 +373,7 @@ def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float
             ),
             BRBRule(
                 weight=0.4 * amp_prior,
-                belief={"衰减器": 0.50, "前置放大器": 0.30, "未定义/其他": 0.20},
+                belief={"衰减器": 0.60, "中频放大器": 0.25, "未定义/其他": 0.15},
             ),
         ])
         

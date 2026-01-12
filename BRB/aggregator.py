@@ -6,20 +6,130 @@
 对应小论文系统级诊断的聚合逻辑。
 
 本模块负责：
-1. 聚合三个子BRB（幅度、频率、参考电平）的推理结果
-2. 应用softmax进行概率校准
-3. 执行正常状态识别
-4. 输出最终的系统级诊断结果
+1. Stage-0 Normal Anchor (先判 Normal vs Abnormal)
+2. 聚合三个子BRB（幅度、频率、参考电平）的推理结果
+3. 应用门控+温度softmax进行概率校准
+4. 执行正常状态识别
+5. 输出最终的系统级诊断结果
+
+Enhanced with:
+- Evidence gating (beta_freq, beta_ref)
+- Temperature-calibrated softmax
+- Stage-0 normal anchor detection
+- Calibration.json loading
 """
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from .system_brb_amp import amp_brb_infer
 from .system_brb_freq import freq_brb_infer
 from .system_brb_ref import ref_brb_infer
+
+
+# Default calibration values
+DEFAULT_CALIBRATION = {
+    'alpha': 2.0,           # Softmax temperature
+    'beta_freq': 0.5,       # Frequency branch evidence boost
+    'beta_ref': 0.5,        # Reference branch evidence boost
+    'T_normal': 0.15,       # Normal detection threshold
+    'T_prob': 0.30,         # Probability threshold
+    'overall_threshold': 0.15,
+    'max_prob_threshold': 0.30,
+}
+
+
+def load_calibration(calibration_path: Optional[Path] = None) -> Dict:
+    """Load calibration parameters from JSON file.
+    
+    Parameters
+    ----------
+    calibration_path : Path, optional
+        Path to calibration.json. If None, searches in Output directory.
+        
+    Returns
+    -------
+    dict
+        Calibration parameters.
+    """
+    if calibration_path is None:
+        # Try default location
+        repo_root = Path(__file__).resolve().parents[1]
+        calibration_path = repo_root / 'Output' / 'calibration.json'
+    
+    if calibration_path.exists():
+        try:
+            with open(calibration_path, 'r', encoding='utf-8') as f:
+                loaded = json.load(f)
+                # Merge with defaults
+                result = DEFAULT_CALIBRATION.copy()
+                result.update(loaded)
+                return result
+        except Exception:
+            pass
+    
+    return DEFAULT_CALIBRATION.copy()
+
+
+def compute_evidence_gating(
+    features: Dict[str, float],
+    calibration: Dict
+) -> Tuple[float, float]:
+    """Compute evidence gating boosts for freq and ref branches.
+    
+    If frequency-specific evidence is strong (shift/warp features exceed
+    normal quantile threshold), boost freq logit by beta_freq.
+    Similarly for ref branch (compression/step features).
+    
+    Parameters
+    ----------
+    features : dict
+        Feature dictionary.
+    calibration : dict
+        Calibration parameters containing beta_freq, beta_ref.
+        
+    Returns
+    -------
+    Tuple[float, float]
+        (freq_boost, ref_boost) - gating boost values.
+    """
+    beta_freq = calibration.get('beta_freq', 0.5)
+    beta_ref = calibration.get('beta_ref', 0.5)
+    
+    # Frequency evidence thresholds (normalized)
+    freq_evidence = 0.0
+    x16 = abs(float(features.get('X16', 0)))  # corr_shift_bins
+    x17 = abs(float(features.get('X17', 0)))  # warp_scale
+    x18 = abs(float(features.get('X18', 0)))  # warp_bias
+    
+    # Normalize and check if above normal range
+    if x16 > 0.02 or x17 > 0.01 or x18 > 0.01:
+        freq_evidence = max(x16 / 0.1, x17 / 0.05, x18 / 0.05)
+        freq_evidence = min(1.0, freq_evidence)
+    
+    # Reference evidence thresholds
+    ref_evidence = 0.0
+    x3 = abs(float(features.get('X3', 0)))    # hf_attenuation_slope
+    x5 = abs(float(features.get('X5', 0)))    # scale_consistency
+    x7 = abs(float(features.get('X7', 0)))    # gain_nonlinearity (step)
+    
+    if x3 > 1e-10 or x5 > 0.1 or x7 > 0.5:
+        ref_evidence = max(
+            x3 / 1e-9 if x3 > 0 else 0,
+            x5 / 0.35,
+            x7 / 2.0
+        )
+        ref_evidence = min(1.0, ref_evidence)
+    
+    # Apply gating: boost = beta * evidence_strength
+    freq_boost = beta_freq * freq_evidence
+    ref_boost = beta_ref * ref_evidence
+    
+    return freq_boost, ref_boost
 
 
 def softmax_with_temperature(values: list, alpha: float = 2.0) -> list:
@@ -109,11 +219,13 @@ def aggregate_system_results(
     features: Dict[str, float],
     alpha: float = 2.0,
     overall_threshold: float = 0.15,
-    max_prob_threshold: float = 0.3
+    max_prob_threshold: float = 0.3,
+    calibration: Optional[Dict] = None
 ) -> Dict:
     """聚合三个子BRB的推理结果，输出系统级诊断。
     
     对应小论文系统级推理的聚合逻辑。
+    Enhanced with evidence gating and temperature softmax.
     
     Parameters
     ----------
@@ -125,6 +237,8 @@ def aggregate_system_results(
         整体异常度阈值，低于此值判定为正常。
     max_prob_threshold : float
         最大概率阈值，低于此值判定为正常。
+    calibration : dict, optional
+        Calibration parameters for evidence gating.
         
     Returns
     -------
@@ -138,6 +252,15 @@ def aggregate_system_results(
         - overall_score: 整体异常度
         - sub_brb_results: 各子BRB的详细结果
     """
+    # Load calibration if not provided
+    if calibration is None:
+        calibration = load_calibration()
+    
+    # Apply calibration to parameters
+    alpha = calibration.get('alpha', alpha)
+    overall_threshold = calibration.get('overall_threshold', overall_threshold)
+    max_prob_threshold = calibration.get('max_prob_threshold', max_prob_threshold)
+    
     # 执行三个子BRB推理
     amp_result = amp_brb_infer(features, alpha)
     freq_result = freq_brb_infer(features, alpha)
@@ -150,11 +273,21 @@ def aggregate_system_results(
         ref_result['activation']
     ]
     
+    # Apply evidence gating to prevent amp from absorbing everything
+    freq_boost, ref_boost = compute_evidence_gating(features, calibration)
+    
+    # Boost freq and ref activations based on their specific evidence
+    gated_activations = [
+        activations[0],                    # amp: no boost
+        activations[1] + freq_boost,       # freq: boost if freq-specific evidence
+        activations[2] + ref_boost,        # ref: boost if ref-specific evidence
+    ]
+    
     # 计算整体异常度
     overall_score = compute_overall_score(features)
     
-    # 计算故障概率分布
-    fault_probs = softmax_with_temperature(activations, alpha)
+    # 计算故障概率分布 with temperature softmax
+    fault_probs = softmax_with_temperature(gated_activations, alpha)
     
     # 正常状态识别
     normal_weight = 0.0
@@ -205,6 +338,10 @@ def aggregate_system_results(
         'is_normal': is_normal,
         'uncertainty': uncertainty,
         'overall_score': overall_score,
+        'evidence_gating': {
+            'freq_boost': freq_boost,
+            'ref_boost': ref_boost,
+        },
         'sub_brb_results': {
             'amp': amp_result,
             'freq': freq_result,
@@ -218,14 +355,17 @@ def system_level_infer_with_sub_brbs(
     alpha: float = 2.0,
     overall_threshold: float = 0.15,
     max_prob_threshold: float = 0.3,
-    use_feature_routing: bool = True
+    use_feature_routing: bool = True,
+    calibration: Optional[Dict] = None
 ) -> Dict:
     """使用子BRB架构的系统级推理入口。
     
     这是优化后的系统级推理接口，支持：
-    1. 特征分流到对应的子BRB
-    2. 聚合子BRB结果
-    3. 正常状态识别
+    1. Stage-0 Normal Anchor detection
+    2. 特征分流到对应的子BRB
+    3. Evidence gating + temperature softmax
+    4. 聚合子BRB结果
+    5. 正常状态识别
     
     Parameters
     ----------
@@ -239,12 +379,44 @@ def system_level_infer_with_sub_brbs(
         最大概率阈值。
     use_feature_routing : bool
         是否启用特征分流（默认True）。
+    calibration : dict, optional
+        Calibration parameters.
         
     Returns
     -------
     dict
         系统级诊断结果。
     """
+    # Load calibration if not provided
+    if calibration is None:
+        calibration = load_calibration()
+    
+    # Apply calibration to parameters
+    alpha = calibration.get('alpha', alpha)
+    overall_threshold = calibration.get('overall_threshold', overall_threshold)
+    max_prob_threshold = calibration.get('max_prob_threshold', max_prob_threshold)
+    
+    # Stage-0: Normal Anchor Detection
+    try:
+        from .normal_anchor import infer_normal_anchor
+        
+        anchor_result = infer_normal_anchor(features, calibration)
+        
+        if anchor_result.get('bypass_classification', False):
+            # High confidence normal - return early
+            return {
+                'probabilities': {'正常': 1.0, '幅度失准': 0.0, '频率失准': 0.0, '参考电平失准': 0.0},
+                'max_prob': 1.0,
+                'predicted_class': '正常',
+                'is_normal': True,
+                'uncertainty': 0.0,
+                'overall_score': anchor_result['score'],
+                'normal_anchor': anchor_result,
+                'sub_brb_results': None,
+            }
+    except ImportError:
+        anchor_result = None
+    
     if use_feature_routing:
         # 导入特征路由
         try:
@@ -267,8 +439,16 @@ def system_level_infer_with_sub_brbs(
                 ref_result['activation']
             ]
             
+            # Apply evidence gating
+            freq_boost, ref_boost = compute_evidence_gating(features, calibration)
+            gated_activations = [
+                activations[0],
+                activations[1] + freq_boost,
+                activations[2] + ref_boost,
+            ]
+            
             overall_score = compute_overall_score(features)
-            fault_probs = softmax_with_temperature(activations, alpha)
+            fault_probs = softmax_with_temperature(gated_activations, alpha)
             
             # 后续处理与 aggregate_system_results 相同
             normal_weight = 0.0
@@ -297,13 +477,17 @@ def system_level_infer_with_sub_brbs(
             predicted_class = max(probabilities, key=probabilities.get)
             is_normal = probabilities.get('正常', 0.0) >= 0.5 or max_fault_prob < max_prob_threshold
             
-            return {
+            result = {
                 'probabilities': probabilities,
                 'max_prob': max_prob,
                 'predicted_class': predicted_class,
                 'is_normal': is_normal,
                 'uncertainty': 1.0 - max_prob,
                 'overall_score': overall_score,
+                'evidence_gating': {
+                    'freq_boost': freq_boost,
+                    'ref_boost': ref_boost,
+                },
                 'sub_brb_results': {
                     'amp': amp_result,
                     'freq': freq_result,
@@ -311,9 +495,14 @@ def system_level_infer_with_sub_brbs(
                 },
             }
             
+            if anchor_result is not None:
+                result['normal_anchor'] = anchor_result
+            
+            return result
+            
         except ImportError:
             # 如果无法导入特征路由，回退到标准聚合
             pass
     
     # 不使用特征分流，直接使用完整特征
-    return aggregate_system_results(features, alpha, overall_threshold, max_prob_threshold)
+    return aggregate_system_results(features, alpha, overall_threshold, max_prob_threshold, calibration)

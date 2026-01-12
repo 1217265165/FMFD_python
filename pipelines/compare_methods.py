@@ -690,6 +690,15 @@ def main():
     
     n_sys_classes = len(np.unique(y_sys))
     
+    # Audit tracking: count samples at each stage
+    audit_info = {
+        'n_labels_total': len(sample_ids),
+        'n_features_rows': len(X),
+        'n_joined': len(sample_ids),  # After joining features and labels
+        'feature_names': feature_names,
+        'n_sys_classes': n_sys_classes,
+    }
+    
     # Split dataset
     print("\n" + "="*60)
     print("Splitting dataset...")
@@ -704,6 +713,13 @@ def main():
     print(f"Train set: {len(X_train)} samples")
     print(f"Val set: {len(X_val)} samples")
     print(f"Test set: {len(X_test)} samples")
+    
+    # Update audit info with split sizes
+    audit_info['n_train'] = len(X_train)
+    audit_info['n_val'] = len(X_val)
+    audit_info['n_test'] = len(X_test)
+    audit_info['test_indices'] = test_idx.tolist()
+    audit_info['test_sample_ids'] = [sample_ids[i] for i in test_idx]
     
     # Import methods (will be implemented)
     print("\n" + "="*60)
@@ -741,10 +757,27 @@ def main():
                 feature_names, n_sys_classes
             )
             all_results.append(results)
+            
+            # Validate confusion matrix sum
+            cm = results.get('confusion_matrix', None)
+            if cm is not None:
+                cm_sum = np.sum(cm)
+                if cm_sum != len(X_test):
+                    print(f"WARNING: {method.name} confusion matrix sum ({cm_sum}) != test size ({len(X_test)})")
+                    audit_info[f'{method.name}_cm_mismatch'] = {
+                        'cm_sum': int(cm_sum),
+                        'expected': len(X_test),
+                        'difference': len(X_test) - int(cm_sum),
+                    }
         except Exception as e:
             print(f"Error evaluating {method.name}: {e}")
             import traceback
             traceback.print_exc()
+    
+    # Update audit with test used count
+    audit_info['n_test_used'] = len(X_test)
+    audit_info['n_dropped'] = 0  # All samples used in current implementation
+    audit_info['drop_reasons'] = []  # No drops in current implementation
     
     # Save comparison table
     print("\n" + "="*60)
@@ -840,6 +873,97 @@ def main():
         
         # Plot small-sample curve
         plot_small_sample_curve(small_sample_results, output_dir)
+    
+    # Save eval_audit.json (mandatory for sample tracking)
+    print("\n" + "="*60)
+    print("Saving audit information...")
+    print("="*60)
+    
+    eval_audit_path = output_dir / "eval_audit.json"
+    with open(eval_audit_path, 'w', encoding='utf-8') as f:
+        # Clean up non-serializable items
+        audit_serializable = {}
+        for k, v in audit_info.items():
+            if isinstance(v, (list, dict, str, int, float, bool, type(None))):
+                audit_serializable[k] = v
+            elif hasattr(v, 'tolist'):
+                audit_serializable[k] = v.tolist()
+            else:
+                audit_serializable[k] = str(v)
+        json.dump(audit_serializable, f, indent=2, ensure_ascii=False)
+    print(f"Saved evaluation audit to: {eval_audit_path}")
+    
+    # Verify confusion matrix sum equals test size
+    for result in all_results:
+        cm = result.get('confusion_matrix', None)
+        if cm is not None:
+            cm_sum = int(np.sum(cm))
+            expected = len(X_test)
+            if cm_sum != expected:
+                raise ValueError(
+                    f"Confusion matrix sum mismatch for {result['method']}: "
+                    f"got {cm_sum}, expected {expected}. "
+                    f"See eval_audit.json for details."
+                )
+    
+    # Save ours-specific outputs
+    ours_result = None
+    for result in all_results:
+        if result['method'] == 'ours':
+            ours_result = result
+            break
+    
+    if ours_result is not None:
+        # Save ours confusion matrix CSV
+        cm_csv_path = output_dir / "ours_confusion_matrix.csv"
+        cm = ours_result['confusion_matrix']
+        with open(cm_csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+            writer.writerow(['Predicted\\Actual'] + sys_label_names)
+            for i, row in enumerate(cm):
+                writer.writerow([sys_label_names[i]] + list(row))
+        print(f"Saved ours confusion matrix to: {cm_csv_path}")
+        
+        # Save per-class metrics
+        per_class_path = output_dir / "ours_per_class_metrics.csv"
+        with open(per_class_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['class', 'precision', 'recall', 'f1', 'support'])
+            writer.writeheader()
+            for i, label in enumerate(sys_label_names):
+                tp = cm[i, i]
+                fp = np.sum(cm[:, i]) - tp
+                fn = np.sum(cm[i, :]) - tp
+                support = np.sum(cm[i, :])
+                
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                
+                writer.writerow({
+                    'class': label,
+                    'precision': f'{precision:.4f}',
+                    'recall': f'{recall:.4f}',
+                    'f1': f'{f1:.4f}',
+                    'support': int(support),
+                })
+        print(f"Saved ours per-class metrics to: {per_class_path}")
+    
+    # Save dataset class distribution
+    dist_path = output_dir / "dataset_class_distribution.csv"
+    with open(dist_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['class', 'train_count', 'val_count', 'test_count', 'total'])
+        sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref']
+        for i, label in enumerate(sys_label_names):
+            if i >= n_sys_classes:
+                break
+            train_count = np.sum(y_sys_train == i)
+            val_count = np.sum(y_sys_val == i)
+            test_count = np.sum(y_sys_test == i)
+            total = train_count + val_count + test_count
+            writer.writerow([label, train_count, val_count, test_count, total])
+    print(f"Saved dataset class distribution to: {dist_path}")
     
     print("\n" + "="*60)
     print("Comparison complete!")

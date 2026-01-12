@@ -60,10 +60,10 @@ from pipelines.simulate.faults import (
     inject_lo_path_error,
     inject_mixer_ripple,
     inject_power_noise,
-    inject_preamp_degradation,
     inject_reflevel_miscal,
     inject_vbw_smoothing,
     inject_ytf_variation,
+    SINGLE_BAND_MODE,
 )
 
 
@@ -198,21 +198,21 @@ def simulate_curve(
     curve = _pick_base_trace(rrs, traces, rng).copy()
     
     # More realistic probability distribution based on actual fault complexity
-    # Amplitude faults have more module types (8) so naturally more common
+    # Amplitude faults have more module types (7) so naturally more common
     # Frequency faults have fewer modules (3) so less common
     # Reference level faults have specific modules (2)
+    # NOTE: Preamp is DISABLED in single-band mode (10MHz-8.2GHz)
     if target_class is None:
-        # Realistic distribution reflecting module diversity
+        # Realistic distribution reflecting module diversity (NO PREAMP)
         kind_probs = {
-            # Amplitude-related (多种模块, 概率较高)
-            "amp": 0.10,      # Calibration source
-            "preamp": 0.08,   # Preamplifier
-            "lpf": 0.07,      # Low-pass filter
-            "mixer": 0.07,    # Mixer
-            "ytf": 0.07,      # YTF filter
-            "adc": 0.07,      # ADC
-            "vbw": 0.06,      # Digital detector
-            "power": 0.06,    # Power supply
+            # Amplitude-related (多种模块, 概率较高) - NO PREAMP
+            "amp": 0.12,      # Calibration source
+            "lpf": 0.09,      # Low-pass filter
+            "mixer": 0.09,    # Mixer
+            "ytf": 0.09,      # YTF filter
+            "adc": 0.09,      # ADC
+            "vbw": 0.08,      # Digital detector
+            "power": 0.08,    # Power supply
             # Frequency-related (少量模块, 概率较低)
             "freq": 0.08,     # Frequency calibration
             "clock": 0.06,    # Clock synthesis
@@ -221,13 +221,13 @@ def simulate_curve(
             "rl": 0.08,       # Reference level
             "att": 0.06,      # Attenuator
             # Normal
-            "normal": 0.08,   # Normal state
+            "normal": 0.10,   # Normal state (increased slightly)
         }
     elif target_class == "amp_error":
-        # Select from amplitude fault modules with realistic weights
+        # Select from amplitude fault modules with realistic weights (NO PREAMP)
         kind_probs = {
-            "amp": 0.15, "preamp": 0.13, "lpf": 0.13, "mixer": 0.13,
-            "ytf": 0.13, "adc": 0.13, "vbw": 0.10, "power": 0.10
+            "amp": 0.18, "lpf": 0.15, "mixer": 0.15,
+            "ytf": 0.15, "adc": 0.15, "vbw": 0.11, "power": 0.11
         }
     elif target_class == "freq_error":
         # Select from frequency fault modules
@@ -238,12 +238,12 @@ def simulate_curve(
     elif target_class == "normal":
         kind_probs = {"normal": 1.0}
     else:
-        # Fallback to original distribution
+        # Fallback to distribution without preamp
         kind_probs = {
-            "amp": 0.12, "freq": 0.12, "rl": 0.12, "att": 0.08,
-            "preamp": 0.08, "lpf": 0.06, "mixer": 0.06, "ytf": 0.06,
+            "amp": 0.14, "freq": 0.12, "rl": 0.12, "att": 0.08,
+            "lpf": 0.08, "mixer": 0.08, "ytf": 0.08,
             "clock": 0.06, "lo": 0.06, "adc": 0.06, "vbw": 0.06,
-            "power": 0.06, "normal": 0.1,
+            "power": 0.06, "normal": 0.10,
         }
     
     kinds = list(kind_probs.keys())
@@ -261,12 +261,10 @@ def simulate_curve(
         curve = inject_freq_miscal(frequency, curve, rng=rng)
         label_sys, label_mod = "频率失准", "时钟振荡器"
     elif fault_kind in ("rl", "att"):
-        steps = list(rng.normal(0.6, 0.2, size=len(band_ranges) - 1))
-        curve = inject_reflevel_miscal(frequency, curve, band_ranges, steps, rng=rng)
+        # Use single_band_mode=True for reflevel injection (no step injection)
+        curve = inject_reflevel_miscal(frequency, curve, band_ranges, rng=rng, single_band_mode=True)
         label_sys, label_mod = "参考电平失准", "衰减器"
-    elif fault_kind == "preamp":
-        curve = inject_preamp_degradation(frequency, curve, rng=rng)
-        label_sys, label_mod = "幅度失准", "前置放大器"
+    # NOTE: preamp case is REMOVED - it's disabled in single-band mode
     elif fault_kind == "lpf":
         curve = inject_lpf_shift(frequency, curve, rng=rng)
         label_sys, label_mod = "幅度失准", "低频段前置低通滤波器"
