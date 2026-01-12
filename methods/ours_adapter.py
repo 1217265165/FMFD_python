@@ -1,7 +1,9 @@
 """Adapter for Ours method (knowledge-driven rule compression + hierarchical BRB)."""
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -9,6 +11,27 @@ import numpy as np
 from methods.base import MethodAdapter
 from BRB.system_brb import system_level_infer, SystemBRBConfig
 from BRB.module_brb import module_level_infer, module_level_infer_with_activation
+
+
+def _load_calibration() -> Dict:
+    """Load calibration parameters from Output/calibration.json."""
+    # Try multiple locations
+    possible_paths = [
+        Path(__file__).parent.parent / 'Output' / 'calibration.json',
+        Path(__file__).parent.parent / 'Output' / 'sim_spectrum' / 'calibration.json',
+        Path('Output/calibration.json'),
+        Path('Output/sim_spectrum/calibration.json'),
+    ]
+    
+    for path in possible_paths:
+        if path.exists():
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                continue
+    
+    return {}  # Return empty dict if no calibration found
 
 
 class OursAdapter(MethodAdapter):
@@ -30,7 +53,16 @@ class OursAdapter(MethodAdapter):
     name = "ours"
     
     def __init__(self):
-        self.config = SystemBRBConfig()  # 默认启用扩展特征
+        # Load calibration first
+        self.calibration = _load_calibration()
+        
+        # Initialize config with calibration values
+        self.config = SystemBRBConfig()
+        if self.calibration:
+            self.config.alpha = self.calibration.get('alpha', self.config.alpha)
+            self.config.overall_threshold = self.calibration.get('T_low', self.calibration.get('overall_threshold', self.config.overall_threshold))
+            self.config.max_prob_threshold = self.calibration.get('T_prob', self.calibration.get('max_prob_threshold', self.config.max_prob_threshold))
+        
         self.feature_names = None
         self.n_system_rules = 15  # 3 sub-BRBs with 5 rules each
         self.n_module_rules = 33  # Configured per-module rules
@@ -95,14 +127,16 @@ class OursAdapter(MethodAdapter):
             probs = sys_result.get('probabilities', {})
             
             # Map to probability array with better fallback handling
-            # Order: 正常(0), 幅度失准(1), 频率失准(2), 参考电平失准(3)
+            # Order (sorted Chinese alphabetically, as used in compare_methods):
+            # 参考电平失准(0), 幅度失准(1), 正常(2), 频率失准(3)
+            # = [Ref, Amp, Normal, Freq]
             total_prob = sum(probs.values()) if probs else 0.0
             
             if total_prob > 0.01:  # Valid probabilities
-                sys_proba[i, 0] = probs.get('正常', 0.0)
-                sys_proba[i, 1] = probs.get('幅度失准', 0.0)
-                sys_proba[i, 2] = probs.get('频率失准', 0.0)
-                sys_proba[i, 3] = probs.get('参考电平失准', 0.0)
+                sys_proba[i, 0] = probs.get('参考电平失准', 0.0)  # Ref -> idx 0
+                sys_proba[i, 1] = probs.get('幅度失准', 0.0)      # Amp -> idx 1
+                sys_proba[i, 2] = probs.get('正常', 0.0)          # Normal -> idx 2
+                sys_proba[i, 3] = probs.get('频率失准', 0.0)      # Freq -> idx 3
                 
                 # Normalize if needed
                 row_sum = np.sum(sys_proba[i])

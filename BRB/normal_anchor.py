@@ -164,27 +164,25 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     components.update(freq_group)
     
     # ==== REF GROUP: Reference Level Evidence ====
+    # NOTE: After data analysis, only X14 (low_band_residual) distinguishes ref_error from normal
+    # Other features (X3, X26, X27, X28) do NOT discriminate - they add noise!
+    # 
+    # Data analysis results:
+    #   X14: normal=0.027, ref_error=0.376 (14x difference) ✓
+    #   X3:  normal=0.0002, ref_error=0.0002 (no difference)
+    #   X26: normal=0.0004, ref_error=0.0004 (no difference)
+    #   X27: normal=0.0001, ref_error=0.0001 (no difference)
+    #   X28: normal=0.04,   ref_error=-0.02 (wrong direction!)
+    
     ref_group = {}
     
-    # X3: hf_attenuation_slope - actual values are around 3e-4
-    x3 = abs(_get_feature_value(features, 'X3', 'hf_attenuation_slope', 'res_slope'))
-    ref_group['compress_slope'] = min(1.0, x3 / 0.001)  # Adjusted to actual scale
+    # X14: low_band_residual_mean - THE KEY FEATURE for ref detection
+    # normal=0.027, ref_error=0.376 - 14x difference!
+    # threshold 0.10: normal ~0.27, ref_error >1.0
+    x14 = abs(_get_feature_value(features, 'X14', 'low_band_residual'))
+    ref_group['low_band_res'] = min(1.0, x14 / 0.10)
     
-    # X5: scale_consistency - actual values around 0.29
-    x5 = abs(_get_feature_value(features, 'X5', 'scale_consistency'))
-    ref_group['scale_consist'] = min(1.0, x5 / 0.5)  # Adjusted
-    
-    # X26: high_quantile_compress_score (NEW) - actual values around 5e-4
-    x26 = abs(_get_feature_value(features, 'X26', 'high_quantile_compress_score'))
-    ref_group['high_compress'] = min(1.0, x26 / 0.01)  # Adjusted
-    
-    # X27: piecewise_gain_change (NEW) - actual values around 4e-4
-    x27 = abs(_get_feature_value(features, 'X27', 'piecewise_gain_change'))
-    ref_group['piecewise_gain'] = min(1.0, x27 / 0.01)  # Adjusted
-    
-    # X28: residual_upper_tail_asym (NEW) - actual values around -0.03 to 0.07
-    x28 = abs(_get_feature_value(features, 'X28', 'residual_upper_tail_asym'))
-    ref_group['tail_asym'] = min(1.0, x28 / 0.3)
+    # Only keep X14 - other features add noise, not signal
     
     components.update(ref_group)
     
