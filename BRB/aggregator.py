@@ -17,6 +17,7 @@ Enhanced with:
 - Temperature-calibrated softmax
 - Stage-0 normal anchor detection
 - Calibration.json loading
+- BRB-MU style reliability weighting (v5)
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .system_brb_amp import amp_brb_infer
 from .system_brb_freq import freq_brb_infer
@@ -36,10 +37,13 @@ DEFAULT_CALIBRATION = {
     'alpha': 2.0,           # Softmax temperature
     'beta_freq': 0.5,       # Frequency branch evidence boost
     'beta_ref': 0.5,        # Reference branch evidence boost
+    'beta_amp': 0.3,        # Amplitude branch evidence boost (optional)
+    'gamma': 0.5,           # Reliability adaptive temperature factor
     'T_normal': 0.15,       # Normal detection threshold
     'T_prob': 0.30,         # Probability threshold
     'overall_threshold': 0.15,
     'max_prob_threshold': 0.30,
+    'T_rel': 0.6,           # Reliability threshold for module routing
 }
 
 
@@ -78,8 +82,8 @@ def load_calibration(calibration_path: Optional[Path] = None) -> Dict:
 def compute_evidence_gating(
     features: Dict[str, float],
     calibration: Dict
-) -> Tuple[float, float]:
-    """Compute evidence gating boosts for freq and ref branches.
+) -> Tuple[float, float, float]:
+    """Compute evidence gating boosts for amp, freq and ref branches.
     
     If frequency-specific evidence is strong (shift/warp features exceed
     normal quantile threshold), boost freq logit by beta_freq.
@@ -90,46 +94,165 @@ def compute_evidence_gating(
     features : dict
         Feature dictionary.
     calibration : dict
-        Calibration parameters containing beta_freq, beta_ref.
+        Calibration parameters containing beta_freq, beta_ref, beta_amp.
         
     Returns
     -------
-    Tuple[float, float]
-        (freq_boost, ref_boost) - gating boost values.
+    Tuple[float, float, float]
+        (amp_boost, freq_boost, ref_boost) - gating boost values.
     """
+    beta_amp = calibration.get('beta_amp', 0.3)
     beta_freq = calibration.get('beta_freq', 0.5)
     beta_ref = calibration.get('beta_ref', 0.5)
+    
+    # Amplitude evidence thresholds
+    amp_evidence = 0.0
+    x11 = abs(float(features.get('X11', 0)))  # env_overrun_rate
+    x12 = abs(float(features.get('X12', 0)))  # env_overrun_max
+    x13 = abs(float(features.get('X13', 0)))  # env_violation_energy
+    
+    if x11 > 0.05 or x12 > 1.0 or x13 > 50.0:
+        amp_evidence = max(x11 / 0.3, x12 / 4.0, x13 / 500.0)
+        amp_evidence = min(1.0, amp_evidence)
     
     # Frequency evidence thresholds (normalized)
     freq_evidence = 0.0
     x16 = abs(float(features.get('X16', 0)))  # corr_shift_bins
     x17 = abs(float(features.get('X17', 0)))  # warp_scale
     x18 = abs(float(features.get('X18', 0)))  # warp_bias
+    x24 = abs(float(features.get('X24', 0)))  # phase_slope_diff
     
     # Normalize and check if above normal range
-    if x16 > 0.02 or x17 > 0.01 or x18 > 0.01:
-        freq_evidence = max(x16 / 0.1, x17 / 0.05, x18 / 0.05)
+    if x16 > 5.0 or x17 > 0.005 or x18 > 0.005 or x24 > 0.1:
+        freq_evidence = max(x16 / 50.0, x17 / 0.02, x18 / 0.02, x24 / 0.5)
         freq_evidence = min(1.0, freq_evidence)
     
-    # Reference evidence thresholds
+    # Reference evidence thresholds - primarily X14
     ref_evidence = 0.0
-    x3 = abs(float(features.get('X3', 0)))    # hf_attenuation_slope
-    x5 = abs(float(features.get('X5', 0)))    # scale_consistency
-    x7 = abs(float(features.get('X7', 0)))    # gain_nonlinearity (step)
+    x14 = abs(float(features.get('X14', 0)))  # low_band_residual - KEY feature
     
-    if x3 > 1e-10 or x5 > 0.1 or x7 > 0.5:
-        ref_evidence = max(
-            x3 / 1e-9 if x3 > 0 else 0,
-            x5 / 0.35,
-            x7 / 2.0
-        )
-        ref_evidence = min(1.0, ref_evidence)
+    if x14 > 0.05:  # normal is ~0.027, ref_error is ~0.376
+        ref_evidence = min(1.0, x14 / 0.15)
     
     # Apply gating: boost = beta * evidence_strength
+    amp_boost = beta_amp * amp_evidence
     freq_boost = beta_freq * freq_evidence
     ref_boost = beta_ref * ref_evidence
     
-    return freq_boost, ref_boost
+    return amp_boost, freq_boost, ref_boost
+
+
+def compute_reliability(
+    features: Dict[str, float],
+    calibration: Dict
+) -> Dict[str, float]:
+    """Compute BRB-MU style reliability scores based on evidence consistency.
+    
+    Implements reliability computation inspired by BRB with Multiplicative Utility:
+    - Higher coverage (more normal-like) → higher reliability
+    - Evidence conflict → lower reliability
+    - Robust z-scores used for normalization
+    
+    Parameters
+    ----------
+    features : dict
+        Feature dictionary.
+    calibration : dict
+        Calibration parameters.
+        
+    Returns
+    -------
+    dict
+        - reliability: Overall reliability score [0, 1]
+        - rel_amp: Amplitude branch reliability
+        - rel_freq: Frequency branch reliability
+        - rel_ref: Reference branch reliability
+        - components: Detailed z-scores per feature
+    """
+    # Get feature values with defaults
+    def _get_f(name, default=0.0):
+        return float(features.get(name, default))
+    
+    # === Compute z-scores for each evidence group ===
+    # Using typical normal statistics (median, IQR) from baseline
+    
+    # Amplitude group z-scores
+    z_env_rate = min(5.0, _get_f('X11', 0) / 0.02)
+    z_env_max = min(5.0, _get_f('X12', 0) / 0.5)
+    z_env_energy = min(5.0, _get_f('X13', 0) / 50.0)
+    z_jump = min(5.0, _get_f('X7', 0) / 0.2)
+    
+    amp_zscores = [z_env_rate, z_env_max, z_env_energy, z_jump]
+    
+    # Frequency group z-scores
+    z_shift = min(5.0, abs(_get_f('X16', 0)) / 20.0)
+    z_warp_s = min(5.0, abs(_get_f('X17', 0)) / 0.01)
+    z_warp_b = min(5.0, abs(_get_f('X18', 0)) / 0.01)
+    z_phase = min(5.0, abs(_get_f('X24', 0)) / 0.2)
+    
+    freq_zscores = [z_shift, z_warp_s, z_warp_b, z_phase]
+    
+    # Reference group z-scores
+    z_low_band = min(5.0, abs(_get_f('X14', 0)) / 0.05)
+    
+    ref_zscores = [z_low_band]
+    
+    # === Compute group-level reliability ===
+    # Reliability decreases when z-scores are too high (uncertain evidence)
+    # but also when z-scores conflict within a group
+    
+    def group_reliability(zscores: List[float]) -> float:
+        if not zscores:
+            return 1.0
+        max_z = max(zscores)
+        # If max evidence is strong and consistent, reliability is high
+        # If evidence is very weak (all near 0), reliability is also high (normal)
+        # If evidence is mixed/conflicting, reliability is lower
+        
+        # Simple formula: reliability drops with extreme evidence
+        # but not with consistent mild evidence
+        if max_z < 1.0:
+            return 1.0  # Normal range - high reliability
+        elif max_z < 3.0:
+            return 0.9 - 0.1 * (max_z - 1.0)  # Slight drop
+        else:
+            return max(0.4, 0.7 - 0.1 * (max_z - 3.0))  # Cap at 0.4
+    
+    rel_amp = group_reliability(amp_zscores)
+    rel_freq = group_reliability(freq_zscores)
+    rel_ref = group_reliability(ref_zscores)
+    
+    # === Detect evidence conflict ===
+    # If multiple groups have strong evidence, there's conflict
+    strong_groups = 0
+    if max(amp_zscores) > 2.0:
+        strong_groups += 1
+    if max(freq_zscores) > 2.0:
+        strong_groups += 1
+    if max(ref_zscores) > 2.0:
+        strong_groups += 1
+    
+    conflict_penalty = 0.0
+    if strong_groups >= 2:
+        conflict_penalty = 0.15 * (strong_groups - 1)
+    
+    # === Overall reliability ===
+    # Weighted combination of branch reliabilities
+    overall_reliability = 0.4 * rel_amp + 0.3 * rel_freq + 0.3 * rel_ref - conflict_penalty
+    overall_reliability = max(0.3, min(1.0, overall_reliability))
+    
+    return {
+        'reliability': overall_reliability,
+        'rel_amp': rel_amp,
+        'rel_freq': rel_freq,
+        'rel_ref': rel_ref,
+        'conflict_penalty': conflict_penalty,
+        'components': {
+            'amp_zscores': amp_zscores,
+            'freq_zscores': freq_zscores,
+            'ref_zscores': ref_zscores,
+        }
+    }
 
 
 def softmax_with_temperature(values: list, alpha: float = 2.0) -> list:
@@ -274,11 +397,11 @@ def aggregate_system_results(
     ]
     
     # Apply evidence gating to prevent amp from absorbing everything
-    freq_boost, ref_boost = compute_evidence_gating(features, calibration)
+    amp_boost, freq_boost, ref_boost = compute_evidence_gating(features, calibration)
     
-    # Boost freq and ref activations based on their specific evidence
+    # Boost activations based on their specific evidence
     gated_activations = [
-        activations[0],                    # amp: no boost
+        activations[0] + amp_boost,        # amp: with boost
         activations[1] + freq_boost,       # freq: boost if freq-specific evidence
         activations[2] + ref_boost,        # ref: boost if ref-specific evidence
     ]
@@ -339,6 +462,7 @@ def aggregate_system_results(
         'uncertainty': uncertainty,
         'overall_score': overall_score,
         'evidence_gating': {
+            'amp_boost': amp_boost,
             'freq_boost': freq_boost,
             'ref_boost': ref_boost,
         },
@@ -358,7 +482,7 @@ def system_level_infer_with_sub_brbs(
     use_feature_routing: bool = True,
     calibration: Optional[Dict] = None
 ) -> Dict:
-    """使用子BRB架构的系统级推理入口（v2：软门控版本）。
+    """使用子BRB架构的系统级推理入口（v5：BRB-MU可信度权重版本）。
     
     这是优化后的系统级推理接口，支持：
     1. Stage-0 Normal Anchor with SOFT GATING (no bypass!)
@@ -366,6 +490,7 @@ def system_level_infer_with_sub_brbs(
     3. Evidence gating + temperature softmax
     4. Normal logit competes with fault logits
     5. 四分类softmax输出
+    6. BRB-MU style reliability weighting (v5 NEW)
     
     Parameters
     ----------
@@ -392,7 +517,8 @@ def system_level_infer_with_sub_brbs(
         calibration = load_calibration()
     
     # Apply calibration to parameters
-    alpha = calibration.get('alpha', alpha)
+    alpha_base = calibration.get('alpha', alpha)
+    gamma = calibration.get('gamma', 0.5)  # Reliability temperature factor
     
     # Stage-0: Normal Anchor Detection (v2: SOFT GATING)
     anchor_result = None
@@ -409,10 +535,21 @@ def system_level_infer_with_sub_brbs(
         anchor_result = None
         normal_logit = 0.0
     
+    # === v5 NEW: Compute reliability scores ===
+    reliability_info = compute_reliability(features, calibration)
+    reliability = reliability_info['reliability']
+    rel_amp = reliability_info['rel_amp']
+    rel_freq = reliability_info['rel_freq']
+    rel_ref = reliability_info['rel_ref']
+    
+    # === v5: Adaptive temperature (suppresses overconfidence when uncertain) ===
+    # When reliability is low, make softmax softer (more uncertain output)
+    alpha_eff = alpha_base * (1.0 + gamma * (1.0 - reliability))
+    
     # Execute three sub-BRBs (always run, no bypass)
-    amp_result = amp_brb_infer(features, alpha)
-    freq_result = freq_brb_infer(features, alpha)
-    ref_result = ref_brb_infer(features, alpha)
+    amp_result = amp_brb_infer(features, alpha_eff)
+    freq_result = freq_brb_infer(features, alpha_eff)
+    ref_result = ref_brb_infer(features, alpha_eff)
     
     # 获取各子BRB的激活度
     activations = [
@@ -421,19 +558,26 @@ def system_level_infer_with_sub_brbs(
         ref_result['activation']
     ]
     
-    # Apply evidence gating to prevent amp from absorbing everything
-    freq_boost, ref_boost = compute_evidence_gating(features, calibration)
+    # Apply evidence gating (now returns 3 values including amp_boost)
+    amp_boost, freq_boost, ref_boost = compute_evidence_gating(features, calibration)
+    
+    # === v5: Apply reliability-weighted gating ===
+    # Boost is scaled by branch reliability
+    # When rel_freq is high, freq evidence is trusted more
+    freq_boost_weighted = freq_boost * rel_freq
+    ref_boost_weighted = ref_boost * rel_ref
+    amp_boost_weighted = amp_boost * rel_amp
     
     # Build 4-way logits: [Normal, Amp, Freq, Ref]
     logits = [
-        normal_logit,                           # Normal: from anchor
-        activations[0],                         # Amp: no additional boost
-        activations[1] + freq_boost,            # Freq: evidence gating boost
-        activations[2] + ref_boost,             # Ref: evidence gating boost
+        normal_logit,                                   # Normal: from anchor
+        activations[0] + amp_boost_weighted,            # Amp: with reliability-weighted boost
+        activations[1] + freq_boost_weighted,           # Freq: with reliability-weighted boost
+        activations[2] + ref_boost_weighted,            # Ref: with reliability-weighted boost
     ]
     
-    # Apply temperature softmax for 4-way classification
-    fault_probs = softmax_with_temperature(logits, alpha)
+    # Apply temperature softmax for 4-way classification (with adaptive temperature)
+    fault_probs = softmax_with_temperature(logits, alpha_eff)
     
     # Build probability dictionary
     probabilities = {
@@ -451,12 +595,18 @@ def system_level_infer_with_sub_brbs(
     # Compute overall score for debugging
     overall_score = anchor_result.get('anchor_score', 0.0) if anchor_result else compute_overall_score(features)
     
+    # === v5: Enhanced uncertainty with reliability ===
+    # Uncertainty increases when reliability is low
+    base_uncertainty = 1.0 - max_prob
+    uncertainty = base_uncertainty + 0.2 * (1.0 - reliability)
+    uncertainty = min(1.0, uncertainty)
+    
     result = {
         'probabilities': probabilities,
         'max_prob': max_prob,
         'predicted_class': predicted_class,
         'is_normal': is_normal,
-        'uncertainty': 1.0 - max_prob,
+        'uncertainty': uncertainty,
         'overall_score': overall_score,
         'logits': {
             'normal': logits[0],
@@ -465,8 +615,17 @@ def system_level_infer_with_sub_brbs(
             'ref': logits[3],
         },
         'evidence_gating': {
-            'freq_boost': freq_boost,
-            'ref_boost': ref_boost,
+            'amp_boost': amp_boost_weighted,
+            'freq_boost': freq_boost_weighted,
+            'ref_boost': ref_boost_weighted,
+        },
+        # v5 NEW: Reliability info
+        'reliability': {
+            'overall': reliability,
+            'rel_amp': rel_amp,
+            'rel_freq': rel_freq,
+            'rel_ref': rel_ref,
+            'alpha_eff': alpha_eff,
         },
         'sub_brb_results': {
             'amp': amp_result,

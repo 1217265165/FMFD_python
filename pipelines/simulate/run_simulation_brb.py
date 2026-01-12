@@ -567,5 +567,39 @@ def build_argparser():
 
 
 if __name__ == "__main__":
+    import sys
+    import os
+    
+    # Change to repository root for relative paths to work
+    # This enables Windows double-click execution
+    script_dir = Path(__file__).resolve().parent
+    repo_root = script_dir.parents[1]
+    os.chdir(repo_root)
+    
+    # Build parser and run
     parser = build_argparser()
-    run_simulation(parser.parse_args())
+    args = parser.parse_args()
+    
+    # Show banner for interactive use (Windows double-click)
+    print("=" * 60)
+    print("FMFD Simulation Pipeline (系统级均衡仿真)")
+    print("=" * 60)
+    print(f"  Samples: {args.n_samples} (balanced={args.balanced})")
+    print(f"  Output:  {args.out_dir}")
+    print("=" * 60)
+    print()
+    
+    # Run simulation
+    run_simulation(args)
+    
+    # Windows: pause if double-clicked (no parent console)
+    if sys.platform == 'win32':
+        try:
+            # Check if we're in an interactive session
+            if sys.stdin.isatty():
+                print()
+                print("=" * 60)
+                print("Simulation complete! Press Enter to exit...")
+                input()
+        except Exception:
+            pass

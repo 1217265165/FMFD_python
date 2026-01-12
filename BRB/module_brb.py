@@ -244,6 +244,7 @@ def module_level_infer_with_activation(
     only_activate_relevant: bool = True,
     uncertain_max_prob_threshold: float = 0.45,
     uncertain_top2_diff_threshold: float = 0.15,
+    uncertain_reliability_threshold: float = 0.6,
     expand_top_m: int = 10,
     contract_top_k: int = 5
 ) -> Dict[str, float]:
@@ -252,17 +253,17 @@ def module_level_infer_with_activation(
     对应小论文规则压缩策略：根据系统级诊断结果，
     仅对可能受影响的模块子集执行推理，减少冗余计算。
     
-    Enhanced with candidate routing fallback:
-    - If system-level is uncertain (max_prob < threshold or top2 diff small):
+    Enhanced with candidate routing fallback (v5: reliability-based):
+    - If system-level is uncertain (max_prob < threshold or reliability < T_rel):
       Expand candidates to Top-M (8~12)
-    - If high certainty, contract to Top-K (3~6)
+    - If high certainty and reliability, contract to Top-K (3~6)
     
     Parameters
     ----------
     features : dict
         模块层特征字典。
     sys_probs : dict
-        系统级诊断概率分布。
+        系统级诊断概率分布 (may include 'reliability' dict from v5).
     only_activate_relevant : bool
         如果为True，仅激活与检测到的异常类型相关的模块组。
         如果为False，行为与 module_level_infer 相同。
@@ -270,6 +271,8 @@ def module_level_infer_with_activation(
         If max_prob below this, expand candidates.
     uncertain_top2_diff_threshold : float
         If top1-top2 diff below this, expand candidates.
+    uncertain_reliability_threshold : float
+        If reliability below this, expand candidates (v5 NEW).
     expand_top_m : int
         Number of candidates when uncertain.
     contract_top_k : int
@@ -282,6 +285,10 @@ def module_level_infer_with_activation(
     """
     probs = sys_probs.get("probabilities", sys_probs)
     
+    # v5: Get reliability from system result (if available)
+    reliability_info = sys_probs.get("reliability", {})
+    reliability = reliability_info.get("overall", 1.0) if isinstance(reliability_info, dict) else 1.0
+    
     # 检查是否为正常状态
     normal_prob = probs.get("正常", 0.0)
     if normal_prob > 0.5:
@@ -291,6 +298,13 @@ def module_level_infer_with_activation(
     amp_prior = probs.get("幅度失准", 0.3)
     freq_prior = probs.get("频率失准", 0.3)
     ref_prior = probs.get("参考电平失准", 0.3)
+    
+    # v5: Check for uncertainty - include reliability in decision
+    max_prob = sys_probs.get("max_prob", max(amp_prior, freq_prior, ref_prior, normal_prob))
+    is_uncertain = (
+        max_prob < uncertain_max_prob_threshold or
+        reliability < uncertain_reliability_threshold
+    )
     
     # 确定主导异常类型
     max_prob_val = max(amp_prior, freq_prior, ref_prior)
