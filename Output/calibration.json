@@ -1,16 +1,16 @@
 {
-  "alpha": 1.5,
-  "T_low": 0.08,
-  "T_high": 0.3,
+  "alpha": 1.0,
+  "T_low": 0.3,
+  "T_high": 0.7,
   "k_normal_prior": 2.0,
-  "beta_freq": 2.0,
+  "beta_freq": 1.0,
   "beta_ref": 0.0,
-  "overall_threshold": 0.08,
+  "overall_threshold": 0.3,
   "max_prob_threshold": 0.35,
-  "T_normal": 0.08,
+  "T_normal": 0.3,
   "T_prob": 0.35,
-  "calibration_accuracy": 0.4025,
-  "calibration_macro_f1": 0.3473999899989999,
+  "calibration_balanced_accuracy": 0.5275,
+  "calibration_macro_f1": 0.43642714398559573,
   "single_band_mode": true,
-  "version": "v2_soft_gating"
+  "version": "v3_grouped_max"
 }

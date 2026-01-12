@@ -69,19 +69,23 @@ def _robust_zscore(value: float, median: float, iqr: float, zcap: float = 5.0) -
 
 
 def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig = None) -> Dict[str, float]:
-    """Compute normal anchor score with both envelope and in-envelope anomalies.
+    """Compute normal anchor score using GROUPED MAX fusion.
     
     This function computes a combined score indicating how "abnormal" a sample is.
     Higher scores indicate more anomalous behavior.
     
-    Includes TWO types of evidence:
-    1. Envelope-related (external anomalies): violations outside bounds
-    2. In-envelope anomalies (internal shape anomalies): jumps, warping, kurtosis
+    v3: Changed from weighted average to GROUPED MAX to prevent
+    Freq/Ref being diluted by Amp components.
+    
+    Groups:
+    - amp_evidence: envelope, jump, flatness, kurtosis
+    - freq_evidence: freq_shift, warp_scale, warp_bias, warp_residual, phase_slope
+    - ref_evidence: compress_slope, scale_consist, high_quantile, piecewise, tail_asym
     
     Parameters
     ----------
     features : dict
-        Feature dictionary containing X1-X22 or equivalent.
+        Feature dictionary containing X1-X28 or equivalent.
     config : NormalAnchorConfig, optional
         Configuration for normal detection.
         
@@ -90,6 +94,7 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     dict
         Contains:
         - anchor_score: Combined anomaly score (higher = more abnormal)
+        - score_amp, score_freq, score_ref: Group-level max scores
         - components: Individual component scores
         - T_low, T_high: Applied thresholds
     """
@@ -98,80 +103,115 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     
     components = {}
     
-    # ==== Envelope-related features (external anomalies) ====
-    # env_overrun_rate (X11)
+    # ==== AMP GROUP: Envelope + Internal Shape ====
+    amp_group = {}
+    
+    # env_overrun_rate (X11) - actual values 0 to 1, median ~0.005
     x11 = abs(_get_feature_value(features, 'X11', 'env_overrun_rate', 'viol_rate'))
-    components['env_rate'] = min(1.0, x11 / 0.2)  # Cap at 0.2
+    amp_group['env_rate'] = min(1.0, x11 / 0.5)  # Adjusted - 50% violation rate = full score
     
-    # env_overrun_max (X12)
+    # env_overrun_max (X12) - actual values 0 to ~8, median ~0.08
     x12 = abs(_get_feature_value(features, 'X12', 'env_overrun_max'))
-    components['env_max'] = min(1.0, x12 / 3.0)  # Cap at 3.0
+    amp_group['env_max'] = min(1.0, x12 / 4.0)  # Adjusted - 4dB max violation = full score
     
-    # env_violation_energy (X13)
+    # env_violation_energy (X13) - actual values 0 to ~6000, median ~16
     x13 = abs(_get_feature_value(features, 'X13', 'env_violation_energy'))
-    components['env_energy'] = min(1.0, x13 / 5.0)  # Cap at 5.0
+    amp_group['env_energy'] = min(1.0, x13 / 500.0)  # Adjusted - 500 energy = full score
     
-    # ==== In-envelope anomalies (internal shape anomalies) ====
-    # gain_nonlinearity / jump_energy (X7)
+    # gain_nonlinearity / jump_energy (X7) - actual values 0.001 to ~1.4, median ~0.08
     x7 = abs(_get_feature_value(features, 'X7', 'gain_nonlinearity', 'step_score'))
-    components['jump_energy'] = min(1.0, x7 / 1.5)  # Cap at 1.5
+    amp_group['jump_energy'] = min(1.0, x7 / 0.5)  # Adjusted - 0.5 = full score
     
     # inband_flatness / ripple (X2)
     x2 = abs(_get_feature_value(features, 'X2', 'inband_flatness', 'ripple_var'))
-    components['flatness'] = min(1.0, x2 / 0.05)  # Cap at 0.05
+    amp_group['flatness'] = min(1.0, x2 / 0.1)  # Adjusted
     
-    # kurtosis_detrended (X20) - in-envelope shape anomaly
+    # kurtosis_detrended (X20)
     x20 = abs(_get_feature_value(features, 'X20', 'kurtosis_detrended'))
-    components['kurtosis'] = min(1.0, max(0, x20 - 2.0) / 3.0)  # Excess from 2.0
+    amp_group['kurtosis'] = min(1.0, max(0, x20 - 2.0) / 5.0)  # Adjusted
     
-    # ==== Frequency-specific evidence ====
-    # corr_shift_bins (X16) - frequency shift
+    components.update(amp_group)
+    
+    # ==== FREQ GROUP: Frequency Shift/Warp Evidence ====
+    freq_group = {}
+    
+    # X16: corr_shift_bins (now in actual bins, not normalized)
     x16 = abs(_get_feature_value(features, 'X16', 'corr_shift_bins'))
-    components['freq_shift'] = min(1.0, x16 / 0.05)
+    # For 820 points, 1 bin = ~1/820. With enhanced ppm, expect >= 1 bin shift
+    # Adjusted: X16 can be large (up to 800) so use wider threshold
+    freq_group['freq_shift'] = min(1.0, abs(x16) / 50.0)  # 50 bins = clear shift
     
-    # warp_scale (X17) - frequency warping
+    # X17: warp_scale
     x17 = abs(_get_feature_value(features, 'X17', 'warp_scale'))
-    components['warp_scale'] = min(1.0, x17 / 0.03)
+    freq_group['warp_scale'] = min(1.0, x17 / 0.02)  # Adjusted based on actual values
     
-    # warp_bias (X18) - frequency bias
+    # X18: warp_bias
     x18 = abs(_get_feature_value(features, 'X18', 'warp_bias'))
-    components['warp_bias'] = min(1.0, x18 / 0.03)
+    freq_group['warp_bias'] = min(1.0, x18 / 0.02)  # Adjusted
     
-    # ==== Reference-specific evidence ====
-    # hf_attenuation_slope (X3) - ref level compression
+    # X23: warp_residual_energy (NEW)
+    x23 = abs(_get_feature_value(features, 'X23', 'warp_residual_energy'))
+    freq_group['warp_residual'] = min(1.0, x23 / 2.0)  # Adjusted - can be quite large
+    
+    # X24: phase_slope_diff (NEW)
+    x24 = abs(_get_feature_value(features, 'X24', 'phase_slope_diff'))
+    freq_group['phase_slope'] = min(1.0, x24 / 0.5)  # Adjusted
+    
+    # X25: interp_mse_after_shift (NEW)
+    x25 = abs(_get_feature_value(features, 'X25', 'interp_mse_after_shift'))
+    freq_group['interp_mse'] = min(1.0, x25 / 5.0)  # Adjusted
+    
+    components.update(freq_group)
+    
+    # ==== REF GROUP: Reference Level Evidence ====
+    ref_group = {}
+    
+    # X3: hf_attenuation_slope - actual values are around 3e-4
     x3 = abs(_get_feature_value(features, 'X3', 'hf_attenuation_slope', 'res_slope'))
-    components['compress_slope'] = min(1.0, x3 / 1e-9) if x3 > 1e-12 else 0.0
+    ref_group['compress_slope'] = min(1.0, x3 / 0.001)  # Adjusted to actual scale
     
-    # scale_consistency (X5)
+    # X5: scale_consistency - actual values around 0.29
     x5 = abs(_get_feature_value(features, 'X5', 'scale_consistency'))
-    components['scale_consist'] = min(1.0, x5 / 0.25)
+    ref_group['scale_consist'] = min(1.0, x5 / 0.5)  # Adjusted
     
-    # ==== Combine components with clipping to positive only ====
-    # Only penalize anomalous direction (positive z-scores)
-    component_values = [max(0.0, v) for v in components.values()]
+    # X26: high_quantile_compress_score (NEW) - actual values around 5e-4
+    x26 = abs(_get_feature_value(features, 'X26', 'high_quantile_compress_score'))
+    ref_group['high_compress'] = min(1.0, x26 / 0.01)  # Adjusted
     
-    # Weighted combination (emphasize envelope + internal shape)
-    weights = {
-        'env_rate': 0.12,
-        'env_max': 0.10,
-        'env_energy': 0.10,
-        'jump_energy': 0.15,
-        'flatness': 0.10,
-        'kurtosis': 0.08,
-        'freq_shift': 0.10,
-        'warp_scale': 0.08,
-        'warp_bias': 0.05,
-        'compress_slope': 0.06,
-        'scale_consist': 0.06,
-    }
+    # X27: piecewise_gain_change (NEW) - actual values around 4e-4
+    x27 = abs(_get_feature_value(features, 'X27', 'piecewise_gain_change'))
+    ref_group['piecewise_gain'] = min(1.0, x27 / 0.01)  # Adjusted
     
-    weighted_sum = sum(components.get(k, 0) * w for k, w in weights.items())
-    total_weight = sum(weights.values())
-    anchor_score = weighted_sum / (total_weight + 1e-12)
+    # X28: residual_upper_tail_asym (NEW) - actual values around -0.03 to 0.07
+    x28 = abs(_get_feature_value(features, 'X28', 'residual_upper_tail_asym'))
+    ref_group['tail_asym'] = min(1.0, x28 / 0.3)
+    
+    components.update(ref_group)
+    
+    # ==== GROUPED MAX FUSION ====
+    # Instead of weighted average, use max within each group
+    score_amp = max(amp_group.values()) if amp_group else 0.0
+    score_freq = max(freq_group.values()) if freq_group else 0.0
+    score_ref = max(ref_group.values()) if ref_group else 0.0
+    
+    # Final anchor_score = max of group scores (or weighted combination)
+    # Using max to prevent dilution
+    anchor_score = max(score_amp, score_freq, score_ref)
+    
+    # Also compute weighted version for calibration flexibility
+    w_amp, w_freq, w_ref = 0.4, 0.3, 0.3  # Weights can be calibrated
+    anchor_score_weighted = w_amp * score_amp + w_freq * score_freq + w_ref * score_ref
     
     return {
         'anchor_score': anchor_score,
+        'anchor_score_weighted': anchor_score_weighted,
+        'score_amp': score_amp,
+        'score_freq': score_freq,
+        'score_ref': score_ref,
         'components': components,
+        'amp_group': amp_group,
+        'freq_group': freq_group,
+        'ref_group': ref_group,
         'T_low': config.T_low,
         'T_high': config.T_high,
     }

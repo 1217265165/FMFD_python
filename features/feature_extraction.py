@@ -296,25 +296,38 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     x14 = float(np.mean(np.abs(low_band))) if low_band.size > 0 else 0.0  # 低频段残差均值
     x15 = float(np.std(high_band)) if high_band.size > 0 else 0.0  # 高频段残差方差
 
-    # X16-X18: 频率对齐/形变特征
+    # X16-X18: 频率对齐/形变特征 (Enhanced for better Freq detection)
+    # NEW features for better frequency shift detection:
+    # - X16: corr_peak_lag_bins (cross-correlation peak lag in bins)
+    # - X17: warp_scale (frequency axis scale factor)
+    # - X18: warp_bias (frequency axis shift factor)
+    # - X23: warp_residual_energy (residual after optimal warp alignment)
+    # - X24: phase_slope_diff (frequency derivative correlation)
+    # - X25: interp_mse_after_shift (MSE after optimal shift resampling)
+    
+    x16, x17, x18, x23, x24, x25 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    
     if baseline_curve is not None:
         baseline = np.asarray(baseline_curve, dtype=float)
         if baseline.shape == arr.shape and len(arr) > 10:
-            # X16: 互相关滞后（频移代理）
+            # X16: Enhanced cross-correlation lag (in actual bins, not normalized)
             try:
-                corr = np.correlate(arr - np.mean(arr), baseline - np.mean(baseline), mode='same')
-                lag = np.argmax(corr) - len(arr) // 2
-                x16 = float(lag / len(arr))  # 归一化滞后
+                # Full cross-correlation for better peak detection
+                arr_centered = arr - np.mean(arr)
+                baseline_centered = baseline - np.mean(baseline)
+                corr = np.correlate(arr_centered, baseline_centered, mode='full')
+                lag_idx = np.argmax(corr) - (len(arr) - 1)  # Actual lag in bins
+                x16 = float(lag_idx)  # Keep as bins, not normalized
             except Exception:
                 x16 = 0.0
             
-            # X17-X18: 频轴缩放/平移因子（简化版网格搜索）
+            # X17-X18: Enhanced frequency warp detection with finer grid
             best_scale, best_shift = 1.0, 0.0
             min_error = np.inf
-            for scale in [0.95, 0.98, 1.0, 1.02, 1.05]:
-                for shift in [-0.05, -0.02, 0.0, 0.02, 0.05]:
+            # Finer grid for better warp detection
+            for scale in [0.990, 0.995, 0.998, 1.0, 1.002, 1.005, 1.010]:
+                for shift in [-0.02, -0.01, -0.005, 0.0, 0.005, 0.01, 0.02]:
                     try:
-                        # 简单线性变换
                         x_new = x_axis * scale + shift
                         x_new = np.clip(x_new, 0, 1)
                         baseline_interp = np.interp(x_new, x_axis, baseline)
@@ -325,12 +338,50 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                     except Exception:
                         continue
             
-            x17 = float(best_scale - 1.0)  # 缩放偏差
-            x18 = float(best_shift)  # 平移偏差
-        else:
-            x16, x17, x18 = 0.0, 0.0, 0.0
-    else:
-        x16, x17, x18 = 0.0, 0.0, 0.0
+            x17 = float(best_scale - 1.0)  # Warp scale deviation
+            x18 = float(best_shift)  # Warp bias/shift
+            
+            # X23: Warp residual energy (after optimal alignment)
+            try:
+                x_optimal = x_axis * best_scale + best_shift
+                x_optimal = np.clip(x_optimal, 0, 1)
+                baseline_aligned = np.interp(x_optimal, x_axis, baseline)
+                warp_residual = arr - baseline_aligned
+                x23 = float(np.sum(warp_residual ** 2) / len(arr))  # MSE
+            except Exception:
+                x23 = 0.0
+            
+            # X24: Phase/derivative slope difference
+            try:
+                arr_diff = np.diff(arr)
+                baseline_diff = np.diff(baseline)
+                if len(arr_diff) > 1:
+                    # Correlation between derivatives
+                    corr_coef = np.corrcoef(arr_diff, baseline_diff)[0, 1]
+                    x24 = float(1.0 - abs(corr_coef)) if not np.isnan(corr_coef) else 0.0
+                else:
+                    x24 = 0.0
+            except Exception:
+                x24 = 0.0
+            
+            # X25: MSE after optimal lag shift (without scale)
+            try:
+                optimal_lag = int(round(x16))
+                if optimal_lag != 0:
+                    if optimal_lag > 0:
+                        arr_shifted = arr[optimal_lag:]
+                        baseline_shifted = baseline[:-optimal_lag]
+                    else:
+                        arr_shifted = arr[:optimal_lag]
+                        baseline_shifted = baseline[-optimal_lag:]
+                    if len(arr_shifted) > 10:
+                        x25 = float(np.mean((arr_shifted - baseline_shifted) ** 2))
+                    else:
+                        x25 = 0.0
+                else:
+                    x25 = float(np.mean((arr - baseline) ** 2))
+            except Exception:
+                x25 = 0.0
 
     # X19-X22: 幅度链路细粒度特征
     # X19: 低频段斜率（区分前置链路 vs IF链路）
@@ -364,6 +415,82 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             x22 = 0.0
     else:
         x22 = 0.0
+    
+    # NEW Reference Level Features (X26-X28)
+    # X26: high_quantile_compress_score (upper tail slope change)
+    # X27: piecewise_gain_change (segmented linear slope difference)
+    # X28: residual_upper_tail_asym (upper tail asymmetry)
+    
+    x26, x27, x28 = 0.0, 0.0, 0.0
+    
+    if baseline_curve is not None:
+        baseline = np.asarray(baseline_curve, dtype=float)
+        if baseline.shape == arr.shape:
+            # X26: High quantile compression score
+            try:
+                p80_arr = np.percentile(arr, 80)
+                p80_base = np.percentile(baseline, 80)
+                high_mask_arr = arr >= p80_arr
+                high_mask_base = baseline >= p80_base
+                
+                if np.sum(high_mask_arr) > 5 and np.sum(high_mask_base) > 5:
+                    # Compare slopes in high amplitude region
+                    high_arr = arr[high_mask_arr]
+                    high_base = baseline[high_mask_base]
+                    
+                    # Normalize to compare shapes
+                    high_arr_norm = (high_arr - np.min(high_arr)) / (np.ptp(high_arr) + 1e-12)
+                    high_base_norm = (high_base - np.min(high_base)) / (np.ptp(high_base) + 1e-12)
+                    
+                    # Slope comparison in normalized space
+                    if len(high_arr_norm) >= 2 and len(high_base_norm) >= 2:
+                        slope_arr = np.polyfit(np.arange(len(high_arr_norm)), high_arr_norm, 1)[0]
+                        slope_base = np.polyfit(np.arange(len(high_base_norm)), high_base_norm, 1)[0]
+                        x26 = float(abs(slope_arr - slope_base))
+            except Exception:
+                x26 = 0.0
+            
+            # X27: Piecewise gain change (3-segment analysis)
+            try:
+                n_seg = 3
+                seg_size = len(arr) // n_seg
+                slopes_arr = []
+                slopes_base = []
+                
+                for i in range(n_seg):
+                    start = i * seg_size
+                    end = (i + 1) * seg_size if i < n_seg - 1 else len(arr)
+                    seg_arr = arr[start:end]
+                    seg_base = baseline[start:end]
+                    
+                    if len(seg_arr) >= 2:
+                        slope_arr = np.polyfit(np.arange(len(seg_arr)), seg_arr, 1)[0]
+                        slope_base = np.polyfit(np.arange(len(seg_base)), seg_base, 1)[0]
+                        slopes_arr.append(slope_arr)
+                        slopes_base.append(slope_base)
+                
+                if slopes_arr and slopes_base:
+                    # Compare slope differences between segments
+                    slope_diffs_arr = np.diff(slopes_arr) if len(slopes_arr) > 1 else [0]
+                    slope_diffs_base = np.diff(slopes_base) if len(slopes_base) > 1 else [0]
+                    x27 = float(np.sum(np.abs(np.array(slope_diffs_arr) - np.array(slope_diffs_base))))
+            except Exception:
+                x27 = 0.0
+            
+            # X28: Upper tail asymmetry
+            try:
+                residual_with_base = arr - baseline
+                p90 = np.percentile(residual_with_base, 90)
+                p10 = np.percentile(residual_with_base, 10)
+                median_res = np.median(residual_with_base)
+                
+                upper_dev = p90 - median_res
+                lower_dev = median_res - p10
+                
+                # Asymmetry: if compression, upper_dev < lower_dev
+                x28 = float((upper_dev - lower_dev) / (upper_dev + lower_dev + 1e-12))
+            except Exception:
+                x28 = 0.0
 
     return {
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
@@ -371,6 +498,8 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X11": x11, "X12": x12, "X13": x13, "X14": x14, "X15": x15,
         "X16": x16, "X17": x17, "X18": x18,
         "X19": x19, "X20": x20, "X21": x21, "X22": x22,
+        "X23": x23, "X24": x24, "X25": x25,  # New freq features
+        "X26": x26, "X27": x27, "X28": x28,  # New ref features
     }
 
 

@@ -40,28 +40,80 @@ def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
         comp = rng.normal(0.02, 0.01)
     return gain * amp + bias + comp * (amp ** 2)
 
-def inject_freq_miscal(frequency, amp, delta_f=None, rng=None):
+def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=False):
     """
     频率失准：频率轴整体平移后重采样；delta_f 未给出时按带宽 ppm 生成。
+    
+    Parameters
+    ----------
+    frequency : array
+        Frequency axis
+    amp : array
+        Amplitude data
+    delta_f : float, optional
+        Frequency shift in Hz. If None, generated from ppm.
+    rng : Generator, optional
+        Random number generator
+    return_params : bool
+        If True, return (curve, params_dict) instead of just curve
+        
+    Returns
+    -------
+    array or (array, dict)
+        Modified amplitude, optionally with injection parameters
     """
     rng = rng or np.random.default_rng()
     bw = frequency[-1] - frequency[0]
+    step_hz = frequency[1] - frequency[0] if len(frequency) > 1 else 1e7
+    
     if delta_f is None:
-        ppm = rng.uniform(-150e-6, 150e-6)
+        # Increased ppm range to produce >= 1 bin shift (10MHz)
+        # With 820 points and 8.19GHz bandwidth, 1 bin = 10MHz
+        # ppm = delta_f / bw, so for 1 bin: ppm = 10MHz / 8.19GHz ≈ 0.0012 (1200ppm)
+        # Previous: ±150ppm was too small to cause meaningful shift
+        # New: ±500-3000ppm to ensure >= 1 bin shift for detectability
+        ppm = rng.uniform(-3000e-6, 3000e-6)
+        # Ensure minimum absolute ppm for detectability
+        if abs(ppm) < 500e-6:
+            ppm = 500e-6 * np.sign(ppm) if ppm != 0 else rng.choice([-1, 1]) * 500e-6
         delta_f = ppm * bw
+    else:
+        ppm = delta_f / bw if bw > 0 else 0
+    
     f_shift = frequency + delta_f
     interp = interp1d(f_shift, amp, kind="linear", bounds_error=False, fill_value="extrapolate")
-    return interp(frequency)
+    result = interp(frequency)
+    
+    # Calculate effective shift in bins
+    shift_bins = delta_f / step_hz if step_hz > 0 else 0
+    
+    params = {
+        'delta_f_hz': float(delta_f),
+        'ppm': float(ppm * 1e6),  # Convert to actual ppm
+        'shift_bins': float(shift_bins),
+        'bandwidth_hz': float(bw),
+    }
+    
+    if return_params:
+        return result, params
+    return result
 
 def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compression_coef=None,
-                           compression_start_percent=0.8, rng=None, single_band_mode=None):
+                           compression_start_percent=0.8, rng=None, single_band_mode=None,
+                           return_params=False):
     """
     参考电平失准：在切换点施加错误步进；高幅度区压缩。
     step_biases/compression_coef 未给出时按 σ 自适应随机生成。
     
     In single-band mode (single_band_mode=True or SINGLE_BAND_MODE global):
     - Switch-point step injection is DISABLED
-    - Only global offset and high-amplitude compression are applied
+    - Type-A: Global offset (reference level shift)
+    - Type-B: High-amplitude compression/saturation
+    
+    Parameters
+    ----------
+    return_params : bool
+        If True, return (curve, params_dict) instead of just curve
     """
     rng = rng or np.random.default_rng()
     out = amp.copy()
@@ -70,6 +122,14 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     # Determine if single-band mode is active
     if single_band_mode is None:
         single_band_mode = SINGLE_BAND_MODE
+    
+    params = {
+        'single_band_mode': single_band_mode,
+        'ref_type': 'none',
+        'global_offset_db': 0.0,
+        'compression_coef': 0.0,
+        'compression_threshold_db': 0.0,
+    }
     
     # Step injection at switch points (DISABLED in single-band mode)
     if not single_band_mode and len(band_ranges) > 1:
@@ -80,17 +140,36 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
             end_f = band_ranges[i][1]
             m_end = np.argmin(np.abs(frequency - end_f))
             out[m_end:] += step_biases[i]
+        params['ref_type'] = 'step'
+        params['step_biases'] = [float(b) for b in step_biases]
     else:
-        # Single-band mode: apply global offset instead of step injection
-        global_offset = rng.normal(0.3 * sig_med, 0.1 * max(0.1, sig_med))
+        # Single-band mode: Type-A global offset with stronger effect
+        # Increased range for detectability: ±0.5 to ±2.0 dB offset
+        global_offset = rng.normal(0, 0.8 * max(0.5, sig_med))
+        # Ensure minimum offset for detectability
+        if abs(global_offset) < 0.3:
+            global_offset = 0.3 * np.sign(global_offset) if global_offset != 0 else rng.choice([-1, 1]) * 0.3
         out = out + global_offset
+        params['ref_type'] = 'global_offset'
+        params['global_offset_db'] = float(global_offset)
     
-    # High-amplitude compression (always applied)
+    # Type-B: High-amplitude compression (always applied, with stronger effect)
     if compression_coef is None:
-        compression_coef = abs(rng.normal(0.15, 0.05))
+        # Increased compression for detectability
+        compression_coef = abs(rng.normal(0.25, 0.10))  # Increased from 0.15±0.05
+        # Ensure minimum compression
+        compression_coef = max(0.15, compression_coef)
+    
     thr = np.percentile(out, 100 * compression_start_percent)
     mask = out >= thr
     out[mask] = out[mask] - compression_coef * (out[mask] - thr)
+    
+    params['compression_coef'] = float(compression_coef)
+    params['compression_threshold_db'] = float(thr)
+    params['compression_start_percent'] = float(compression_start_percent)
+    
+    if return_params:
+        return out, params
     return out
 
 # -------------------------

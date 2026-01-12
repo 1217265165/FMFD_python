@@ -246,9 +246,10 @@ def evaluate_with_params_v2(
     
     accuracy = np.mean(y_true_np == y_pred_np)
     
-    # Macro F1
+    # Macro F1 and per-class recall (for balanced accuracy)
     n_classes = 4
     f1_scores = []
+    recalls = []
     for c in range(n_classes):
         tp = np.sum((y_true_np == c) & (y_pred_np == c))
         fp = np.sum((y_true_np != c) & (y_pred_np == c))
@@ -258,10 +259,12 @@ def evaluate_with_params_v2(
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
         f1_scores.append(f1)
+        recalls.append(recall)
     
     macro_f1 = np.mean(f1_scores)
+    balanced_accuracy = np.mean(recalls)  # Balanced accuracy = mean recall across classes
     
-    return accuracy, macro_f1, y_true, y_pred
+    return accuracy, macro_f1, balanced_accuracy, y_true, y_pred
 
 
 def grid_search_calibration_v2(
@@ -271,15 +274,18 @@ def grid_search_calibration_v2(
 ) -> Tuple[Dict, float, float]:
     """Perform grid search to find optimal v2 calibration parameters.
     
+    v3: Changed optimization objective to BALANCED ACCURACY (mean recall)
+    as primary metric, macro-F1 as secondary.
+    
     Returns:
-        (best_params, best_accuracy, best_f1)
+        (best_params, best_balanced_accuracy, best_f1)
     """
     # First compute anchor scores to determine T_low/T_high ranges
     from BRB.normal_anchor import compute_anchor_score, NormalAnchorConfig
     
     config = NormalAnchorConfig()
     normal_scores = []
-    fault_scores = []
+    fault_scores = {'amp': [], 'freq': [], 'ref': []}
     
     common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
     for sample_id in common_ids:
@@ -287,30 +293,39 @@ def grid_search_calibration_v2(
         label = extract_system_label(labels_dict[sample_id])
         result = compute_anchor_score(features, config)
         score = result['anchor_score']
+        score_amp = result.get('score_amp', 0)
+        score_freq = result.get('score_freq', 0)
+        score_ref = result.get('score_ref', 0)
         
         if label == 0:
             normal_scores.append(score)
-        else:
-            fault_scores.append(score)
+        elif label == 1:
+            fault_scores['amp'].append(score)
+        elif label == 2:
+            fault_scores['freq'].append(score)
+        elif label == 3:
+            fault_scores['ref'].append(score)
     
     normal_scores = np.array(normal_scores) if normal_scores else np.array([0.1])
-    fault_scores = np.array(fault_scores) if fault_scores else np.array([0.5])
+    all_fault_scores = []
+    for k, v in fault_scores.items():
+        all_fault_scores.extend(v)
+    all_fault_scores = np.array(all_fault_scores) if all_fault_scores else np.array([0.5])
     
-    # Use wider, fixed ranges since data-driven ranges are too narrow
-    # Key insight: T_low should be LOW to avoid giving normal prior to most samples
-    # T_high should capture where faults clearly separate
-    T_low_range = [0.05, 0.08, 0.10, 0.12, 0.15]
-    T_high_range = [0.20, 0.25, 0.30, 0.35, 0.40, 0.50]
+    # Use wider ranges based on grouped-max scores
+    T_low_range = [0.10, 0.15, 0.20, 0.25, 0.30]
+    T_high_range = [0.35, 0.40, 0.45, 0.50, 0.60, 0.70]
     
-    # Grid ranges - k_normal_prior should be smaller to not dominate
-    alpha_range = [1.5, 2.0, 2.5, 3.0, 4.0]
-    k_normal_prior_range = [0.5, 1.0, 1.5, 2.0, 3.0]  # Reduced from [2,4,6,8]
-    beta_freq_range = [0.0, 0.5, 1.0, 1.5, 2.0]  # Increased upper range
-    beta_ref_range = [0.0, 0.5, 1.0, 1.5, 2.0]   # Increased upper range
+    # Grid ranges
+    alpha_range = [1.0, 1.5, 2.0, 2.5, 3.0]
+    k_normal_prior_range = [0.0, 0.5, 1.0, 1.5, 2.0]  # Can be 0 to disable normal boost
+    beta_freq_range = [0.0, 1.0, 2.0, 3.0, 4.0]  # Increased to help freq detection
+    beta_ref_range = [0.0, 1.0, 2.0, 3.0, 4.0]   # Increased to help ref detection
     
-    best_accuracy = 0.0
+    best_balanced_acc = 0.0
     best_f1 = 0.0
     best_params = None
+    leaderboard = []  # Store top configurations
     
     total_configs = (
         len(alpha_range) * len(T_low_range) * len(T_high_range) *
@@ -318,11 +333,14 @@ def grid_search_calibration_v2(
     )
     
     if verbose:
-        print(f"Running v2 grid search with {total_configs} configurations...")
+        print(f"Running v3 grid search (balanced_accuracy primary) with {total_configs} configurations...")
         print(f"  T_low range: {T_low_range}")
         print(f"  T_high range: {T_high_range}")
         print(f"  Normal scores: mean={np.mean(normal_scores):.4f}, p95={np.percentile(normal_scores, 95):.4f}")
-        print(f"  Fault scores: mean={np.mean(fault_scores):.4f}, p25={np.percentile(fault_scores, 25):.4f}")
+        print(f"  Fault scores: mean={np.mean(all_fault_scores):.4f}, p25={np.percentile(all_fault_scores, 25):.4f}")
+        for k, v in fault_scores.items():
+            if v:
+                print(f"    {k}: mean={np.mean(v):.4f}, p90={np.percentile(v, 90):.4f}")
     
     config_count = 0
     
@@ -338,20 +356,34 @@ def grid_search_calibration_v2(
                             config_count += 1
                             
                             try:
-                                accuracy, macro_f1, _, _ = evaluate_with_params_v2(
+                                accuracy, macro_f1, balanced_acc, _, _ = evaluate_with_params_v2(
                                     features_dict, labels_dict,
                                     alpha, T_low, T_high, k_normal_prior,
                                     beta_freq, beta_ref
                                 )
                             except Exception as e:
-                                if verbose:
+                                if verbose and config_count < 10:
                                     print(f"Error with config {config_count}: {e}")
                                 continue
                             
-                            # Primary: accuracy, Secondary: macro_f1
-                            if (accuracy > best_accuracy or 
-                                (accuracy == best_accuracy and macro_f1 > best_f1)):
-                                best_accuracy = accuracy
+                            # Store in leaderboard
+                            config_result = {
+                                'alpha': alpha,
+                                'T_low': T_low,
+                                'T_high': T_high,
+                                'k_normal_prior': k_normal_prior,
+                                'beta_freq': beta_freq,
+                                'beta_ref': beta_ref,
+                                'balanced_accuracy': balanced_acc,
+                                'macro_f1': macro_f1,
+                                'accuracy': accuracy,
+                            }
+                            leaderboard.append(config_result)
+                            
+                            # v3: Primary = balanced_accuracy, Secondary = macro_f1
+                            if (balanced_acc > best_balanced_acc or 
+                                (balanced_acc == best_balanced_acc and macro_f1 > best_f1)):
+                                best_balanced_acc = balanced_acc
                                 best_f1 = macro_f1
                                 best_params = {
                                     'alpha': alpha,
@@ -367,17 +399,25 @@ def grid_search_calibration_v2(
                                     'T_prob': 0.35,
                                 }
                             
-                            if verbose and config_count % 200 == 0:
+                            if verbose and config_count % 500 == 0:
                                 print(f"  Progress: {config_count}/{total_configs}, "
-                                      f"Best acc={best_accuracy:.4f}, F1={best_f1:.4f}")
+                                      f"Best bal_acc={best_balanced_acc:.4f}, F1={best_f1:.4f}")
+    
+    # Save leaderboard (top 20)
+    leaderboard.sort(key=lambda x: (x['balanced_accuracy'], x['macro_f1']), reverse=True)
     
     if verbose:
         print(f"\nGrid search complete!")
-        print(f"Best accuracy: {best_accuracy:.4f}")
+        print(f"Best balanced accuracy: {best_balanced_acc:.4f}")
         print(f"Best macro-F1: {best_f1:.4f}")
         print(f"Best params: {best_params}")
+        print("\n=== Top 5 Configurations ===")
+        for i, cfg in enumerate(leaderboard[:5]):
+            print(f"  #{i+1}: bal_acc={cfg['balanced_accuracy']:.4f}, F1={cfg['macro_f1']:.4f}, "
+                  f"alpha={cfg['alpha']}, T_low={cfg['T_low']}, T_high={cfg['T_high']}, "
+                  f"beta_freq={cfg['beta_freq']}, beta_ref={cfg['beta_ref']}")
     
-    return best_params, best_accuracy, best_f1
+    return best_params, best_balanced_acc, best_f1, leaderboard[:20]
 
 
 def save_debug_output(
@@ -505,12 +545,15 @@ def main():
         print("Please run simulation first: python pipelines/simulate/run_simulation_brb.py")
         return 1
     
-    # Step 1: Compute and save anchor score statistics by class
+    # Step 1: Compute and save anchor score statistics by class (with grouped scores)
     anchor_results = compute_anchor_scores_for_samples(features_dict, labels_dict)
     save_anchor_score_by_class(anchor_results, data_dir / 'anchor_score_by_class.csv')
     
-    # Step 2: Run v2 grid search
-    best_params, best_acc, best_f1 = grid_search_calibration_v2(
+    # Also save detailed anchor components by class
+    save_anchor_components_by_class(features_dict, labels_dict, data_dir / 'anchor_components_by_class.csv')
+    
+    # Step 2: Run v3 grid search (balanced_accuracy primary)
+    best_params, best_balanced_acc, best_f1, leaderboard = grid_search_calibration_v2(
         features_dict, labels_dict, verbose=not args.quiet
     )
     
@@ -519,10 +562,10 @@ def main():
         return 1
     
     # Add metadata
-    best_params['calibration_accuracy'] = best_acc
+    best_params['calibration_balanced_accuracy'] = best_balanced_acc
     best_params['calibration_macro_f1'] = best_f1
     best_params['single_band_mode'] = True
-    best_params['version'] = 'v2_soft_gating'
+    best_params['version'] = 'v3_grouped_max'
     
     # Save calibration
     calibration_path = output_dir / "calibration.json"
@@ -532,10 +575,74 @@ def main():
     if data_dir != output_dir:
         save_calibration(best_params, data_dir / "calibration.json")
     
+    # Save calibration leaderboard
+    if leaderboard:
+        leaderboard_path = data_dir / 'calibration_leaderboard.csv'
+        with open(leaderboard_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=leaderboard[0].keys())
+            writer.writeheader()
+            writer.writerows(leaderboard)
+        print(f"Saved calibration_leaderboard.csv to: {leaderboard_path}")
+    
     # Step 3: Save debug output with best parameters
     save_debug_output(features_dict, labels_dict, best_params, data_dir)
     
     return 0
+
+
+def save_anchor_components_by_class(features_dict: Dict, labels_dict: Dict, output_path: Path):
+    """Save detailed anchor component statistics by class for debugging."""
+    from BRB.normal_anchor import compute_anchor_score, NormalAnchorConfig
+    
+    config = NormalAnchorConfig()
+    by_class = {0: [], 1: [], 2: [], 3: []}
+    
+    common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
+    for sample_id in common_ids:
+        features = features_dict[sample_id]
+        label = extract_system_label(labels_dict[sample_id])
+        result = compute_anchor_score(features, config)
+        by_class[label].append(result)
+    
+    class_names = ['Normal', 'Amp', 'Freq', 'Ref']
+    rows = []
+    
+    for cls, results in by_class.items():
+        if not results:
+            continue
+        
+        # Aggregate group scores
+        score_amps = [r.get('score_amp', 0) for r in results]
+        score_freqs = [r.get('score_freq', 0) for r in results]
+        score_refs = [r.get('score_ref', 0) for r in results]
+        anchor_scores = [r.get('anchor_score', 0) for r in results]
+        
+        row = {
+            'class': class_names[cls],
+            'n': len(results),
+            'anchor_mean': np.mean(anchor_scores),
+            'anchor_p90': np.percentile(anchor_scores, 90),
+            'score_amp_mean': np.mean(score_amps),
+            'score_amp_p90': np.percentile(score_amps, 90),
+            'score_freq_mean': np.mean(score_freqs),
+            'score_freq_p90': np.percentile(score_freqs, 90),
+            'score_ref_mean': np.mean(score_refs),
+            'score_ref_p90': np.percentile(score_refs, 90),
+        }
+        rows.append(row)
+    
+    if rows:
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"Saved anchor_components_by_class.csv to: {output_path}")
+        
+        # Print summary
+        print("\n=== Anchor Group Scores by Class ===")
+        for row in rows:
+            print(f"  {row['class']:8s}: anchor={row['anchor_mean']:.4f}, "
+                  f"amp={row['score_amp_mean']:.4f}, freq={row['score_freq_mean']:.4f}, ref={row['score_ref_mean']:.4f}")
 
 
 if __name__ == "__main__":

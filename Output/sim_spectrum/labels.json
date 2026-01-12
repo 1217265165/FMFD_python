@@ -2,2001 +2,4021 @@
   "sim_00000": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00001": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00002": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00003": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00004": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00005": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00006": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00007": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00008": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00009": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00010": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00011": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00012": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00013": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00014": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00015": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00016": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00017": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00018": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00019": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00020": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00021": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00022": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00023": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00024": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00025": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00026": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00027": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00028": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00029": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00030": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00031": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00032": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00033": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00034": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00035": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00036": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00037": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00038": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00039": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00040": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00041": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00042": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00043": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00044": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00045": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00046": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00047": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00048": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00049": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00050": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00051": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00052": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00053": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00054": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00055": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00056": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00057": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00058": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00059": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00060": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00061": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00062": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00063": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00064": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00065": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00066": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00067": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00068": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00069": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00070": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00071": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00072": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00073": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00074": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "高频段YTF滤波器"
+    "module": "高频段YTF滤波器",
+    "fault_params": {
+      "type": "ytf_variation"
+    }
   },
   "sim_00075": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00076": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00077": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00078": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00079": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00080": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00081": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00082": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00083": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00084": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00085": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00086": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "数字检波器"
+    "module": "数字检波器",
+    "fault_params": {
+      "type": "vbw_smoothing"
+    }
   },
   "sim_00087": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00088": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00089": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00090": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00091": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段第一混频器"
+    "module": "低频段第一混频器",
+    "fault_params": {
+      "type": "mixer_ripple"
+    }
   },
   "sim_00092": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00093": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00094": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00095": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "校准源"
+    "module": "校准源",
+    "fault_params": {
+      "type": "amp_miscal"
+    }
   },
   "sim_00096": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "电源模块"
+    "module": "电源模块",
+    "fault_params": {
+      "type": "power_noise"
+    }
   },
   "sim_00097": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00098": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "低频段前置低通滤波器"
+    "module": "低频段前置低通滤波器",
+    "fault_params": {
+      "type": "lpf_shift"
+    }
   },
   "sim_00099": {
     "type": "fault",
     "system_fault_class": "amp_error",
-    "module": "ADC"
+    "module": "ADC",
+    "fault_params": {
+      "type": "adc_bias"
+    }
   },
   "sim_00100": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 13337029.70132879,
+      "ppm": 1628.4529549852002,
+      "shift_bins": 1.333702970132879,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00101": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00102": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00103": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00104": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00105": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 10961787.761513805,
+      "ppm": 1338.4356241164596,
+      "shift_bins": 1.0961787761513806,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00106": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00107": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -21055040.339307528,
+      "ppm": -2570.8229962524456,
+      "shift_bins": -2.1055040339307527,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00108": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -15097089.36210811,
+      "ppm": -1843.3564544698545,
+      "shift_bins": -1.509708936210811,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00109": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00110": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00111": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -5077107.703256087,
+      "ppm": -619.9154704830388,
+      "shift_bins": -0.5077107703256087,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00112": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 17903083.13143995,
+      "ppm": 2185.968636317454,
+      "shift_bins": 1.790308313143995,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00113": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00114": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 22406201.57166886,
+      "ppm": 2735.799947700715,
+      "shift_bins": 2.240620157166886,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00115": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -4095000.0,
+      "ppm": -500.0,
+      "shift_bins": -0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00116": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -4793969.856917179,
+      "ppm": -585.3443048738924,
+      "shift_bins": -0.4793969856917179,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00117": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00118": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 6690888.103279427,
+      "ppm": 816.9582543686724,
+      "shift_bins": 0.6690888103279427,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00119": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -9081815.124512559,
+      "ppm": -1108.890735593719,
+      "shift_bins": -0.9081815124512559,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00120": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00121": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -14819740.254985634,
+      "ppm": -1809.4920946258405,
+      "shift_bins": -1.4819740254985634,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00122": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00123": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -9262959.257979363,
+      "ppm": -1131.0084564077367,
+      "shift_bins": -0.9262959257979363,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00124": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00125": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00126": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -13207759.003709296,
+      "ppm": -1612.668987021892,
+      "shift_bins": -1.3207759003709296,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00127": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00128": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00129": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 4095000.0,
+      "ppm": 500.0,
+      "shift_bins": 0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00130": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00131": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00132": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00133": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -20956962.9148253,
+      "ppm": -2558.8477307479,
+      "shift_bins": -2.0956962914825303,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00134": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00135": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -4095000.0,
+      "ppm": -500.0,
+      "shift_bins": -0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00136": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00137": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -19725688.028852213,
+      "ppm": -2408.5089168317722,
+      "shift_bins": -1.9725688028852213,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00138": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -19618039.086390983,
+      "ppm": -2395.364967813307,
+      "shift_bins": -1.9618039086390984,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00139": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 4095000.0,
+      "ppm": 500.0,
+      "shift_bins": 0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00140": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 10600708.16242617,
+      "ppm": 1294.3477609799963,
+      "shift_bins": 1.060070816242617,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00141": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00142": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -12498509.808541141,
+      "ppm": -1526.069573692447,
+      "shift_bins": -1.249850980854114,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00143": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00144": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -19293895.652608357,
+      "ppm": -2355.7870149704954,
+      "shift_bins": -1.9293895652608357,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00145": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 15129592.187678361,
+      "ppm": 1847.3250534405813,
+      "shift_bins": 1.5129592187678362,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00146": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00147": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 16274306.867375534,
+      "ppm": 1987.0948556014082,
+      "shift_bins": 1.6274306867375534,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00148": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 11183620.042244151,
+      "ppm": 1365.5213726793836,
+      "shift_bins": 1.1183620042244151,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00149": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00150": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -22037131.07057795,
+      "ppm": -2690.736394453962,
+      "shift_bins": -2.203713107057795,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00151": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -13158549.465535562,
+      "ppm": -1606.6604964023886,
+      "shift_bins": -1.3158549465535563,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00152": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 8317354.158486329,
+      "ppm": 1015.5499583011391,
+      "shift_bins": 0.8317354158486329,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00153": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -12902308.091922484,
+      "ppm": -1575.373393397129,
+      "shift_bins": -1.2902308091922485,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00154": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -14134863.372433208,
+      "ppm": -1725.8685436426383,
+      "shift_bins": -1.4134863372433208,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00155": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00156": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 24275816.231768258,
+      "ppm": 2964.08012597903,
+      "shift_bins": 2.4275816231768257,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00157": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00158": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -22065542.22713251,
+      "ppm": -2694.2054001382794,
+      "shift_bins": -2.206554222713251,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00159": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00160": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -15328827.877033278,
+      "ppm": -1871.6517554375187,
+      "shift_bins": -1.5328827877033278,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00161": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00162": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00163": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -14406302.465854779,
+      "ppm": -1759.0112900921586,
+      "shift_bins": -1.440630246585478,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00164": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00165": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 8592894.053653518,
+      "ppm": 1049.1934131445078,
+      "shift_bins": 0.8592894053653518,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00166": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 10785622.238481468,
+      "ppm": 1316.9257922443794,
+      "shift_bins": 1.0785622238481467,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00167": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 21326884.13234371,
+      "ppm": 2604.015156574323,
+      "shift_bins": 2.132688413234371,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00168": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00169": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -4095000.0,
+      "ppm": -500.0,
+      "shift_bins": -0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00170": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 4095000.0,
+      "ppm": 500.0,
+      "shift_bins": 0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00171": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00172": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -21981982.58888145,
+      "ppm": -2684.002758105183,
+      "shift_bins": -2.1981982588881452,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00173": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00174": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00175": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 4095000.0,
+      "ppm": 500.0,
+      "shift_bins": 0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00176": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00177": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00178": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": 7279138.229576558,
+      "ppm": 888.7836666149644,
+      "shift_bins": 0.7279138229576558,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00179": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00180": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -12246541.689449627,
+      "ppm": -1495.304235586035,
+      "shift_bins": -1.2246541689449626,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00181": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 20531437.295516536,
+      "ppm": 2506.8910006735696,
+      "shift_bins": 2.0531437295516537,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00182": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00183": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00184": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00185": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00186": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -8675991.357487528,
+      "ppm": -1059.339604088831,
+      "shift_bins": -0.8675991357487528,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00187": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 19773614.431039955,
+      "ppm": 2414.360736390715,
+      "shift_bins": 1.9773614431039956,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00188": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -23326394.56322932,
+      "ppm": -2848.1556243259242,
+      "shift_bins": -2.332639456322932,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00189": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": -4095000.0,
+      "ppm": -500.0,
+      "shift_bins": -0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00190": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00191": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -5877160.525662087,
+      "ppm": -717.6020177853586,
+      "shift_bins": -0.5877160525662087,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00192": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00193": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 16846524.533258032,
+      "ppm": 2056.962702473508,
+      "shift_bins": 1.6846524533258032,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00194": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 4512919.579272491,
+      "ppm": 551.0280316572027,
+      "shift_bins": 0.4512919579272491,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00195": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -20443361.966652464,
+      "ppm": -2496.136992265258,
+      "shift_bins": -2.0443361966652462,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00196": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟合成与同步网络"
+    "module": "时钟合成与同步网络",
+    "fault_params": {
+      "delta_f_hz": 12408583.191613583,
+      "ppm": 1515.0895227855412,
+      "shift_bins": 1.2408583191613582,
+      "bandwidth_hz": 8190000000.0,
+      "type": "clock_drift"
+    }
   },
   "sim_00197": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00198": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "时钟振荡器"
+    "module": "时钟振荡器",
+    "fault_params": {
+      "delta_f_hz": -4095000.0,
+      "ppm": -500.0,
+      "shift_bins": -0.4095,
+      "bandwidth_hz": 8190000000.0,
+      "type": "freq_miscal"
+    }
   },
   "sim_00199": {
     "type": "fault",
     "system_fault_class": "freq_error",
-    "module": "本振混频组件"
+    "module": "本振混频组件",
+    "fault_params": {
+      "type": "lo_path_error"
+    }
   },
   "sim_00200": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.4286677151960091,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.298667715196009,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00201": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.27799950479840496,
+      "compression_threshold_db": -9.62,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00202": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.26374043349915105,
+      "compression_threshold_db": -10.280000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00203": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.26485966312248654,
+      "compression_threshold_db": -9.569999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00204": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.552816926454295,
+      "compression_coef": 0.3130583005910349,
+      "compression_threshold_db": -10.402816926454294,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00205": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.41251425921523877,
+      "compression_threshold_db": -10.190000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00206": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.5099489591389372,
+      "compression_coef": 0.2752151121982834,
+      "compression_threshold_db": -10.399948959138937,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00207": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.28459548655726485,
+      "compression_threshold_db": -10.280000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00208": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.3267532104351976,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00209": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.7695744754057743,
+      "compression_coef": 0.39565199552181335,
+      "compression_threshold_db": -10.699574475405774,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00210": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.3574908728980671,
+      "compression_threshold_db": -10.15,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00211": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.3074499179327686,
+      "compression_threshold_db": -9.68,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00212": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.5108000695031424,
+      "compression_coef": 0.28181858833253354,
+      "compression_threshold_db": -10.400800069503143,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00213": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3998035833629238,
+      "compression_coef": 0.1892614983237983,
+      "compression_threshold_db": -10.379803583362925,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00214": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.23544424196451078,
+      "compression_threshold_db": -9.639999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00215": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.18411905540248835,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00216": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3494411135190964,
+      "compression_coef": 0.36115596799260397,
+      "compression_threshold_db": -10.229441113519098,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00217": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.4338690362342102,
+      "compression_coef": 0.15895060713026474,
+      "compression_threshold_db": -9.45613096376579,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00218": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.3563829113426728,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00219": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.24641958932476418,
+      "compression_threshold_db": -9.629999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00220": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.2869765685417665,
+      "compression_threshold_db": -10.190000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00221": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3500624314036465,
+      "compression_coef": 0.34289200678274245,
+      "compression_threshold_db": -10.238062431403646,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00222": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.16940134719988656,
+      "compression_threshold_db": -9.649999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00223": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.30316768726428056,
+      "compression_threshold_db": -10.23,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00224": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.33407430683239053,
+      "compression_threshold_db": -9.639999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00225": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -9.62,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00226": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3174803189404913,
+      "compression_coef": 0.18540103344435943,
+      "compression_threshold_db": -10.227480318940492,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00227": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.22918647519011653,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00228": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.25553574034530036,
+      "compression_threshold_db": -10.25,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00229": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.41804750814202374,
+      "compression_coef": 0.37664929988959345,
+      "compression_threshold_db": -10.268047508142024,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00230": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.8299410956110157,
+      "compression_coef": 0.38943071526224726,
+      "compression_threshold_db": -10.809941095611016,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00231": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3254430575749252,
+      "compression_coef": 0.3561767184863856,
+      "compression_threshold_db": -10.205443057574925,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00232": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3145516355020692,
+      "compression_coef": 0.433189056825938,
+      "compression_threshold_db": -9.595448364497932,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00233": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.8057979398571613,
+      "compression_coef": 0.283997844464691,
+      "compression_threshold_db": -10.685797939857162,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00234": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.4162271228513934,
+      "compression_coef": 0.24679573277232647,
+      "compression_threshold_db": -10.316227122851394,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00235": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.6933234409785056,
+      "compression_coef": 0.18574990029669247,
+      "compression_threshold_db": -10.673323440978507,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00236": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.7868326043797356,
+      "compression_coef": 0.3445023400579287,
+      "compression_threshold_db": -9.123167395620264,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00237": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.35157822965852437,
+      "compression_coef": 0.2298859087884357,
+      "compression_threshold_db": -10.271578229658525,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00238": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.4983356567080587,
+      "compression_coef": 0.1873817546722148,
+      "compression_threshold_db": -9.57166434329194,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00239": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.3315429443004876,
+      "compression_threshold_db": -10.180000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00240": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.38442523162178144,
+      "compression_coef": 0.21002761167757603,
+      "compression_threshold_db": -10.304425231621781,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00241": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.5399512056617869,
+      "compression_coef": 0.36586808390124703,
+      "compression_threshold_db": -10.459951205661786,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00242": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.2946570434205298,
+      "compression_threshold_db": -9.68,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00243": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.21623307210533213,
+      "compression_threshold_db": -10.23,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00244": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.370000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00245": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.869069767397137,
+      "compression_coef": 0.27167425577357307,
+      "compression_threshold_db": -9.040930232602863,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00246": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3713049709959572,
+      "compression_coef": 0.36445910626616784,
+      "compression_threshold_db": -10.311304970995957,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00247": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.5620055424872945,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.542005542487296,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00248": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.209787557350602,
+      "compression_threshold_db": -10.280000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00249": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 1.0462610864521666,
+      "compression_coef": 0.19151082669308625,
+      "compression_threshold_db": -8.843738913547835,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00250": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.49683425533447106,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.426834255334471,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00251": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.2272375983445334,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00252": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.28076899414191436,
+      "compression_threshold_db": -10.21,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00253": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.2068644878437076,
+      "compression_threshold_db": -10.190000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00254": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.24356288958321987,
+      "compression_threshold_db": -10.370000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00255": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.31885209487283933,
+      "compression_coef": 0.4436561045476678,
+      "compression_threshold_db": -10.25885209487284,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00256": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.19364629013308815,
+      "compression_threshold_db": -10.23,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00257": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.2741021649420697,
+      "compression_threshold_db": -10.24,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00258": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.49717374497962424,
+      "compression_coef": 0.3804964416354827,
+      "compression_threshold_db": -9.372826255020374,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00259": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.4064886306385181,
+      "compression_coef": 0.21914727069985102,
+      "compression_threshold_db": -9.483511369361482,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00260": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.23885099307865046,
+      "compression_threshold_db": -10.370000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00261": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.30577087653827145,
+      "compression_threshold_db": -10.180000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00262": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.5026153253334558,
+      "compression_coef": 0.15927172404211115,
+      "compression_threshold_db": -10.382615325333457,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00263": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.16956210079578884,
+      "compression_threshold_db": -9.588,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00264": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.3944464734694176,
+      "compression_threshold_db": -9.67,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00265": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.3972850423165384,
+      "compression_threshold_db": -10.24,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00266": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.30500379234174346,
+      "compression_threshold_db": -9.61,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00267": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.3054895930763296,
+      "compression_threshold_db": -10.270000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00268": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.33144309273983297,
+      "compression_coef": 0.2611459557029208,
+      "compression_threshold_db": -10.251443092739834,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00269": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.17191992572148468,
+      "compression_threshold_db": -10.200000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00270": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.3517649475184955,
+      "compression_threshold_db": -9.61,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00271": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.4888700931747124,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -9.391129906825288,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00272": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.18536388005894056,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00273": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.42466699785442086,
+      "compression_threshold_db": -10.25,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00274": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.7413707670310804,
+      "compression_coef": 0.3178642193832695,
+      "compression_threshold_db": -10.65137076703108,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00275": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.2255016104703974,
+      "compression_threshold_db": -10.190000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00276": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.7738031242032135,
+      "compression_coef": 0.3590968745721905,
+      "compression_threshold_db": -9.114196875796786,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00277": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.3618596259159671,
+      "compression_threshold_db": -9.67,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00278": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.25021868515167706,
+      "compression_threshold_db": -10.280000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00279": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.28348961758437413,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00280": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.2532485728166136,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00281": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.36580045809938805,
+      "compression_threshold_db": -10.17,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00282": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -9.649999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00283": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.370000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00284": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.37594787626711146,
+      "compression_threshold_db": -10.23,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00285": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.29170617834828727,
+      "compression_threshold_db": -10.370000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00286": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.190000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00287": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.2711010211317797,
+      "compression_threshold_db": -9.59,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00288": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.9280948146954066,
+      "compression_coef": 0.3677722667189732,
+      "compression_threshold_db": -8.921905185304594,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00289": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.5611675042187451,
+      "compression_coef": 0.2593666806352783,
+      "compression_threshold_db": -9.328832495781256,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00290": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.29819784503190905,
+      "compression_threshold_db": -9.58,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00291": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.30270177375372553,
+      "compression_threshold_db": -10.22,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00292": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.3962176510420297,
+      "compression_threshold_db": -10.23,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00293": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3,
+      "compression_coef": 0.3739999169603666,
+      "compression_threshold_db": -10.270000000000001,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00294": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.22903125927814905,
+      "compression_threshold_db": -9.649999999999999,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00295": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.5221704564025763,
+      "compression_coef": 0.23412826271145662,
+      "compression_threshold_db": -9.367829543597423,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00296": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.44457528708384886,
+      "compression_coef": 0.17563377753326595,
+      "compression_threshold_db": -10.344575287083849,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00297": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3651765743165977,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -9.554823425683402,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00298": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": -0.3020637997189026,
+      "compression_coef": 0.15,
+      "compression_threshold_db": -10.192063799718904,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00299": {
     "type": "fault",
     "system_fault_class": "ref_error",
-    "module": "衰减器"
+    "module": "衰减器",
+    "fault_params": {
+      "single_band_mode": true,
+      "ref_type": "global_offset",
+      "global_offset_db": 0.3,
+      "compression_coef": 0.16165659386383746,
+      "compression_threshold_db": -9.61,
+      "compression_start_percent": 0.8,
+      "type": "ref_miscal"
+    }
   },
   "sim_00300": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00301": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00302": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00303": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00304": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00305": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00306": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00307": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00308": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00309": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00310": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00311": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00312": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00313": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00314": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00315": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00316": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00317": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00318": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00319": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00320": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00321": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00322": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00323": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00324": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00325": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00326": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00327": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00328": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00329": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00330": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00331": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00332": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00333": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00334": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00335": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00336": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00337": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00338": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00339": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00340": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00341": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00342": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00343": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00344": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00345": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00346": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00347": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00348": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00349": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00350": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00351": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00352": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00353": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00354": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00355": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00356": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00357": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00358": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00359": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00360": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00361": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00362": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00363": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00364": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00365": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00366": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00367": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00368": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00369": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00370": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00371": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00372": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00373": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00374": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00375": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00376": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00377": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00378": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00379": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00380": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00381": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00382": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00383": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00384": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00385": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00386": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00387": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00388": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00389": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00390": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00391": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00392": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00393": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00394": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00395": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00396": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00397": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00398": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   },
   "sim_00399": {
     "type": "normal",
     "system_fault_class": null,
-    "module": null
+    "module": null,
+    "fault_params": {
+      "type": "normal"
+    }
   }
 }

@@ -115,9 +115,14 @@ def _write_csv(path: Path, rows: List[Dict[str, object]], encoding: str = "utf-8
         path.write_text("", encoding=encoding)
         return
 
-    fieldnames = list(rows[0].keys())
+    # Collect all unique fieldnames from all rows
+    all_fieldnames = set()
+    for row in rows:
+        all_fieldnames.update(row.keys())
+    fieldnames = sorted(all_fieldnames)
+    
     with path.open("w", newline="", encoding=encoding) as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
@@ -253,44 +258,63 @@ def simulate_curve(
     
     label_sys = "normal"
     label_mod = "none"
+    fault_params = {}  # Track injection parameters
 
     if fault_kind == "amp":
         curve = inject_amplitude_miscal(curve, rng=rng)
         label_sys, label_mod = "幅度失准", "校准源"
+        fault_params['type'] = 'amp_miscal'
     elif fault_kind == "freq":
-        curve = inject_freq_miscal(frequency, curve, rng=rng)
+        curve, freq_params = inject_freq_miscal(frequency, curve, rng=rng, return_params=True)
         label_sys, label_mod = "频率失准", "时钟振荡器"
+        fault_params.update(freq_params)
+        fault_params['type'] = 'freq_miscal'
     elif fault_kind in ("rl", "att"):
         # Use single_band_mode=True for reflevel injection (no step injection)
-        curve = inject_reflevel_miscal(frequency, curve, band_ranges, rng=rng, single_band_mode=True)
+        curve, ref_params = inject_reflevel_miscal(frequency, curve, band_ranges, rng=rng, 
+                                                    single_band_mode=True, return_params=True)
         label_sys, label_mod = "参考电平失准", "衰减器"
+        fault_params.update(ref_params)
+        fault_params['type'] = 'ref_miscal'
     # NOTE: preamp case is REMOVED - it's disabled in single-band mode
     elif fault_kind == "lpf":
         curve = inject_lpf_shift(frequency, curve, rng=rng)
         label_sys, label_mod = "幅度失准", "低频段前置低通滤波器"
+        fault_params['type'] = 'lpf_shift'
     elif fault_kind == "mixer":
         curve = inject_mixer_ripple(frequency, curve, rng=rng)
         label_sys, label_mod = "幅度失准", "低频段第一混频器"
+        fault_params['type'] = 'mixer_ripple'
     elif fault_kind == "ytf":
         curve = inject_ytf_variation(frequency, curve, rng=rng)
         label_sys, label_mod = "幅度失准", "高频段YTF滤波器"
+        fault_params['type'] = 'ytf_variation'
     elif fault_kind == "clock":
-        curve = inject_clock_drift(frequency, curve, rng=rng)
+        # Clock drift also uses freq_miscal internally
+        curve, freq_params = inject_freq_miscal(frequency, curve, rng=rng, return_params=True)
         label_sys, label_mod = "频率失准", "时钟合成与同步网络"
+        fault_params.update(freq_params)
+        fault_params['type'] = 'clock_drift'
     elif fault_kind == "lo":
         curve = inject_lo_path_error(frequency, curve, band_ranges, rng=rng)
         label_sys, label_mod = "频率失准", "本振混频组件"
+        fault_params['type'] = 'lo_path_error'
     elif fault_kind == "adc":
         curve = inject_adc_bias(curve, rng=rng)
         label_sys, label_mod = "幅度失准", "ADC"
+        fault_params['type'] = 'adc_bias'
     elif fault_kind == "vbw":
         curve = inject_vbw_smoothing(curve, rng=rng)
         label_sys, label_mod = "幅度失准", "数字检波器"
+        fault_params['type'] = 'vbw_smoothing'
     elif fault_kind == "power":
         curve = inject_power_noise(curve, rng=rng)
         label_sys, label_mod = "幅度失准", "电源模块"
+        fault_params['type'] = 'power_noise'
+    else:
+        fault_params['type'] = 'normal'
 
-    return curve, label_sys, label_mod
+    return curve, label_sys, label_mod, fault_params
 
 
 def run_simulation(args: argparse.Namespace):
@@ -319,6 +343,7 @@ def run_simulation(args: argparse.Namespace):
     labels: dict = {}
     sys_labels: List[str] = []
     mod_labels: List[str] = []
+    fault_params_list: List[Dict] = []  # Track fault injection parameters
 
     # Generate balanced samples across 4 system classes
     if args.balanced:
@@ -342,10 +367,11 @@ def run_simulation(args: argparse.Namespace):
         for target_class in ['amp_error', 'freq_error', 'ref_error', 'normal']:
             for _ in range(class_counts[target_class]):
                 sample_id = f"sim_{idx:05d}"
-                curve, label_sys, label_mod = simulate_curve(freq, rrs, band_ranges, traces, rng, target_class=target_class)
+                curve, label_sys, label_mod, fault_params = simulate_curve(freq, rrs, band_ranges, traces, rng, target_class=target_class)
                 curves.append(curve)
                 sys_labels.append(label_sys)
                 mod_labels.append(label_mod)
+                fault_params_list.append({'sample_id': sample_id, **fault_params})
 
                 # Pass baseline_curve=rrs and envelope=bounds to extract X16-X18 features properly
                 sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
@@ -368,6 +394,7 @@ def run_simulation(args: argparse.Namespace):
                     "type": "normal" if fault_class == "normal" else "fault",
                     "system_fault_class": fault_class if fault_class != "normal" else None,
                     "module": None if fault_class == "normal" else label_mod,
+                    "fault_params": fault_params,  # Include injection parameters
                 }
 
                 feature_rows.append({"sample_id": sample_id, "fault_kind": label_sys, "module_label": label_mod, **sys_feats, **dyn_feats})
@@ -396,10 +423,11 @@ def run_simulation(args: argparse.Namespace):
         
         for idx in range(args.n_samples):
             sample_id = f"sim_{idx:05d}"
-            curve, label_sys, label_mod = simulate_curve(freq, rrs, band_ranges, traces, rng)
+            curve, label_sys, label_mod, fault_params = simulate_curve(freq, rrs, band_ranges, traces, rng)
             curves.append(curve)
             sys_labels.append(label_sys)
             mod_labels.append(label_mod)
+            fault_params_list.append({'sample_id': sample_id, **fault_params})
 
             # Pass baseline_curve=rrs and envelope=bounds to extract X16-X18 features properly
             sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
@@ -422,6 +450,7 @@ def run_simulation(args: argparse.Namespace):
                 "type": "normal" if fault_class == "normal" else "fault",
                 "system_fault_class": fault_class if fault_class != "normal" else None,
                 "module": None if fault_class == "normal" else label_mod,
+                "fault_params": fault_params,
             }
 
             feature_rows.append({"sample_id": sample_id, "fault_kind": label_sys, "module_label": label_mod, **sys_feats, **dyn_feats})
@@ -446,8 +475,79 @@ def run_simulation(args: argparse.Namespace):
     (out_dir / "labels.json").write_text(json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8")
     _write_curves(out_dir / "simulated_curves.csv", freq, curves)
     np.savez(out_dir / "simulated_curves.npz", frequency=freq, curves=np.array(curves))
+    
+    # Save fault params CSV for effect check
+    if fault_params_list:
+        _write_csv(out_dir / "fault_params.csv", fault_params_list, encoding="utf-8-sig")
+        print(f"Saved fault_params.csv with injection parameters")
+    
+    # Generate freq_ref_effect_check.csv
+    _generate_effect_check(out_dir, feature_rows, labels)
 
     print(f"已保存特征/预测至 {out_dir}，comparison/评估脚本可直接使用 features_brb.csv + labels.json")
+
+
+def _generate_effect_check(out_dir: Path, feature_rows: List[Dict], labels: dict):
+    """Generate freq_ref_effect_check.csv to verify injection → feature correlation."""
+    import pandas as pd
+    
+    # Build dataframe with features and labels
+    df = pd.DataFrame(feature_rows)
+    df['system_class'] = df['sample_id'].apply(
+        lambda x: labels.get(x, {}).get('system_fault_class', 'normal') or 'normal'
+    )
+    
+    # Key freq features
+    freq_features = ['X16', 'X17', 'X18', 'X23', 'X24', 'X25']
+    # Key ref features  
+    ref_features = ['X3', 'X5', 'X26', 'X27', 'X28']
+    
+    # Compute statistics by class
+    stats = []
+    for cls in ['normal', 'amp_error', 'freq_error', 'ref_error']:
+        cls_df = df[df['system_class'] == cls]
+        if len(cls_df) == 0:
+            continue
+        
+        row = {'class': cls, 'n': len(cls_df)}
+        
+        # Freq features
+        for f in freq_features:
+            if f in cls_df.columns:
+                vals = cls_df[f].astype(float)
+                row[f'{f}_mean'] = vals.mean()
+                row[f'{f}_std'] = vals.std()
+                row[f'{f}_p90'] = vals.quantile(0.9) if len(vals) > 0 else 0
+        
+        # Ref features
+        for f in ref_features:
+            if f in cls_df.columns:
+                vals = cls_df[f].astype(float)
+                row[f'{f}_mean'] = vals.mean()
+                row[f'{f}_std'] = vals.std()
+                row[f'{f}_p90'] = vals.quantile(0.9) if len(vals) > 0 else 0
+        
+        stats.append(row)
+    
+    # Save effect check
+    if stats:
+        effect_df = pd.DataFrame(stats)
+        effect_df.to_csv(out_dir / 'freq_ref_effect_check.csv', index=False, encoding='utf-8-sig')
+        print(f"Saved freq_ref_effect_check.csv")
+        
+        # Print summary
+        print("\n=== Freq/Ref Feature Effect Check ===")
+        print("Freq features (should be high for freq_error):")
+        for f in ['X16', 'X23', 'X24']:
+            if f'{f}_mean' in effect_df.columns:
+                for _, row in effect_df.iterrows():
+                    print(f"  {row['class']:12s} {f}_mean={row.get(f'{f}_mean', 0):.4f}")
+        
+        print("\nRef features (should be high for ref_error):")
+        for f in ['X26', 'X27', 'X28']:
+            if f'{f}_mean' in effect_df.columns:
+                for _, row in effect_df.iterrows():
+                    print(f"  {row['class']:12s} {f}_mean={row.get(f'{f}_mean', 0):.4f}")
 
 
 def build_argparser():
