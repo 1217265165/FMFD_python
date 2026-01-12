@@ -1,0 +1,16 @@
+{
+  "alpha": 1.5,
+  "T_low": 0.08,
+  "T_high": 0.3,
+  "k_normal_prior": 2.0,
+  "beta_freq": 2.0,
+  "beta_ref": 0.0,
+  "overall_threshold": 0.08,
+  "max_prob_threshold": 0.35,
+  "T_normal": 0.08,
+  "T_prob": 0.35,
+  "calibration_accuracy": 0.4025,
+  "calibration_macro_f1": 0.3473999899989999,
+  "single_band_mode": true,
+  "version": "v2_soft_gating"
+}

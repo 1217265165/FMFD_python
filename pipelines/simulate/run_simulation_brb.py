@@ -347,7 +347,8 @@ def run_simulation(args: argparse.Namespace):
                 sys_labels.append(label_sys)
                 mod_labels.append(label_mod)
 
-                sys_feats = extract_system_features(curve)
+                # Pass baseline_curve=rrs and envelope=bounds to extract X16-X18 features properly
+                sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
                 dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
                 sys_result = system_level_infer(sys_feats)
 
@@ -400,7 +401,8 @@ def run_simulation(args: argparse.Namespace):
             sys_labels.append(label_sys)
             mod_labels.append(label_mod)
 
-            sys_feats = extract_system_features(curve)
+            # Pass baseline_curve=rrs and envelope=bounds to extract X16-X18 features properly
+            sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
             dyn_feats = compute_dynamic_threshold_features(curve, rrs, bounds, switch_feats)
             sys_result = system_level_infer(sys_feats)
 

@@ -358,14 +358,14 @@ def system_level_infer_with_sub_brbs(
     use_feature_routing: bool = True,
     calibration: Optional[Dict] = None
 ) -> Dict:
-    """使用子BRB架构的系统级推理入口。
+    """使用子BRB架构的系统级推理入口（v2：软门控版本）。
     
     这是优化后的系统级推理接口，支持：
-    1. Stage-0 Normal Anchor detection
+    1. Stage-0 Normal Anchor with SOFT GATING (no bypass!)
     2. 特征分流到对应的子BRB
     3. Evidence gating + temperature softmax
-    4. 聚合子BRB结果
-    5. 正常状态识别
+    4. Normal logit competes with fault logits
+    5. 四分类softmax输出
     
     Parameters
     ----------
@@ -374,9 +374,9 @@ def system_level_infer_with_sub_brbs(
     alpha : float
         Softmax温度参数。
     overall_threshold : float
-        整体异常度阈值。
+        整体异常度阈值（已被T_low/T_high替代，保留兼容）。
     max_prob_threshold : float
-        最大概率阈值。
+        最大概率阈值（已被软门控替代，保留兼容）。
     use_feature_routing : bool
         是否启用特征分流（默认True）。
     calibration : dict, optional
@@ -393,116 +393,89 @@ def system_level_infer_with_sub_brbs(
     
     # Apply calibration to parameters
     alpha = calibration.get('alpha', alpha)
-    overall_threshold = calibration.get('overall_threshold', overall_threshold)
-    max_prob_threshold = calibration.get('max_prob_threshold', max_prob_threshold)
     
-    # Stage-0: Normal Anchor Detection
+    # Stage-0: Normal Anchor Detection (v2: SOFT GATING)
+    anchor_result = None
+    normal_logit = 0.0
     try:
         from .normal_anchor import infer_normal_anchor
         
         anchor_result = infer_normal_anchor(features, calibration)
         
-        if anchor_result.get('bypass_classification', False):
-            # High confidence normal - return early
-            return {
-                'probabilities': {'正常': 1.0, '幅度失准': 0.0, '频率失准': 0.0, '参考电平失准': 0.0},
-                'max_prob': 1.0,
-                'predicted_class': '正常',
-                'is_normal': True,
-                'uncertainty': 0.0,
-                'overall_score': anchor_result['score'],
-                'normal_anchor': anchor_result,
-                'sub_brb_results': None,
-            }
+        # v2: NO BYPASS - get Normal logit instead
+        normal_logit = anchor_result.get('normal_logit', 0.0)
+        
     except ImportError:
         anchor_result = None
+        normal_logit = 0.0
     
-    if use_feature_routing:
-        # 导入特征路由
-        try:
-            from features.feature_router import feature_router
-            
-            # 分流特征到各子BRB
-            amp_features = feature_router(features, 'amp')
-            freq_features = feature_router(features, 'freq')
-            ref_features = feature_router(features, 'ref')
-            
-            # 执行各子BRB推理
-            amp_result = amp_brb_infer(amp_features, alpha)
-            freq_result = freq_brb_infer(freq_features, alpha)
-            ref_result = ref_brb_infer(ref_features, alpha)
-            
-            # 聚合结果
-            activations = [
-                amp_result['activation'],
-                freq_result['activation'],
-                ref_result['activation']
-            ]
-            
-            # Apply evidence gating
-            freq_boost, ref_boost = compute_evidence_gating(features, calibration)
-            gated_activations = [
-                activations[0],
-                activations[1] + freq_boost,
-                activations[2] + ref_boost,
-            ]
-            
-            overall_score = compute_overall_score(features)
-            fault_probs = softmax_with_temperature(gated_activations, alpha)
-            
-            # 后续处理与 aggregate_system_results 相同
-            normal_weight = 0.0
-            if overall_score < overall_threshold:
-                normal_weight = 1.0 - overall_score / (overall_threshold + 1e-12)
-            
-            max_fault_prob = max(fault_probs)
-            if max_fault_prob < max_prob_threshold:
-                normal_weight = max(normal_weight, max_prob_threshold - max_fault_prob)
-            
-            fault_scale = max(0.0, 1.0 - normal_weight)
-            scaled_faults = [p * fault_scale for p in fault_probs]
-            
-            total = normal_weight + sum(scaled_faults)
-            if total <= 1e-12:
-                probabilities = {'正常': 1.0, '幅度失准': 0.0, '频率失准': 0.0, '参考电平失准': 0.0}
-            else:
-                probabilities = {
-                    '正常': normal_weight / total,
-                    '幅度失准': scaled_faults[0] / total,
-                    '频率失准': scaled_faults[1] / total,
-                    '参考电平失准': scaled_faults[2] / total,
-                }
-            
-            max_prob = max(probabilities.values())
-            predicted_class = max(probabilities, key=probabilities.get)
-            is_normal = probabilities.get('正常', 0.0) >= 0.5 or max_fault_prob < max_prob_threshold
-            
-            result = {
-                'probabilities': probabilities,
-                'max_prob': max_prob,
-                'predicted_class': predicted_class,
-                'is_normal': is_normal,
-                'uncertainty': 1.0 - max_prob,
-                'overall_score': overall_score,
-                'evidence_gating': {
-                    'freq_boost': freq_boost,
-                    'ref_boost': ref_boost,
-                },
-                'sub_brb_results': {
-                    'amp': amp_result,
-                    'freq': freq_result,
-                    'ref': ref_result,
-                },
-            }
-            
-            if anchor_result is not None:
-                result['normal_anchor'] = anchor_result
-            
-            return result
-            
-        except ImportError:
-            # 如果无法导入特征路由，回退到标准聚合
-            pass
+    # Execute three sub-BRBs (always run, no bypass)
+    amp_result = amp_brb_infer(features, alpha)
+    freq_result = freq_brb_infer(features, alpha)
+    ref_result = ref_brb_infer(features, alpha)
     
-    # 不使用特征分流，直接使用完整特征
-    return aggregate_system_results(features, alpha, overall_threshold, max_prob_threshold, calibration)
+    # 获取各子BRB的激活度
+    activations = [
+        amp_result['activation'],
+        freq_result['activation'],
+        ref_result['activation']
+    ]
+    
+    # Apply evidence gating to prevent amp from absorbing everything
+    freq_boost, ref_boost = compute_evidence_gating(features, calibration)
+    
+    # Build 4-way logits: [Normal, Amp, Freq, Ref]
+    logits = [
+        normal_logit,                           # Normal: from anchor
+        activations[0],                         # Amp: no additional boost
+        activations[1] + freq_boost,            # Freq: evidence gating boost
+        activations[2] + ref_boost,             # Ref: evidence gating boost
+    ]
+    
+    # Apply temperature softmax for 4-way classification
+    fault_probs = softmax_with_temperature(logits, alpha)
+    
+    # Build probability dictionary
+    probabilities = {
+        '正常': fault_probs[0],
+        '幅度失准': fault_probs[1],
+        '频率失准': fault_probs[2],
+        '参考电平失准': fault_probs[3],
+    }
+    
+    # Determine prediction
+    max_prob = max(probabilities.values())
+    predicted_class = max(probabilities, key=probabilities.get)
+    is_normal = predicted_class == '正常'
+    
+    # Compute overall score for debugging
+    overall_score = anchor_result.get('anchor_score', 0.0) if anchor_result else compute_overall_score(features)
+    
+    result = {
+        'probabilities': probabilities,
+        'max_prob': max_prob,
+        'predicted_class': predicted_class,
+        'is_normal': is_normal,
+        'uncertainty': 1.0 - max_prob,
+        'overall_score': overall_score,
+        'logits': {
+            'normal': logits[0],
+            'amp': logits[1],
+            'freq': logits[2],
+            'ref': logits[3],
+        },
+        'evidence_gating': {
+            'freq_boost': freq_boost,
+            'ref_boost': ref_boost,
+        },
+        'sub_brb_results': {
+            'amp': amp_result,
+            'freq': freq_result,
+            'ref': ref_result,
+        },
+    }
+    
+    if anchor_result is not None:
+        result['normal_anchor'] = anchor_result
+    
+    return result
