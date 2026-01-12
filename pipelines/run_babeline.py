@@ -212,7 +212,8 @@ def main():
         feats = extract_system_features(amp, baseline_curve=rrs, envelope=bounds)
         feats_list.append(feats)
     stats_df = pd.DataFrame(feats_list)
-    stats_df.describe(percentiles=[0.5, 0.9, 0.95, 0.99]).to_csv(normal_feat_stats)
+    # Include 25% and 75% for IQR calculation
+    stats_df.describe(percentiles=[0.25, 0.5, 0.75, 0.9, 0.95, 0.97, 0.99]).to_csv(normal_feat_stats)
 
     print(f"\n基线产物已保存:")
     print(f"  - 基线数据: {baseline_artifacts}")

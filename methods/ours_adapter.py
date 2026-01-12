@@ -170,6 +170,10 @@ class OursAdapter(MethodAdapter):
                             q25 = stats_df.loc['25%', col] if '25%' in stats_df.index else 0.0
                             q75 = stats_df.loc['75%', col] if '75%' in stats_df.index else 0.0
                             iqr = q75 - q25
+                            # Use std as fallback when IQR is 0
+                            if iqr < 1e-9:
+                                std = stats_df.loc['std', col] if 'std' in stats_df.index else 0.0
+                                iqr = float(std) * 1.35  # Approx IQR for normal distribution
                             p95 = stats_df.loc['95%', col] if '95%' in stats_df.index else 0.0
                             p97 = stats_df.loc['97%', col] if '97%' in stats_df.index else p95
                             self.normal_feature_stats[col] = {

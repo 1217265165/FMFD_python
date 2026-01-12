@@ -96,6 +96,9 @@ def evaluate_with_params(
     
     # Create adapter with custom parameters
     adapter = OursAdapter()
+    # Enable normal anchor and evidence gating for calibration
+    adapter.use_normal_anchor = True
+    adapter.use_evidence_gating = True
     adapter.normal_anchor_threshold = normal_threshold
     adapter.config.alpha = alpha
     adapter.freq_boost = freq_boost
@@ -244,6 +247,8 @@ def main():
         print("WARNING: No valid parameter combination found!")
         # Use defaults
         best_params = {
+            'use_normal_anchor': True,
+            'use_evidence_gating': True,
             'normal_anchor_threshold': 0.12,
             'alpha': 3.0,
             'freq_boost': 1.0,
@@ -253,6 +258,9 @@ def main():
         }
     else:
         best_params = search_result['best_params']
+        # Add enable flags
+        best_params['use_normal_anchor'] = True
+        best_params['use_evidence_gating'] = True
         best_result = search_result['best_result']
         
         print(f"\nBest parameters found:")
