@@ -137,7 +137,7 @@ def compute_overall_score(features: Dict[str, float]) -> float:
 def aggregate_system_results(
     features: Dict[str, float],
     alpha: float = 3.0,  # Higher temperature for sharper distribution
-    overall_threshold: float = 0.12,  # Lower threshold for better normal detection
+    overall_threshold: float = 0.35,  # Higher threshold to capture more normal samples
     max_prob_threshold: float = 0.25  # Lower threshold for better fault confirmation
 ) -> Dict:
     """聚合三个子BRB的推理结果，输出系统级诊断。
@@ -245,7 +245,7 @@ def aggregate_system_results(
 def system_level_infer_with_sub_brbs(
     features: Dict[str, float],
     alpha: float = 3.0,  # Higher temperature for sharper distribution
-    overall_threshold: float = 0.12,  # Lower threshold for better normal detection
+    overall_threshold: float = 0.35,  # Higher threshold to capture more normal samples
     max_prob_threshold: float = 0.25,  # Lower threshold for better fault confirmation
     use_feature_routing: bool = True
 ) -> Dict:

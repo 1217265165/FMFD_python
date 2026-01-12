@@ -143,6 +143,10 @@ class OursAdapter(MethodAdapter):
                         self.ref_boost = float(calib['ref_boost'])
                     if 'alpha' in calib:
                         self.config.alpha = float(calib['alpha'])
+                    if 'overall_threshold' in calib:
+                        self.config.overall_threshold = float(calib['overall_threshold'])
+                    if 'max_prob_threshold' in calib:
+                        self.config.max_prob_threshold = float(calib['max_prob_threshold'])
                     
                     print(f"[OursAdapter] Loaded calibration from {calib_path}")
                     break
