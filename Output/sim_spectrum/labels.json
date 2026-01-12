@@ -498,5 +498,505 @@
     "type": "fault",
     "system_fault_class": "ref_error",
     "module": "衰减器"
+  },
+  "sim_00100": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "电源模块"
+  },
+  "sim_00101": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00102": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00103": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "高频段YTF滤波器"
+  },
+  "sim_00104": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00105": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "高频段YTF滤波器"
+  },
+  "sim_00106": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00107": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00108": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "本振混频组件"
+  },
+  "sim_00109": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "电源模块"
+  },
+  "sim_00110": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00111": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00112": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00113": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00114": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "校准源"
+  },
+  "sim_00115": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00116": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "本振混频组件"
+  },
+  "sim_00117": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00118": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00119": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00120": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "校准源"
+  },
+  "sim_00121": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00122": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00123": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00124": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00125": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00126": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00127": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "高频段YTF滤波器"
+  },
+  "sim_00128": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00129": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "校准源"
+  },
+  "sim_00130": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00131": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00132": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00133": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00134": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00135": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00136": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "电源模块"
+  },
+  "sim_00137": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00138": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "ADC"
+  },
+  "sim_00139": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00140": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00141": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00142": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "电源模块"
+  },
+  "sim_00143": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "高频段YTF滤波器"
+  },
+  "sim_00144": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00145": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00146": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00147": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00148": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "校准源"
+  },
+  "sim_00149": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "高频段YTF滤波器"
+  },
+  "sim_00150": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00151": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00152": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00153": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00154": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00155": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00156": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00157": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00158": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00159": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00160": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00161": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00162": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00163": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00164": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00165": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00166": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "ADC"
+  },
+  "sim_00167": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00168": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "数字检波器"
+  },
+  "sim_00169": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00170": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00171": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "校准源"
+  },
+  "sim_00172": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "ADC"
+  },
+  "sim_00173": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00174": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00175": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00176": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "电源模块"
+  },
+  "sim_00177": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00178": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00179": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00180": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "ADC"
+  },
+  "sim_00181": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "ADC"
+  },
+  "sim_00182": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00183": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00184": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "本振混频组件"
+  },
+  "sim_00185": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00186": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "高频段YTF滤波器"
+  },
+  "sim_00187": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段前置低通滤波器"
+  },
+  "sim_00188": {
+    "type": "normal",
+    "system_fault_class": null,
+    "module": null
+  },
+  "sim_00189": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟合成与同步网络"
+  },
+  "sim_00190": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "ADC"
+  },
+  "sim_00191": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "电源模块"
+  },
+  "sim_00192": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "本振混频组件"
+  },
+  "sim_00193": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00194": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
+  },
+  "sim_00195": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00196": {
+    "type": "fault",
+    "system_fault_class": "amp_error",
+    "module": "低频段第一混频器"
+  },
+  "sim_00197": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "时钟振荡器"
+  },
+  "sim_00198": {
+    "type": "fault",
+    "system_fault_class": "freq_error",
+    "module": "本振混频组件"
+  },
+  "sim_00199": {
+    "type": "fault",
+    "system_fault_class": "ref_error",
+    "module": "衰减器"
   }
 }
