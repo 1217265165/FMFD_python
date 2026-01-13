@@ -610,7 +610,7 @@ def main():
     best_params['calibration_balanced_accuracy'] = best_balanced_acc
     best_params['calibration_macro_f1'] = best_f1
     best_params['single_band_mode'] = True
-    best_params['version'] = 'v7_soft_suppression'
+    best_params['version'] = 'v8_aggressive_amp_suppression'
     
     # Save calibration
     calibration_path = output_dir / "calibration.json"

@@ -16,5 +16,5 @@
   "calibration_balanced_accuracy": 0.8075,
   "calibration_macro_f1": 0.8052743229858095,
   "single_band_mode": true,
-  "version": "v7_soft_suppression"
+  "version": "v8_aggressive_amp_suppression"
 }
