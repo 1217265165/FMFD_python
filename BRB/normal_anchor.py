@@ -28,10 +28,11 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-# v7 Constants
+# v7 Constants for soft suppression
 X16_AMP_DISTORTION_THRESHOLD = 100  # X16 (corr_shift_bins) > this indicates amp error distortion
 AMP_EVIDENCE_STRONG_THRESHOLD = 0.5  # Above this, amp evidence is strong enough to suppress freq/ref
 SOFT_SUPPRESSION_LAMBDA = 1.0  # Default lambda for soft suppression (calibratable)
+FREQ_SUPPRESS_MULTIPLIER = 0.7  # How much freq evidence is reduced when amp is dominant
 
 
 @dataclass
@@ -158,7 +159,7 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     # Calculate suppression factor: 0 when no amp, up to SOFT_SUPPRESSION_LAMBDA when amp is dominant
     amp_excess = max(0, score_amp_raw - E_strong)  # How much above threshold
     suppression_factor = min(1.0, SOFT_SUPPRESSION_LAMBDA * amp_excess)  # Soft suppression factor
-    freq_suppression = 1.0 - suppression_factor * 0.7 if amp_dominant else 1.0  # Don't fully suppress
+    freq_suppression = 1.0 - suppression_factor * FREQ_SUPPRESS_MULTIPLIER if amp_dominant else 1.0  # Don't fully suppress
     
     # X16: corr_shift_bins (now in actual bins, not normalized)
     x16_raw = _get_feature_value(features, 'X16', 'corr_shift_bins')

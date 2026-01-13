@@ -338,15 +338,19 @@ def grid_search_calibration_v2(
     jump_energy_p99 = float(np.percentile(normal_jump_energies, 99)) if normal_jump_energies else 0.5
     env_violation_p99 = float(np.percentile(normal_env_violations, 99)) if normal_env_violations else 100.0
     
-    # Include auto-calibrated values in search plus some variations
-    T_low_range = [max(0.05, T_low_auto - 0.05), T_low_auto, min(0.4, T_low_auto + 0.1)]
-    T_high_range = [max(T_low_auto + 0.1, T_high_auto - 0.1), T_high_auto, min(0.9, T_high_auto + 0.1)]
+    # v7: Include auto-calibrated values in search plus some variations
+    # Constants for threshold range calculation
+    T_LOW_MIN = 0.05  # Minimum T_low to avoid too strict normal detection
+    T_LOW_MAX = 0.4   # Maximum T_low to avoid too loose normal detection
+    T_HIGH_MAX = 0.9  # Maximum T_high to ensure abnormal samples are detected
+    T_low_range = [max(T_LOW_MIN, T_low_auto - 0.05), T_low_auto, min(T_LOW_MAX, T_low_auto + 0.1)]
+    T_high_range = [max(T_low_auto + 0.1, T_high_auto - 0.1), T_high_auto, min(T_HIGH_MAX, T_high_auto + 0.1)]
     
     # Grid ranges (v7: narrowed to auto-calibrated values + variations)
     alpha_range = [1.5, 2.0, 2.5]
-    gamma_range = [0.0, 0.3]  # v5 NEW: reliability adaptive temperature (reduced gamma for stability)
+    gamma_range = [0.0, 0.3]  # v7: reliability adaptive temperature (reduced for stability)
     k_normal_prior_range = [0.0, 1.0, 2.0]  # Can be 0 to disable normal boost
-    beta_amp_range = [1.0, 2.0, 4.0]  # v6 NEW: amp boost to balance freq/ref
+    beta_amp_range = [1.0, 2.0, 4.0]  # amp boost to balance freq/ref
     beta_freq_range = [0.0, 2.0, 4.0]  # Increased to help freq detection
     beta_ref_range = [0.0, 2.0, 4.0]   # Increased to help ref detection
     

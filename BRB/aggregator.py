@@ -39,6 +39,13 @@ ALPHA_MAX_MULTIPLIER = 1.3  # Maximum multiplier for adaptive temperature (1 + G
 AMP_EVIDENCE_STRONG_THRESHOLD = 0.5  # v7: Above this, amp evidence is strong enough for soft suppression
 SOFT_SUPPRESSION_LAMBDA = 1.0  # v7: Lambda for soft suppression in evidence gating
 
+# v7 Suppression constants for Amp/Freq/Ref discrimination
+FREQ_SUPPRESS_MULTIPLIER = 0.7  # How much freq is suppressed when amp is dominant
+FREQ_MIN_RETAIN = 0.3  # Minimum retention for freq evidence (never fully suppress)
+REF_SUPPRESS_MULTIPLIER = 0.5  # How much ref is suppressed when amp is dominant
+REF_MIN_RETAIN = 0.1  # Minimum retention for ref evidence when amp is clearly dominant
+X14_AMP_VS_REF_THRESHOLD = 0.5  # X14 > this suggests Amp error, not Ref error
+
 # Default calibration values
 DEFAULT_CALIBRATION = {
     'alpha': 2.0,           # Softmax temperature
@@ -137,17 +144,17 @@ def compute_evidence_gating(
     suppression_factor = min(1.0, SOFT_SUPPRESSION_LAMBDA * amp_excess)
     
     # freq gets soft suppression when amp is strong (but never zero out completely)
-    freq_retain = max(0.3, 1.0 - suppression_factor * 0.7)
+    freq_retain = max(FREQ_MIN_RETAIN, 1.0 - suppression_factor * FREQ_SUPPRESS_MULTIPLIER)
     
     # v7.1 FIX: ref suppression depends on BOTH amp_evidence AND X14
     # - If amp_evidence high AND X14 > 0.5: probably Amp, suppress ref
     # - If amp_evidence high AND X14 < 0.5: probably Ref, DON'T suppress ref
-    if amp_evidence > E_strong and x14 > 0.5:
+    if amp_evidence > E_strong and x14 > X14_AMP_VS_REF_THRESHOLD:
         # High X14 + high amp_evidence = Amp error, suppress ref
-        ref_retain = 0.1
+        ref_retain = REF_MIN_RETAIN
     elif amp_evidence > E_strong and x14 < 0.2:
         # Low X14 + high amp_evidence = unusual, still suppress ref
-        ref_retain = max(0.3, 1.0 - suppression_factor * 0.5)
+        ref_retain = max(FREQ_MIN_RETAIN, 1.0 - suppression_factor * REF_SUPPRESS_MULTIPLIER)
     else:
         # Either low amp_evidence OR moderate X14 (0.2-0.5) = allow ref
         ref_retain = 1.0
