@@ -32,6 +32,11 @@ from .system_brb_freq import freq_brb_infer
 from .system_brb_ref import ref_brb_infer
 
 
+# v6 Constants for reliability mechanism
+X16_AMP_DISTORTION_THRESHOLD = 100  # X16 (corr_shift_bins) > this indicates amp error distortion
+GAMMA_MAX_EFFECT = 0.3  # Maximum effect of gamma on temperature adjustment
+ALPHA_MAX_MULTIPLIER = 1.3  # Maximum multiplier for adaptive temperature (1 + GAMMA_MAX_EFFECT)
+
 # Default calibration values
 DEFAULT_CALIBRATION = {
     'alpha': 2.0,           # Softmax temperature
@@ -131,7 +136,7 @@ def compute_evidence_gating(
     # v6 FIX: X16 can be falsely large for amp errors - use X24 (phase_slope) as primary
     # X24 is more specific to frequency errors
     # Only consider X16 if it's moderate (not extreme which indicates amp error)
-    x16_valid = x16 < 100  # If X16 > 100, it's likely amp error distortion
+    x16_valid = x16 < X16_AMP_DISTORTION_THRESHOLD  # If X16 > threshold, it's likely amp error distortion
     
     if x24 > 0.15:  # phase_slope_diff is the KEY freq feature
         freq_evidence = min(1.0, x24 / 0.5)
@@ -566,7 +571,6 @@ def system_level_infer_with_sub_brbs(
     # Apply calibration to parameters
     alpha_base = calibration.get('alpha', alpha)
     gamma = calibration.get('gamma', 0.5)  # Reliability temperature factor
-    gamma_max = 0.3  # v6 FIX: cap gamma effect to max 30% increase in alpha
     
     # Stage-0: Normal Anchor Detection (v2: SOFT GATING)
     anchor_result = None
@@ -636,10 +640,10 @@ def system_level_infer_with_sub_brbs(
         # === UNCERTAIN SAMPLE: Apply reliability adjustments ===
         
         # v6 FIX: Adaptive temperature with CAPPED gamma effect
-        # gamma_effective is limited so alpha_eff <= alpha_base * 1.3
-        gamma_effective = min(gamma, gamma_max)
+        # gamma_effective is limited so alpha_eff <= alpha_base * ALPHA_MAX_MULTIPLIER
+        gamma_effective = min(gamma, GAMMA_MAX_EFFECT)
         alpha_eff = alpha_base * (1.0 + gamma_effective * (1.0 - reliability))
-        alpha_eff = min(alpha_eff, alpha_base * 1.3)  # Hard cap at 1.3x
+        alpha_eff = min(alpha_eff, alpha_base * ALPHA_MAX_MULTIPLIER)  # Hard cap
         
         # Apply reliability-weighted boosts
         freq_boost_weighted = freq_boost * rel_freq

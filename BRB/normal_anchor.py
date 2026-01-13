@@ -13,6 +13,9 @@ Key improvements (v2):
 - **In-envelope anomaly detection** (not just envelope violations)
 - **No hard bypass** - always runs three branches with Normal prior
 - **Robust zscore** normalization using median/IQR
+
+v6 improvements:
+- **Amp-dominant detection** to prevent freq_group false positives
 """
 
 from __future__ import annotations
@@ -24,6 +27,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+# v6 Constants
+X16_AMP_DISTORTION_THRESHOLD = 100  # X16 (corr_shift_bins) > this indicates amp error distortion
 
 
 @dataclass
@@ -150,7 +156,7 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     x16_raw = _get_feature_value(features, 'X16', 'corr_shift_bins')
     x16 = abs(x16_raw)
     # X16 > 100 usually indicates amp error distortion, not real freq shift
-    x16_valid = x16 < 100 and not amp_dominant
+    x16_valid = x16 < X16_AMP_DISTORTION_THRESHOLD and not amp_dominant
     freq_group['freq_shift'] = min(1.0, x16 / 50.0) if x16_valid else 0.0
     
     # X17: warp_scale

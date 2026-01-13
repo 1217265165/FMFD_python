@@ -583,7 +583,7 @@ def main():
     best_params['calibration_balanced_accuracy'] = best_balanced_acc
     best_params['calibration_macro_f1'] = best_f1
     best_params['single_band_mode'] = True
-    best_params['version'] = 'v5_brb_mu_reliability'
+    best_params['version'] = 'v6_reliability_fix'
     
     # Save calibration
     calibration_path = output_dir / "calibration.json"
