@@ -132,14 +132,26 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     
     components.update(amp_group)
     
+    # v6: Compute amp_score FIRST to use in freq/ref gating
+    score_amp_raw = max(amp_group.values()) if amp_group else 0.0
+    # v6 FIX: Lower threshold to 0.3 to catch more amp_dominant cases
+    # Also check envelope energy specifically as it's the most reliable amp indicator
+    amp_dominant = score_amp_raw > 0.3 or amp_group.get('env_energy', 0) > 0.3 or amp_group.get('env_max', 0) > 0.3
+    
     # ==== FREQ GROUP: Frequency Shift/Warp Evidence ====
     freq_group = {}
     
+    # v6 FIX: X16 (corr_shift_bins) and X24 (phase_slope_diff) can be falsely triggered
+    # when amp errors are present. The correlation and phase slope get distorted
+    # when amplitude changes are large.
+    # SOLUTION: If amp_dominant, suppress freq_group scores significantly
+    
     # X16: corr_shift_bins (now in actual bins, not normalized)
-    x16 = abs(_get_feature_value(features, 'X16', 'corr_shift_bins'))
-    # For 820 points, 1 bin = ~1/820. With enhanced ppm, expect >= 1 bin shift
-    # Adjusted: X16 can be large (up to 800) so use wider threshold
-    freq_group['freq_shift'] = min(1.0, abs(x16) / 50.0)  # 50 bins = clear shift
+    x16_raw = _get_feature_value(features, 'X16', 'corr_shift_bins')
+    x16 = abs(x16_raw)
+    # X16 > 100 usually indicates amp error distortion, not real freq shift
+    x16_valid = x16 < 100 and not amp_dominant
+    freq_group['freq_shift'] = min(1.0, x16 / 50.0) if x16_valid else 0.0
     
     # X17: warp_scale
     x17 = abs(_get_feature_value(features, 'X17', 'warp_scale'))
@@ -149,17 +161,25 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     x18 = abs(_get_feature_value(features, 'X18', 'warp_bias'))
     freq_group['warp_bias'] = min(1.0, x18 / 0.02)  # Adjusted
     
-    # X23: warp_residual_energy (NEW)
+    # X23: warp_residual_energy (NEW) - also sensitive to amp errors
     x23 = abs(_get_feature_value(features, 'X23', 'warp_residual_energy'))
-    freq_group['warp_residual'] = min(1.0, x23 / 2.0)  # Adjusted - can be quite large
+    # Only trust if amp evidence is weak AND value is reasonable
+    freq_group['warp_residual'] = min(1.0, x23 / 2.0) if (x23 < 5.0 and not amp_dominant) else 0.0
     
-    # X24: phase_slope_diff (NEW)
+    # X24: phase_slope_diff (NEW) - WAS KEY FREQ INDICATOR BUT ALSO FALSE POSITIVE FOR AMP!
+    # Data analysis shows: amp_error X24=0.31, freq_error X24=0.69
+    # So X24 alone is NOT sufficient - we need to suppress when amp is dominant
     x24 = abs(_get_feature_value(features, 'X24', 'phase_slope_diff'))
-    freq_group['phase_slope'] = min(1.0, x24 / 0.5)  # Adjusted
+    # v6 FIX: Only count X24 as freq evidence if amp is NOT dominant
+    if amp_dominant:
+        # If amp is dominant, X24 is likely a false positive
+        freq_group['phase_slope'] = 0.0
+    else:
+        freq_group['phase_slope'] = min(1.0, x24 / 0.5)  # Primary freq evidence
     
     # X25: interp_mse_after_shift (NEW)
     x25 = abs(_get_feature_value(features, 'X25', 'interp_mse_after_shift'))
-    freq_group['interp_mse'] = min(1.0, x25 / 5.0)  # Adjusted
+    freq_group['interp_mse'] = min(1.0, x25 / 5.0) if not amp_dominant else 0.0
     
     components.update(freq_group)
     

@@ -196,7 +196,8 @@ def evaluate_with_params_v2(
     k_normal_prior: float,
     beta_freq: float,
     beta_ref: float,
-    gamma: float = 0.5
+    gamma: float = 0.5,
+    beta_amp: float = 0.5
 ) -> Tuple[float, float, List[int], List[int]]:
     """Evaluate accuracy and F1 with given v5 parameters.
     
@@ -214,6 +215,7 @@ def evaluate_with_params_v2(
         'k_normal_prior': k_normal_prior,
         'beta_freq': beta_freq,
         'beta_ref': beta_ref,
+        'beta_amp': beta_amp,  # v6 NEW: also calibrate amp boost
     }
     
     # Align samples
@@ -322,10 +324,11 @@ def grid_search_calibration_v2(
     T_low_range = [0.10, 0.20, 0.30]
     T_high_range = [0.40, 0.50, 0.70]
     
-    # Grid ranges (v5: added gamma for reliability)
+    # Grid ranges (v5: added gamma for reliability, v6: added beta_amp)
     alpha_range = [1.5, 2.0, 2.5]
     gamma_range = [0.0, 0.5]  # v5 NEW: reliability adaptive temperature
     k_normal_prior_range = [0.0, 1.0, 2.0]  # Can be 0 to disable normal boost
+    beta_amp_range = [1.0, 2.0, 4.0]  # v6 NEW: amp boost to balance freq/ref
     beta_freq_range = [0.0, 2.0, 4.0]  # Increased to help freq detection
     beta_ref_range = [0.0, 2.0, 4.0]   # Increased to help ref detection
     
@@ -336,14 +339,15 @@ def grid_search_calibration_v2(
     
     total_configs = (
         len(alpha_range) * len(gamma_range) * len(T_low_range) * len(T_high_range) *
-        len(k_normal_prior_range) * len(beta_freq_range) * len(beta_ref_range)
+        len(k_normal_prior_range) * len(beta_amp_range) * len(beta_freq_range) * len(beta_ref_range)
     )
     
     if verbose:
-        print(f"Running v5 grid search (BRB-MU reliability) with {total_configs} configurations...")
+        print(f"Running v6 grid search (with beta_amp) with {total_configs} configurations...")
         print(f"  T_low range: {T_low_range}")
         print(f"  T_high range: {T_high_range}")
         print(f"  gamma range: {gamma_range} (reliability adaptive temperature)")
+        print(f"  beta_amp range: {beta_amp_range} (NEW in v6)")
         print(f"  Normal scores: mean={np.mean(normal_scores):.4f}, p95={np.percentile(normal_scores, 95):.4f}")
         print(f"  Fault scores: mean={np.mean(all_fault_scores):.4f}, p25={np.percentile(all_fault_scores, 25):.4f}")
         for k, v in fault_scores.items():
@@ -360,54 +364,57 @@ def grid_search_calibration_v2(
                         continue  # Skip invalid combinations
                         
                     for k_normal_prior in k_normal_prior_range:
-                        for beta_freq in beta_freq_range:
-                            for beta_ref in beta_ref_range:
-                                config_count += 1
-                                
-                                try:
-                                    accuracy, macro_f1, balanced_acc, _, _ = evaluate_with_params_v2(
-                                        features_dict, labels_dict,
-                                        alpha, T_low, T_high, k_normal_prior,
-                                        beta_freq, beta_ref, gamma
-                                    )
-                                except Exception as e:
-                                    if verbose and config_count < 10:
-                                        print(f"Error with config {config_count}: {e}")
-                                    continue
-                                
-                                # Store in leaderboard
-                                config_result = {
-                                    'alpha': alpha,
-                                    'gamma': gamma,
-                                    'T_low': T_low,
-                                    'T_high': T_high,
-                                    'k_normal_prior': k_normal_prior,
-                                    'beta_freq': beta_freq,
-                                    'beta_ref': beta_ref,
-                                    'balanced_accuracy': balanced_acc,
-                                    'macro_f1': macro_f1,
-                                    'accuracy': accuracy,
-                                }
-                                leaderboard.append(config_result)
-                                
-                                # v5: Primary = balanced_accuracy, Secondary = macro_f1
-                                if (balanced_acc > best_balanced_acc or 
-                                    (balanced_acc == best_balanced_acc and macro_f1 > best_f1)):
-                                    best_balanced_acc = balanced_acc
-                                    best_f1 = macro_f1
-                                    best_params = {
+                        for beta_amp in beta_amp_range:
+                            for beta_freq in beta_freq_range:
+                                for beta_ref in beta_ref_range:
+                                    config_count += 1
+                                    
+                                    try:
+                                        accuracy, macro_f1, balanced_acc, _, _ = evaluate_with_params_v2(
+                                            features_dict, labels_dict,
+                                            alpha, T_low, T_high, k_normal_prior,
+                                            beta_freq, beta_ref, gamma, beta_amp
+                                        )
+                                    except Exception as e:
+                                        if verbose and config_count < 10:
+                                            print(f"Error with config {config_count}: {e}")
+                                        continue
+                                    
+                                    # Store in leaderboard
+                                    config_result = {
                                         'alpha': alpha,
                                         'gamma': gamma,
                                         'T_low': T_low,
                                         'T_high': T_high,
                                         'k_normal_prior': k_normal_prior,
+                                        'beta_amp': beta_amp,
                                         'beta_freq': beta_freq,
                                         'beta_ref': beta_ref,
-                                        # Compatibility
-                                        'overall_threshold': T_low,
-                                        'max_prob_threshold': 0.35,
-                                        'T_normal': T_low,
-                                        'T_prob': 0.35,
+                                        'balanced_accuracy': balanced_acc,
+                                        'macro_f1': macro_f1,
+                                        'accuracy': accuracy,
+                                    }
+                                    leaderboard.append(config_result)
+                                    
+                                    # v5: Primary = balanced_accuracy, Secondary = macro_f1
+                                    if (balanced_acc > best_balanced_acc or 
+                                        (balanced_acc == best_balanced_acc and macro_f1 > best_f1)):
+                                        best_balanced_acc = balanced_acc
+                                        best_f1 = macro_f1
+                                        best_params = {
+                                            'alpha': alpha,
+                                            'gamma': gamma,
+                                            'T_low': T_low,
+                                            'T_high': T_high,
+                                            'k_normal_prior': k_normal_prior,
+                                            'beta_amp': beta_amp,
+                                            'beta_freq': beta_freq,
+                                            'beta_ref': beta_ref,
+                                            # Compatibility
+                                            'overall_threshold': T_low,
+                                            'max_prob_threshold': 0.35,
+                                            'T_normal': T_low,
+                                            'T_prob': 0.35,
                                     }
                                 
                                 if verbose and config_count % 2000 == 0:
@@ -426,7 +433,7 @@ def grid_search_calibration_v2(
         for i, cfg in enumerate(leaderboard[:5]):
             print(f"  #{i+1}: bal_acc={cfg['balanced_accuracy']:.4f}, F1={cfg['macro_f1']:.4f}, "
                   f"alpha={cfg['alpha']}, gamma={cfg['gamma']}, T_low={cfg['T_low']}, "
-                  f"T_high={cfg['T_high']}, beta_freq={cfg['beta_freq']}, beta_ref={cfg['beta_ref']}")
+                  f"T_high={cfg['T_high']}, beta_amp={cfg.get('beta_amp', 0.5)}, beta_freq={cfg['beta_freq']}, beta_ref={cfg['beta_ref']}")
     
     return best_params, best_balanced_acc, best_f1, leaderboard[:20]
 
