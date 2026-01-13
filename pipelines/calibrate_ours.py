@@ -284,6 +284,7 @@ def grid_search_calibration_v2(
       as primary metric, macro-F1 as secondary.
     - Uses grouped-max anchor scoring
     - Saves calibration_leaderboard.csv with top configurations
+    - v7: Auto-calibrates T_low/T_high using percentiles from Normal class
     
     Returns:
         (best_params, best_balanced_accuracy, best_f1, leaderboard)
@@ -294,6 +295,10 @@ def grid_search_calibration_v2(
     config = NormalAnchorConfig()
     normal_scores = []
     fault_scores = {'amp': [], 'freq': [], 'ref': []}
+    
+    # Also track jump_energy and env_violation for forced not-normal rule
+    normal_jump_energies = []
+    normal_env_violations = []
     
     common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
     for sample_id in common_ids:
@@ -307,6 +312,9 @@ def grid_search_calibration_v2(
         
         if label == 0:
             normal_scores.append(score)
+            # Track key features for forced not-normal rule
+            normal_jump_energies.append(features.get('X7', 0))
+            normal_env_violations.append(features.get('X13', 0))
         elif label == 1:
             fault_scores['amp'].append(score)
         elif label == 2:
@@ -320,13 +328,23 @@ def grid_search_calibration_v2(
         all_fault_scores.extend(v)
     all_fault_scores = np.array(all_fault_scores) if all_fault_scores else np.array([0.5])
     
-    # Use wider ranges based on grouped-max scores
-    T_low_range = [0.10, 0.20, 0.30]
-    T_high_range = [0.40, 0.50, 0.70]
+    # v7: Auto-calibrate T_low and T_high based on Normal class percentiles
+    # T_low = 85th percentile of normal scores
+    # T_high = 97th percentile of normal scores
+    T_low_auto = float(np.percentile(normal_scores, 85))
+    T_high_auto = float(np.percentile(normal_scores, 97))
     
-    # Grid ranges (v5: added gamma for reliability, v6: added beta_amp)
+    # Also compute thresholds for forced not-normal rule
+    jump_energy_p99 = float(np.percentile(normal_jump_energies, 99)) if normal_jump_energies else 0.5
+    env_violation_p99 = float(np.percentile(normal_env_violations, 99)) if normal_env_violations else 100.0
+    
+    # Include auto-calibrated values in search plus some variations
+    T_low_range = [max(0.05, T_low_auto - 0.05), T_low_auto, min(0.4, T_low_auto + 0.1)]
+    T_high_range = [max(T_low_auto + 0.1, T_high_auto - 0.1), T_high_auto, min(0.9, T_high_auto + 0.1)]
+    
+    # Grid ranges (v7: narrowed to auto-calibrated values + variations)
     alpha_range = [1.5, 2.0, 2.5]
-    gamma_range = [0.0, 0.5]  # v5 NEW: reliability adaptive temperature
+    gamma_range = [0.0, 0.3]  # v5 NEW: reliability adaptive temperature (reduced gamma for stability)
     k_normal_prior_range = [0.0, 1.0, 2.0]  # Can be 0 to disable normal boost
     beta_amp_range = [1.0, 2.0, 4.0]  # v6 NEW: amp boost to balance freq/ref
     beta_freq_range = [0.0, 2.0, 4.0]  # Increased to help freq detection
@@ -343,11 +361,13 @@ def grid_search_calibration_v2(
     )
     
     if verbose:
-        print(f"Running v6 grid search (with beta_amp) with {total_configs} configurations...")
+        print(f"Running v7 grid search (with auto-calibrated T_low/T_high) with {total_configs} configurations...")
+        print(f"  Auto-calibrated: T_low={T_low_auto:.4f} (p85), T_high={T_high_auto:.4f} (p97)")
         print(f"  T_low range: {T_low_range}")
         print(f"  T_high range: {T_high_range}")
         print(f"  gamma range: {gamma_range} (reliability adaptive temperature)")
-        print(f"  beta_amp range: {beta_amp_range} (NEW in v6)")
+        print(f"  beta_amp range: {beta_amp_range}")
+        print(f"  Forced not-normal thresholds: jump_energy>{jump_energy_p99:.4f}, env_violation>{env_violation_p99:.4f}")
         print(f"  Normal scores: mean={np.mean(normal_scores):.4f}, p95={np.percentile(normal_scores, 95):.4f}")
         print(f"  Fault scores: mean={np.mean(all_fault_scores):.4f}, p25={np.percentile(all_fault_scores, 25):.4f}")
         for k, v in fault_scores.items():
@@ -396,7 +416,7 @@ def grid_search_calibration_v2(
                                     }
                                     leaderboard.append(config_result)
                                     
-                                    # v5: Primary = balanced_accuracy, Secondary = macro_f1
+                                    # v7: Primary = balanced_accuracy, Secondary = macro_f1
                                     if (balanced_acc > best_balanced_acc or 
                                         (balanced_acc == best_balanced_acc and macro_f1 > best_f1)):
                                         best_balanced_acc = balanced_acc
@@ -410,6 +430,9 @@ def grid_search_calibration_v2(
                                             'beta_amp': beta_amp,
                                             'beta_freq': beta_freq,
                                             'beta_ref': beta_ref,
+                                            # v7: Add forced not-normal thresholds
+                                            'jump_energy_p99': jump_energy_p99,
+                                            'env_violation_p99': env_violation_p99,
                                             # Compatibility
                                             'overall_threshold': T_low,
                                             'max_prob_threshold': 0.35,
@@ -583,7 +606,7 @@ def main():
     best_params['calibration_balanced_accuracy'] = best_balanced_acc
     best_params['calibration_macro_f1'] = best_f1
     best_params['single_band_mode'] = True
-    best_params['version'] = 'v6_reliability_fix'
+    best_params['version'] = 'v7_soft_suppression'
     
     # Save calibration
     calibration_path = output_dir / "calibration.json"

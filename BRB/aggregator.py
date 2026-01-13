@@ -32,10 +32,12 @@ from .system_brb_freq import freq_brb_infer
 from .system_brb_ref import ref_brb_infer
 
 
-# v6 Constants for reliability mechanism
+# v7 Constants for reliability mechanism
 X16_AMP_DISTORTION_THRESHOLD = 100  # X16 (corr_shift_bins) > this indicates amp error distortion
 GAMMA_MAX_EFFECT = 0.3  # Maximum effect of gamma on temperature adjustment
 ALPHA_MAX_MULTIPLIER = 1.3  # Maximum multiplier for adaptive temperature (1 + GAMMA_MAX_EFFECT)
+AMP_EVIDENCE_STRONG_THRESHOLD = 0.5  # v7: Above this, amp evidence is strong enough for soft suppression
+SOFT_SUPPRESSION_LAMBDA = 1.0  # v7: Lambda for soft suppression in evidence gating
 
 # Default calibration values
 DEFAULT_CALIBRATION = {
@@ -90,11 +92,15 @@ def compute_evidence_gating(
 ) -> Tuple[float, float, float]:
     """Compute evidence gating boosts for amp, freq and ref branches.
     
-    v6 FIX: Added MUTEX logic to prevent false freq/ref boosting when amp is dominant.
+    v7 FIX: Changed from hard MUTEX to SOFT SUPPRESSION.
+    When amp evidence is strong, we now use a soft suppression factor
+    that reduces (but doesn't zero out) freq/ref boosting.
     
-    If frequency-specific evidence is strong (shift/warp features exceed
-    normal quantile threshold), boost freq logit by beta_freq.
-    Similarly for ref branch (compression/step features).
+    v7.1 FIX: Use X14 threshold to distinguish Amp from Ref.
+    - Amp errors have X14 >> 0.5 (mean=1.33)
+    - Ref errors have X14 ~= 0.3-0.5 (mean=0.38)
+    When amp_evidence is high AND X14 > 0.5, suppress ref boosting.
+    When amp_evidence is high AND X14 < 0.5, DON'T suppress ref (it's likely ref).
     
     Parameters
     ----------
@@ -108,7 +114,7 @@ def compute_evidence_gating(
     Tuple[float, float, float]
         (amp_boost, freq_boost, ref_boost) - gating boost values.
     """
-    beta_amp = calibration.get('beta_amp', 0.5)  # Increased default
+    beta_amp = calibration.get('beta_amp', 0.5)
     beta_freq = calibration.get('beta_freq', 0.5)
     beta_ref = calibration.get('beta_ref', 0.5)
     
@@ -122,9 +128,29 @@ def compute_evidence_gating(
         amp_evidence = max(x11 / 0.3, x12 / 4.0, x13 / 500.0)
         amp_evidence = min(1.0, amp_evidence)
     
-    # v6 FIX: Check if amp evidence is DOMINANT (likely amp fault)
-    # If so, suppress freq/ref boosting to prevent false triggers
-    amp_dominant = amp_evidence > 0.5
+    # Get X14 for Amp vs Ref discrimination
+    x14 = abs(float(features.get('X14', 0)))  # low_band_residual
+    
+    # v7 FIX: Use SOFT SUPPRESSION instead of hard MUTEX
+    E_strong = AMP_EVIDENCE_STRONG_THRESHOLD
+    amp_excess = max(0, amp_evidence - E_strong)
+    suppression_factor = min(1.0, SOFT_SUPPRESSION_LAMBDA * amp_excess)
+    
+    # freq gets soft suppression when amp is strong (but never zero out completely)
+    freq_retain = max(0.3, 1.0 - suppression_factor * 0.7)
+    
+    # v7.1 FIX: ref suppression depends on BOTH amp_evidence AND X14
+    # - If amp_evidence high AND X14 > 0.5: probably Amp, suppress ref
+    # - If amp_evidence high AND X14 < 0.5: probably Ref, DON'T suppress ref
+    if amp_evidence > E_strong and x14 > 0.5:
+        # High X14 + high amp_evidence = Amp error, suppress ref
+        ref_retain = 0.1
+    elif amp_evidence > E_strong and x14 < 0.2:
+        # Low X14 + high amp_evidence = unusual, still suppress ref
+        ref_retain = max(0.3, 1.0 - suppression_factor * 0.5)
+    else:
+        # Either low amp_evidence OR moderate X14 (0.2-0.5) = allow ref
+        ref_retain = 1.0
     
     # Frequency evidence thresholds (normalized)
     freq_evidence = 0.0
@@ -133,34 +159,24 @@ def compute_evidence_gating(
     x18 = abs(float(features.get('X18', 0)))  # warp_bias
     x24 = abs(float(features.get('X24', 0)))  # phase_slope_diff
     
-    # v6 FIX: X16 can be falsely large for amp errors - use X24 (phase_slope) as primary
-    # X24 is more specific to frequency errors
-    # Only consider X16 if it's moderate (not extreme which indicates amp error)
-    x16_valid = x16 < X16_AMP_DISTORTION_THRESHOLD  # If X16 > threshold, it's likely amp error distortion
+    # v7 FIX: X16 can be falsely large for amp errors - use X24 (phase_slope) as primary
+    x16_valid = x16 < X16_AMP_DISTORTION_THRESHOLD
     
     if x24 > 0.15:  # phase_slope_diff is the KEY freq feature
         freq_evidence = min(1.0, x24 / 0.5)
     elif x16_valid and (x16 > 10.0 or x17 > 0.005 or x18 > 0.005):
-        # Secondary check - moderate X16 or warp features
         freq_evidence = max((x16 / 50.0) if x16_valid else 0.0, x17 / 0.02, x18 / 0.02)
         freq_evidence = min(1.0, freq_evidence)
     
     # Reference evidence thresholds - primarily X14
     ref_evidence = 0.0
-    x14 = abs(float(features.get('X14', 0)))  # low_band_residual - KEY feature
-    
     if x14 > 0.05:  # normal is ~0.027, ref_error is ~0.376
         ref_evidence = min(1.0, x14 / 0.15)
     
-    # v6 FIX: Apply MUTEX - if amp is dominant, suppress freq/ref to prevent misclassification
-    if amp_dominant:
-        freq_evidence *= 0.3  # Reduce false freq boost when amp is dominant
-        ref_evidence *= 0.5   # Reduce false ref boost when amp is dominant
-    
-    # Apply gating: boost = beta * evidence_strength
+    # Apply gating with soft suppression
     amp_boost = beta_amp * amp_evidence
-    freq_boost = beta_freq * freq_evidence
-    ref_boost = beta_ref * ref_evidence
+    freq_boost = beta_freq * freq_evidence * freq_retain
+    ref_boost = beta_ref * ref_evidence * ref_retain
     
     return amp_boost, freq_boost, ref_boost
 

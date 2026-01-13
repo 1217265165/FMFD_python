@@ -925,6 +925,21 @@ def main():
                 writer.writerow([sys_label_names[i]] + list(row))
         print(f"Saved ours confusion matrix to: {cm_csv_path}")
         
+        # v7: Save confusion matrix counts (separate file for clarity)
+        cm_counts_path = output_dir / "ours_confusion_matrix_counts.csv"
+        with open(cm_counts_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+            # Header row
+            writer.writerow(['True\\Pred'] + sys_label_names + ['Total'])
+            for i, label in enumerate(sys_label_names):
+                row_total = int(np.sum(cm[i, :]))
+                writer.writerow([label] + [int(cm[i, j]) for j in range(len(sys_label_names))] + [row_total])
+            # Column totals
+            col_totals = [int(np.sum(cm[:, j])) for j in range(len(sys_label_names))]
+            writer.writerow(['Pred Total'] + col_totals + [int(np.sum(cm))])
+        print(f"Saved ours confusion matrix counts to: {cm_counts_path}")
+        
         # Save per-class metrics
         per_class_path = output_dir / "ours_per_class_metrics.csv"
         with open(per_class_path, 'w', newline='', encoding='utf-8') as f:

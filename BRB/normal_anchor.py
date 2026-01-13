@@ -28,8 +28,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-# v6 Constants
+# v7 Constants
 X16_AMP_DISTORTION_THRESHOLD = 100  # X16 (corr_shift_bins) > this indicates amp error distortion
+AMP_EVIDENCE_STRONG_THRESHOLD = 0.5  # Above this, amp evidence is strong enough to suppress freq/ref
+SOFT_SUPPRESSION_LAMBDA = 1.0  # Default lambda for soft suppression (calibratable)
 
 
 @dataclass
@@ -138,54 +140,56 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     
     components.update(amp_group)
     
-    # v6: Compute amp_score FIRST to use in freq/ref gating
+    # v7: Compute amp_score FIRST to use in freq/ref soft suppression
     score_amp_raw = max(amp_group.values()) if amp_group else 0.0
-    # v6 FIX: Lower threshold to 0.3 to catch more amp_dominant cases
-    # Also check envelope energy specifically as it's the most reliable amp indicator
-    amp_dominant = score_amp_raw > 0.3 or amp_group.get('env_energy', 0) > 0.3 or amp_group.get('env_max', 0) > 0.3
+    # v7 FIX: Use E_strong threshold (calibratable) for soft suppression
+    E_strong = AMP_EVIDENCE_STRONG_THRESHOLD  # p90(amp_evidence on amp_error class)
+    amp_dominant = score_amp_raw > E_strong or amp_group.get('env_energy', 0) > 0.4 or amp_group.get('env_max', 0) > 0.4
     
     # ==== FREQ GROUP: Frequency Shift/Warp Evidence ====
     freq_group = {}
     
-    # v6 FIX: X16 (corr_shift_bins) and X24 (phase_slope_diff) can be falsely triggered
+    # v7 FIX: X16 (corr_shift_bins) and X24 (phase_slope_diff) can be falsely triggered
     # when amp errors are present. The correlation and phase slope get distorted
     # when amplitude changes are large.
-    # SOLUTION: If amp_dominant, suppress freq_group scores significantly
+    # SOLUTION: Use SOFT SUPPRESSION when amp_dominant (not hard suppression)
+    # This allows true freq faults to still be detected even when amp evidence is also present
+    
+    # Calculate suppression factor: 0 when no amp, up to SOFT_SUPPRESSION_LAMBDA when amp is dominant
+    amp_excess = max(0, score_amp_raw - E_strong)  # How much above threshold
+    suppression_factor = min(1.0, SOFT_SUPPRESSION_LAMBDA * amp_excess)  # Soft suppression factor
+    freq_suppression = 1.0 - suppression_factor * 0.7 if amp_dominant else 1.0  # Don't fully suppress
     
     # X16: corr_shift_bins (now in actual bins, not normalized)
     x16_raw = _get_feature_value(features, 'X16', 'corr_shift_bins')
     x16 = abs(x16_raw)
     # X16 > 100 usually indicates amp error distortion, not real freq shift
-    x16_valid = x16 < X16_AMP_DISTORTION_THRESHOLD and not amp_dominant
-    freq_group['freq_shift'] = min(1.0, x16 / 50.0) if x16_valid else 0.0
+    x16_valid = x16 < X16_AMP_DISTORTION_THRESHOLD
+    freq_group['freq_shift'] = min(1.0, x16 / 50.0) * freq_suppression if x16_valid else 0.0
     
     # X17: warp_scale
     x17 = abs(_get_feature_value(features, 'X17', 'warp_scale'))
-    freq_group['warp_scale'] = min(1.0, x17 / 0.02)  # Adjusted based on actual values
+    freq_group['warp_scale'] = min(1.0, x17 / 0.02)  # Not suppressed - more robust
     
     # X18: warp_bias
     x18 = abs(_get_feature_value(features, 'X18', 'warp_bias'))
-    freq_group['warp_bias'] = min(1.0, x18 / 0.02)  # Adjusted
+    freq_group['warp_bias'] = min(1.0, x18 / 0.02)  # Not suppressed
     
     # X23: warp_residual_energy (NEW) - also sensitive to amp errors
     x23 = abs(_get_feature_value(features, 'X23', 'warp_residual_energy'))
     # Only trust if amp evidence is weak AND value is reasonable
-    freq_group['warp_residual'] = min(1.0, x23 / 2.0) if (x23 < 5.0 and not amp_dominant) else 0.0
+    freq_group['warp_residual'] = min(1.0, x23 / 2.0) * freq_suppression if x23 < 5.0 else 0.0
     
     # X24: phase_slope_diff (NEW) - WAS KEY FREQ INDICATOR BUT ALSO FALSE POSITIVE FOR AMP!
     # Data analysis shows: amp_error X24=0.31, freq_error X24=0.69
-    # So X24 alone is NOT sufficient - we need to suppress when amp is dominant
+    # So X24 alone is NOT sufficient - we use soft suppression when amp is dominant
     x24 = abs(_get_feature_value(features, 'X24', 'phase_slope_diff'))
-    # v6 FIX: Only count X24 as freq evidence if amp is NOT dominant
-    if amp_dominant:
-        # If amp is dominant, X24 is likely a false positive
-        freq_group['phase_slope'] = 0.0
-    else:
-        freq_group['phase_slope'] = min(1.0, x24 / 0.5)  # Primary freq evidence
+    # v7 FIX: Use soft suppression instead of hard zero
+    freq_group['phase_slope'] = min(1.0, x24 / 0.5) * freq_suppression
     
     # X25: interp_mse_after_shift (NEW)
     x25 = abs(_get_feature_value(features, 'X25', 'interp_mse_after_shift'))
-    freq_group['interp_mse'] = min(1.0, x25 / 5.0) if not amp_dominant else 0.0
+    freq_group['interp_mse'] = min(1.0, x25 / 5.0) * freq_suppression
     
     components.update(freq_group)
     
@@ -199,14 +203,21 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     #   X26: normal=0.0004, ref_error=0.0004 (no difference)
     #   X27: normal=0.0001, ref_error=0.0001 (no difference)
     #   X28: normal=0.04,   ref_error=-0.02 (wrong direction!)
+    #
+    # IMPORTANT v7 FIX: X14 is also HIGH for amp_error (mean=1.33 vs ref_error=0.38)
+    # This causes amp to be misclassified as ref. Apply soft suppression when amp_dominant.
     
     ref_group = {}
     
+    # v7 FIX: Calculate ref suppression (like freq suppression)
+    ref_suppression = max(0.5, 1.0 - suppression_factor * 0.5) if amp_dominant else 1.0
+    
     # X14: low_band_residual_mean - THE KEY FEATURE for ref detection
     # normal=0.027, ref_error=0.376 - 14x difference!
+    # BUT ALSO: amp_error=1.33 which is HIGHER than ref_error!
     # threshold 0.10: normal ~0.27, ref_error >1.0
     x14 = abs(_get_feature_value(features, 'X14', 'low_band_residual'))
-    ref_group['low_band_res'] = min(1.0, x14 / 0.10)
+    ref_group['low_band_res'] = min(1.0, x14 / 0.10) * ref_suppression
     
     # Only keep X14 - other features add noise, not signal
     
