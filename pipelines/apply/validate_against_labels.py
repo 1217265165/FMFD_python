@@ -65,7 +65,7 @@ def run_diagnosis(
     from baseline.baseline import align_to_frequency
     from features.extract import extract_system_features
     from BRB.system_brb import system_level_infer
-    from BRB.module_brb import module_level_infer
+    from BRB.module_brb import module_level_infer, DISABLED_MODULES
     from tools.label_mapping import get_topk_modules, SYS_CLASS_TO_CN
     
     # 读取数据
@@ -92,7 +92,7 @@ def run_diagnosis(
     is_normal = sys_result.get('is_normal', False)
     
     # TopK 模块（跳过禁用模块）
-    topk_modules = get_topk_modules(mod_probs, k=10, skip_disabled=True)
+    topk_modules = get_topk_modules(mod_probs, k=10, skip_disabled=True, disabled_modules=list(DISABLED_MODULES))
     
     return {
         'system_diagnosis': {
@@ -115,7 +115,7 @@ def load_labels(labels_path: Path) -> Dict:
         return json.load(f)
 
 
-def check_module_hit(pred_topk: List[Tuple[str, float]], gt_module: Optional[str], k: int = 3) -> Dict:
+def check_module_hit(pred_topk: List[Tuple[str, float]], gt_module: Optional[str], k: int = 3, disabled_modules: list = None) -> Dict:
     """检查模块命中情况。
     
     Parameters
@@ -126,6 +126,8 @@ def check_module_hit(pred_topk: List[Tuple[str, float]], gt_module: Optional[str
         真实模块名（normal 类型为 None）
     k : int
         检查前 k 个
+    disabled_modules : list, optional
+        禁用模块列表
         
     Returns
     -------
@@ -141,7 +143,7 @@ def check_module_hit(pred_topk: List[Tuple[str, float]], gt_module: Optional[str
     gt_normalized = normalize_module_name(gt_module)
     
     # 检查是否为禁用模块
-    if is_module_disabled(gt_module):
+    if is_module_disabled(gt_module, disabled_modules):
         return {'top1_hit': 'NA', 'topk_hit': 'NA', 'skip_reason': 'disabled_module'}
     
     # 获取前 k 个预测
@@ -254,9 +256,10 @@ def main():
     # 导入标签映射
     from tools.label_mapping import (
         SYS_CLASS_TO_CN, CN_TO_SYS_CLASS, 
-        SYS_LABEL_ORDER_CN, DISABLED_MODULES,
+        SYS_LABEL_ORDER_CN,
         normalize_module_name
     )
+    from BRB.module_brb import DISABLED_MODULES
     from baseline.config import BAND_RANGES
     
     # 路径处理
@@ -368,7 +371,7 @@ def main():
         })
         
         # 模块级命中检查
-        mod_hit_result = check_module_hit(pred_topk, gt_module, k=args.topk)
+        mod_hit_result = check_module_hit(pred_topk, gt_module, k=args.topk, disabled_modules=list(DISABLED_MODULES))
         
         if mod_hit_result['top1_hit'] == 'NA':
             skip_reasons[mod_hit_result.get('skip_reason', 'normal_type')] += 1
@@ -402,7 +405,7 @@ def main():
     sys_accuracy = sys_correct / n_evaluated if n_evaluated > 0 else 0.0
     
     # 模块统计（排除 NA）
-    mod_valid = [r for r in module_results if r['top1_hit'] not in ['NA', 'NA']]
+    mod_valid = [r for r in module_results if r['top1_hit'] != 'NA']
     n_mod_valid = len(mod_valid)
     mod_top1_correct = sum(1 for r in mod_valid if r['top1_hit'] == True)
     mod_topk_correct = sum(1 for r in mod_valid if r['topk_hit'] == True)

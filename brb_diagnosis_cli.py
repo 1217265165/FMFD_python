@@ -208,7 +208,7 @@ def main():
         predicted_class = max(sys_probs_dict, key=sys_probs_dict.get) if sys_probs_dict else "未知"
         
         # 获取 TopK 模块（跳过禁用模块）
-        topk_modules = get_topk_modules(mod_probs, k=args.topk, skip_disabled=True)
+        topk_modules = get_topk_modules(mod_probs, k=args.topk, skip_disabled=True, disabled_modules=list(DISABLED_MODULES))
         topk_list = [{"module": name, "probability": float(prob)} for name, prob in topk_modules]
         
         # 证据字段使用 features 中的真实值，保证一致性

@@ -16,6 +16,8 @@
     )
 """
 
+import re
+
 # ============== 系统级类别映射（固定，不允许排序推断）==============
 
 # 系统级故障类别：英文 -> 中文
@@ -37,10 +39,10 @@ SYS_LABEL_ORDER_EN = ["normal", "amp_error", "freq_error", "ref_error"]
 NUM_SYSTEM_CLASSES = len(SYS_LABEL_ORDER_CN)
 
 
-# ============== 禁用模块列表（单频段模式）==============
-
-# 单频段模式下禁用的模块（不参与 TopK 排序和命中统计）
-DISABLED_MODULES = ["前置放大器"]
+# ============== 禁用模块列表 ==============
+# NOTE: DISABLED_MODULES is imported from BRB.module_brb to maintain single source of truth.
+# Do NOT define DISABLED_MODULES here. Use:
+#   from BRB.module_brb import DISABLED_MODULES
 
 
 # ============== 模块名规范化 ==============
@@ -74,33 +76,38 @@ def normalize_module_name(name: str) -> str:
     result = result.replace("（", "(").replace("）", ")")
     
     # 3. 连续空格压缩为单个空格
-    import re
     result = re.sub(r'\s+', ' ', result)
     
     return result
 
 
-def is_module_disabled(module_name: str) -> bool:
+def is_module_disabled(module_name: str, disabled_modules: list = None) -> bool:
     """检查模块是否被禁用。
     
     Parameters
     ----------
     module_name : str
         模块名称
+    disabled_modules : list, optional
+        禁用模块列表。如果为 None，返回 False（无模块被禁用）。
+        建议使用 BRB.module_brb.DISABLED_MODULES。
         
     Returns
     -------
     bool
         True 表示模块被禁用，不参与 TopK 和命中统计
     """
+    if disabled_modules is None:
+        return False
+    
     normalized = normalize_module_name(module_name)
     return any(
         normalize_module_name(disabled) == normalized 
-        for disabled in DISABLED_MODULES
+        for disabled in disabled_modules
     )
 
 
-def get_topk_modules(module_probs: dict, k: int = 3, skip_disabled: bool = True) -> list:
+def get_topk_modules(module_probs: dict, k: int = 3, skip_disabled: bool = True, disabled_modules: list = None) -> list:
     """获取概率最高的前K个模块，可选跳过禁用模块。
     
     Parameters
@@ -111,6 +118,9 @@ def get_topk_modules(module_probs: dict, k: int = 3, skip_disabled: bool = True)
         返回的模块数量
     skip_disabled : bool
         是否跳过禁用模块，默认 True
+    disabled_modules : list, optional
+        禁用模块列表。如果为 None 且 skip_disabled=True，则不跳过任何模块。
+        建议使用 BRB.module_brb.DISABLED_MODULES。
         
     Returns
     -------
@@ -119,8 +129,8 @@ def get_topk_modules(module_probs: dict, k: int = 3, skip_disabled: bool = True)
     """
     items = list(module_probs.items())
     
-    if skip_disabled:
-        items = [(name, prob) for name, prob in items if not is_module_disabled(name)]
+    if skip_disabled and disabled_modules:
+        items = [(name, prob) for name, prob in items if not is_module_disabled(name, disabled_modules)]
     
     sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
     return sorted_items[:k]
