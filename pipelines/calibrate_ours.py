@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Calibrate Ours Method (v5: BRB-MU Reliability Weighting)
-========================================================
+Calibrate Ours Method (v8: Multi-evidence Ref Gate)
+====================================================
 
 This module performs automatic calibration of the ours method parameters
 by grid search on the training/validation set.
 
-v5 improvements (BRB-MU style reliability):
-- Added gamma parameter for reliability-based adaptive temperature
-- Reliability weighting for evidence gating
-- Improved uncertainty handling in module routing
+v8 improvements (Multi-evidence Ref Gate for Amp vs Ref):
+- Added X29, X30, X31 features for Amp vs Ref discrimination
+- Ref Gate Score: I(X14>t14) + I(X29>t29) + I(X30>t30) >= 2
+- Only enable ref boosting when consistent evidence across multiple features
+- Output: feature_separation_amp_ref.csv for verification
 
-Calibration targets:
+v5-v7 features retained:
 - alpha: Softmax temperature (base)
-- gamma: Reliability adaptive temperature factor (NEW in v5)
+- gamma: Reliability adaptive temperature factor
 - T_low, T_high: Dual thresholds for soft gating
 - k_normal_prior: Normal logit scaling factor
-- beta_freq, beta_ref: Evidence gating boost factors
+- beta_freq, beta_ref, beta_amp: Evidence gating boost factors
 
 Optimization objective:
 - Primary: Balanced Accuracy (mean recall)
@@ -29,6 +30,7 @@ Output:
 - Output/sim_spectrum/pred_distribution_ours.csv
 - Output/sim_spectrum/ours_debug_system.csv
 - Output/sim_spectrum/calibration_leaderboard.csv
+- Output/sim_spectrum/feature_separation_amp_ref.csv (NEW in v8)
 """
 
 from __future__ import annotations
@@ -558,6 +560,103 @@ def save_debug_output(
     print(f"\n  pred_normal_ratio = {pred_normal_ratio:.4f}")
 
 
+def generate_feature_separation_amp_ref(features_dict: Dict, labels_dict: Dict, output_path: Path):
+    """v8: Generate feature_separation_amp_ref.csv to verify Amp vs Ref discrimination.
+    
+    Outputs statistics for v8 features (X14, X29, X30, X31) across three groups:
+    - Amp correct: Amp samples correctly classified
+    - Amp→Ref errors: Amp samples misclassified as Ref
+    - Ref correct: Ref samples correctly classified
+    
+    This helps verify that X29, X30, X31 can separate Amp errors from Ref errors.
+    """
+    from BRB.aggregator import system_level_infer_with_sub_brbs, load_calibration
+    
+    calibration = load_calibration()
+    
+    # Collect samples by class and prediction
+    amp_correct = []  # Amp samples correctly predicted as Amp
+    amp_to_ref = []   # Amp samples incorrectly predicted as Ref
+    ref_correct = []  # Ref samples correctly predicted as Ref
+    
+    common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
+    for sample_id in common_ids:
+        features = features_dict[sample_id]
+        label = extract_system_label(labels_dict[sample_id])
+        
+        # Get prediction
+        result = system_level_infer_with_sub_brbs(features, calibration=calibration)
+        pred_class = result['predicted_class']
+        
+        # Map prediction to label index
+        pred_idx = {'正常': 0, '幅度失准': 1, '频率失准': 2, '参考电平失准': 3}.get(pred_class, -1)
+        
+        # Extract v8 features
+        f_row = {
+            'X14': features.get('X14', 0),
+            'X29': features.get('X29', 0),
+            'X30': features.get('X30', 0),
+            'X31': features.get('X31', 0),
+        }
+        
+        if label == 1:  # Amp
+            if pred_idx == 1:
+                amp_correct.append(f_row)
+            elif pred_idx == 3:  # Amp→Ref error
+                amp_to_ref.append(f_row)
+        elif label == 3:  # Ref
+            if pred_idx == 3:
+                ref_correct.append(f_row)
+    
+    # Compute statistics
+    def compute_stats(group_name, rows):
+        if not rows:
+            return {
+                'group': group_name, 'n': 0,
+                'X14_mean': 0, 'X14_std': 0,
+                'X29_mean': 0, 'X29_std': 0,
+                'X30_mean': 0, 'X30_std': 0,
+                'X31_mean': 0, 'X31_std': 0,
+            }
+        
+        x14_vals = [r['X14'] for r in rows]
+        x29_vals = [r['X29'] for r in rows]
+        x30_vals = [r['X30'] for r in rows]
+        x31_vals = [r['X31'] for r in rows]
+        
+        return {
+            'group': group_name,
+            'n': len(rows),
+            'X14_mean': np.mean(x14_vals),
+            'X14_std': np.std(x14_vals),
+            'X29_mean': np.mean(x29_vals),
+            'X29_std': np.std(x29_vals),
+            'X30_mean': np.mean(x30_vals),
+            'X30_std': np.std(x30_vals),
+            'X31_mean': np.mean(x31_vals),
+            'X31_std': np.std(x31_vals),
+        }
+    
+    stats_rows = [
+        compute_stats('Amp_correct', amp_correct),
+        compute_stats('Amp_to_Ref_error', amp_to_ref),
+        compute_stats('Ref_correct', ref_correct),
+    ]
+    
+    # Write CSV
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=stats_rows[0].keys())
+        writer.writeheader()
+        writer.writerows(stats_rows)
+    
+    print(f"\nSaved feature_separation_amp_ref.csv to: {output_path}")
+    print("\n=== v8 Feature Separation (Amp vs Ref) ===")
+    for row in stats_rows:
+        print(f"  {row['group']:20s} (n={row['n']:3d}): "
+              f"X14={row['X14_mean']:.4f}, X29={row['X29_mean']:.4f}, "
+              f"X30={row['X30_mean']:.4f}, X31={row['X31_mean']:.4f}")
+
+
 def save_calibration(calibration: Dict, output_path: Path):
     """Save calibration parameters to JSON file."""
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -590,6 +689,9 @@ def main():
         print("Please run simulation first: python pipelines/simulate/run_simulation_brb.py")
         return 1
     
+    # Step 0: v8 - Generate feature_separation_amp_ref.csv for verification
+    generate_feature_separation_amp_ref(features_dict, labels_dict, data_dir / 'feature_separation_amp_ref.csv')
+    
     # Step 1: Compute and save anchor score statistics by class (with grouped scores)
     anchor_results = compute_anchor_scores_for_samples(features_dict, labels_dict)
     save_anchor_score_by_class(anchor_results, data_dir / 'anchor_score_by_class.csv')
@@ -610,7 +712,7 @@ def main():
     best_params['calibration_balanced_accuracy'] = best_balanced_acc
     best_params['calibration_macro_f1'] = best_f1
     best_params['single_band_mode'] = True
-    best_params['version'] = 'v8_aggressive_amp_suppression'
+    best_params['version'] = 'v8_X30_amp_ref_gate'
     
     # Save calibration
     calibration_path = output_dir / "calibration.json"

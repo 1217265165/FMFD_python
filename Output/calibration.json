@@ -13,8 +13,8 @@
   "max_prob_threshold": 0.35,
   "T_normal": 0.4263736263736307,
   "T_prob": 0.35,
-  "calibration_balanced_accuracy": 0.8075,
-  "calibration_macro_f1": 0.8052743229858095,
+  "calibration_balanced_accuracy": 0.8425,
+  "calibration_macro_f1": 0.8429783330844133,
   "single_band_mode": true,
-  "version": "v8_aggressive_amp_suppression"
+  "version": "v8_X30_amp_ref_gate"
 }

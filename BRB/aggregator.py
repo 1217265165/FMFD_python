@@ -46,6 +46,17 @@ REF_SUPPRESS_MULTIPLIER = 0.5  # How much ref is suppressed when amp is dominant
 REF_MIN_RETAIN = 0.1  # Minimum retention for ref evidence when amp is clearly dominant
 X14_AMP_VS_REF_THRESHOLD = 0.5  # X14 > this suggests Amp error, not Ref error
 
+# v8 Constants for multi-evidence Ref Gate (FIXED based on data analysis)
+# Data analysis results (feature_separation_amp_ref.csv):
+#   Amp→Ref errors: X14=0.25 (LOW), X30=0.45 (HIGH)
+#   Amp_correct:    X14=2.32 (HIGH), X30=0.04 (LOW)
+#   Ref_correct:    X14=0.20 (LOW), X30=0.06 (LOW)
+#
+# Key insight: HIGH X30 (compress_index > 0.2) = Amp error, NOT Ref!
+# So we SUPPRESS ref when X30 is high (opposite to original v8 logic)
+X30_AMP_INDICATOR_THRESHOLD = 0.2  # X30 > this suggests Amp error (suppress ref)
+X14_REF_MAX_THRESHOLD = 0.5  # X14 < this may be Ref (combined with low X30)
+
 # Default calibration values
 DEFAULT_CALIBRATION = {
     'alpha': 2.0,           # Softmax temperature
@@ -109,6 +120,11 @@ def compute_evidence_gating(
     When amp_evidence is high AND X14 > 0.5, suppress ref boosting.
     When amp_evidence is high AND X14 < 0.5, DON'T suppress ref (it's likely ref).
     
+    v8 FIX: Multi-evidence Ref Gate
+    - Ref Gate Score = I(X14>t14) + I(X29>t29) + I(X30>t30)
+    - If ref_gate_score < 2: ref_boost = 0 (no ref boosting unless consistent evidence)
+    - This prevents Amp errors with high X14 from being misclassified as Ref
+    
     Parameters
     ----------
     features : dict
@@ -135,8 +151,11 @@ def compute_evidence_gating(
         amp_evidence = max(x11 / 0.3, x12 / 4.0, x13 / 500.0)
         amp_evidence = min(1.0, amp_evidence)
     
-    # Get X14 for Amp vs Ref discrimination
+    # Get X14, X29, X30 for v8 multi-evidence Ref Gate
     x14 = abs(float(features.get('X14', 0)))  # low_band_residual
+    x29 = float(features.get('X29', 0))  # HF/LF energy ratio (can be negative)
+    x30 = float(features.get('X30', 0))  # High-level compression index (can be negative)
+    x31 = abs(float(features.get('X31', 0)))  # Piecewise offset consistency
     
     # v7 FIX: Use SOFT SUPPRESSION instead of hard MUTEX
     E_strong = AMP_EVIDENCE_STRONG_THRESHOLD
@@ -146,18 +165,30 @@ def compute_evidence_gating(
     # freq gets soft suppression when amp is strong (but never zero out completely)
     freq_retain = max(FREQ_MIN_RETAIN, 1.0 - suppression_factor * FREQ_SUPPRESS_MULTIPLIER)
     
-    # v7.1 FIX: ref suppression depends on BOTH amp_evidence AND X14
-    # - If amp_evidence high AND X14 > 0.5: probably Amp, suppress ref
-    # - If amp_evidence high AND X14 < 0.5: probably Ref, DON'T suppress ref
-    if amp_evidence > E_strong and x14 > X14_AMP_VS_REF_THRESHOLD:
-        # High X14 + high amp_evidence = Amp error, suppress ref
+    # ===== v8 FIX: Corrected Ref Gate based on data analysis =====
+    # Key finding from feature_separation_amp_ref.csv:
+    #   Amp→Ref errors: X14=0.25 (low), X30=0.45 (HIGH) <- X30 indicates Amp NOT Ref!
+    #   Amp_correct:    X14=2.32 (high), X30=0.04 (low)
+    #   Ref_correct:    X14=0.20 (low), X30=0.06 (low)
+    #
+    # Rule: If X30 > 0.2, it's likely Amp (suppress ref); If X14 < 0.5 AND X30 < 0.2, allow ref
+    
+    # Check if this looks like an Amp error being wrongly classified as Ref
+    is_amp_disguised_as_ref = abs(x30) > X30_AMP_INDICATOR_THRESHOLD  # High compress_index = Amp
+    is_possible_ref = x14 < X14_REF_MAX_THRESHOLD and abs(x30) < X30_AMP_INDICATOR_THRESHOLD
+    
+    if is_amp_disguised_as_ref:
+        # High X30 indicates Amp error - suppress ref completely
+        ref_retain = 0.0
+    elif amp_evidence > E_strong and x14 > X14_AMP_VS_REF_THRESHOLD:
+        # High amp evidence with high X14 = definitely Amp, suppress ref
         ref_retain = REF_MIN_RETAIN
-    elif amp_evidence > E_strong and x14 < 0.2:
-        # Low X14 + high amp_evidence = unusual, still suppress ref
-        ref_retain = max(FREQ_MIN_RETAIN, 1.0 - suppression_factor * REF_SUPPRESS_MULTIPLIER)
-    else:
-        # Either low amp_evidence OR moderate X14 (0.2-0.5) = allow ref
+    elif is_possible_ref:
+        # Low X14 AND low X30 = possibly Ref, allow boosting
         ref_retain = 1.0
+    else:
+        # Ambiguous - use partial suppression
+        ref_retain = 0.5
     
     # Frequency evidence thresholds (normalized)
     freq_evidence = 0.0

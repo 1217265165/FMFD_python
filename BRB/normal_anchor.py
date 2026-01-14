@@ -198,15 +198,15 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     # NOTE: After data analysis, only X14 (low_band_residual) distinguishes ref_error from normal
     # Other features (X3, X26, X27, X28) do NOT discriminate - they add noise!
     # 
+    # v8 NOTE: X29-X31 features are used in aggregator.py for Amp vs Ref discrimination,
+    # NOT here in anchor_score. Including them here causes score_ref to be high for Normal
+    # which breaks Normal detection. Keep ref_group simple with just X14.
+    #
     # Data analysis results:
     #   X14: normal=0.027, ref_error=0.376 (14x difference) ✓
-    #   X3:  normal=0.0002, ref_error=0.0002 (no difference)
-    #   X26: normal=0.0004, ref_error=0.0004 (no difference)
-    #   X27: normal=0.0001, ref_error=0.0001 (no difference)
-    #   X28: normal=0.04,   ref_error=-0.02 (wrong direction!)
+    #   BUT: amp_error X14=1.33 which is HIGHER than ref_error!
     #
-    # IMPORTANT v7 FIX: X14 is also HIGH for amp_error (mean=1.33 vs ref_error=0.38)
-    # This causes amp to be misclassified as ref. Apply soft suppression when amp_dominant.
+    # The Amp vs Ref discrimination is handled in aggregator.py using X30.
     
     ref_group = {}
     
@@ -214,13 +214,10 @@ def compute_anchor_score(features: Dict[str, float], config: NormalAnchorConfig 
     ref_suppression = max(0.5, 1.0 - suppression_factor * 0.5) if amp_dominant else 1.0
     
     # X14: low_band_residual_mean - THE KEY FEATURE for ref detection
-    # normal=0.027, ref_error=0.376 - 14x difference!
-    # BUT ALSO: amp_error=1.33 which is HIGHER than ref_error!
-    # threshold 0.10: normal ~0.27, ref_error >1.0
     x14 = abs(_get_feature_value(features, 'X14', 'low_band_residual'))
     ref_group['low_band_res'] = min(1.0, x14 / 0.10) * ref_suppression
     
-    # Only keep X14 - other features add noise, not signal
+    # Keep only X14 in ref_group - X29-X31 are used for gating in aggregator.py
     
     components.update(ref_group)
     

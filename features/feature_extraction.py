@@ -498,6 +498,76 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             except Exception:
                 x28 = 0.0
 
+    # ============ v8 NEW FEATURES for Amp vs Ref discrimination ============
+    # These features are designed to distinguish Amp errors from Ref errors
+    # when both have high X14 (low_band_residual)
+    #
+    # Amp errors: tend to be "global gain/compression" → HF/LF ratio close to 1
+    # Ref errors: tend to be "segment/threshold-based" → HF/LF ratio more variable
+    
+    x29, x30, x31 = 0.0, 0.0, 0.0
+    
+    if baseline_curve is not None:
+        baseline = np.asarray(baseline_curve, dtype=float)
+        if baseline.shape == arr.shape and len(arr) > 10:
+            try:
+                # v8 constants for Amp vs Ref features
+                V8_EPSILON = 1e-12  # Numerical stability constant
+                V8_LF_RATIO = 0.3   # Low frequency band ratio (first 30%)
+                V8_HF_RATIO = 0.7   # High frequency band start ratio (last 30%)
+                V8_COMPRESS_PERCENTILE = 80  # Percentile for compression analysis
+                V8_PIECEWISE_SEGMENTS = 5    # Number of segments for piecewise analysis
+                
+                # Residual for all v8 features
+                r = arr - baseline
+                
+                # X29: HF/LF Energy Ratio (log scale)
+                # Amp errors: more uniform (ratio closer to 0)
+                # Ref errors: more segment-dependent (ratio more extreme)
+                n_points = len(r)
+                lf_idx = int(n_points * V8_LF_RATIO)  # First 30% = low frequency
+                hf_idx = int(n_points * V8_HF_RATIO)  # Last 30% = high frequency
+                
+                E_LF = np.mean(r[:lf_idx] ** 2) if lf_idx > 0 else V8_EPSILON
+                E_HF = np.mean(r[hf_idx:] ** 2) if hf_idx < n_points else V8_EPSILON
+                
+                x29 = float(np.log((E_HF + V8_EPSILON) / (E_LF + V8_EPSILON)))
+                
+                # X30: High-level Compression Index
+                # Ref errors often show compression in high amplitude region
+                # Amp errors show more uniform changes
+                q80 = np.percentile(arr, V8_COMPRESS_PERCENTILE)
+                upper_mask = arr >= q80
+                lower_mask = arr < q80
+                
+                if np.sum(upper_mask) > 5 and np.sum(lower_mask) > 5:
+                    mean_upper = np.mean(r[upper_mask])
+                    mean_lower = np.mean(r[lower_mask])
+                    x30 = float(mean_upper - mean_lower)
+                else:
+                    x30 = 0.0
+                
+                # X31: Piecewise Offset Consistency (segment variance)
+                # Ref errors: higher variance across segments (segment-dependent offsets)
+                # Amp errors: lower variance (more uniform changes)
+                n_seg = V8_PIECEWISE_SEGMENTS
+                seg_size = n_points // n_seg
+                seg_means = []
+                
+                for i in range(n_seg):
+                    start = i * seg_size
+                    end = (i + 1) * seg_size if i < n_seg - 1 else n_points
+                    if end > start:
+                        seg_means.append(np.mean(r[start:end]))
+                
+                if len(seg_means) > 1:
+                    x31 = float(np.std(seg_means))
+                else:
+                    x31 = 0.0
+                    
+            except Exception:
+                x29, x30, x31 = 0.0, 0.0, 0.0
+
     return {
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
         "X6": x6, "X7": x7, "X8": x8, "X9": x9, "X10": x10,
@@ -506,6 +576,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X19": x19, "X20": x20, "X21": x21, "X22": x22,
         "X23": x23, "X24": x24, "X25": x25,  # New freq features
         "X26": x26, "X27": x27, "X28": x28,  # New ref features
+        "X29": x29, "X30": x30, "X31": x31,  # v8: Amp vs Ref features
     }
 
 
