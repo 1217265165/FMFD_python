@@ -10,10 +10,14 @@ BRB 诊断命令行接口
   
 输入CSV格式: frequency,amplitude (两列，频率和幅度)
 输出JSON格式: 包含系统级和模块级诊断结果
+
+新增功能:
+  --labels: 提供 labels.json 文件路径，可在输出中附加 ground_truth 字段
 """
 
 import argparse
 import json
+import re
 import sys
 import os
 import warnings
@@ -48,6 +52,34 @@ def resolve_import_path():
     return fmfd_root
 
 
+def parse_sample_id(input_path: Path) -> str:
+    """从输入文件名中解析 sample_id。
+    
+    解析规则：
+    1. 尝试正则匹配 sim_XXXXX 格式（5位数字）
+    2. 如果无法匹配，使用文件名（不含扩展名）
+    
+    Parameters
+    ----------
+    input_path : Path
+        输入文件路径
+        
+    Returns
+    -------
+    str
+        解析出的 sample_id
+    """
+    filename = input_path.stem  # 不含扩展名的文件名
+    
+    # 尝试匹配 sim_XXXXX 格式
+    match = re.search(r'(sim_\d{5})', filename)
+    if match:
+        return match.group(1)
+    
+    # 回退到使用文件名
+    return filename
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='BRB诊断命令行工具 - 频响异常诊断',
@@ -56,6 +88,7 @@ def main():
 示例:
   python brb_diagnosis_cli.py --input test_data.csv --output result.json
   python brb_diagnosis_cli.py --input test_data.csv --output result.json --baseline ./baseline_data
+  python brb_diagnosis_cli.py --input sim_00009.csv --output result.json --labels labels.json
         """
     )
     
@@ -74,6 +107,10 @@ def main():
                         help='运行名称 (用于组织输出目录，默认使用时间戳)')
     parser.add_argument('--out_dir', default='Output',
                         help='输出目录根路径 (默认: Output)')
+    parser.add_argument('--labels', '-l', default=None,
+                        help='labels.json 文件路径 (可选，用于回填 ground_truth)')
+    parser.add_argument('--topk', type=int, default=3,
+                        help='输出 TopK 模块数量 (默认: 3)')
     
     args = parser.parse_args()
     
@@ -82,11 +119,15 @@ def main():
     
     try:
         # 导入FMFD模块
-        from FMFD.baseline.baseline import align_to_frequency
-        from FMFD.baseline.config import BASELINE_ARTIFACTS, BASELINE_META, BAND_RANGES
-        from FMFD.features.extract import extract_system_features
-        from FMFD.BRB.system_brb import system_level_infer
-        from FMFD.BRB.module_brb import module_level_infer
+        from baseline.baseline import align_to_frequency
+        from baseline.config import BASELINE_ARTIFACTS, BASELINE_META, BAND_RANGES
+        from features.extract import extract_system_features
+        from BRB.system_brb import system_level_infer
+        from BRB.module_brb import module_level_infer, DISABLED_MODULES
+        from tools.label_mapping import (
+            SYS_CLASS_TO_CN, CN_TO_SYS_CLASS, 
+            get_topk_modules, normalize_module_name
+        )
         
         if args.verbose:
             print(f"[INFO] FMFD模块导入成功", file=sys.stderr)
@@ -97,6 +138,11 @@ def main():
         if not input_path.exists():
             print(f"[错误] 输入文件不存在: {input_path}", file=sys.stderr)
             sys.exit(1)
+        
+        # 解析 sample_id
+        sample_id = parse_sample_id(input_path)
+        if args.verbose:
+            print(f"[INFO] 解析 sample_id: {sample_id}", file=sys.stderr)
         
         df = pd.read_csv(input_path)
         if df.shape[1] < 2:
@@ -155,15 +201,25 @@ def main():
             print(f"[INFO] 模块级诊断完成 ({len(mod_probs)}个模块)", file=sys.stderr)
         
         # 5. 构造输出结果
-        # 计算证据字段
+        # 计算证据字段（直接从 features 获取，保证一致性）
         sys_probs_dict = sys_probs.get('probabilities', sys_probs) if isinstance(sys_probs, dict) else sys_probs
         is_normal = sys_probs.get('is_normal', False) if isinstance(sys_probs, dict) else False
         max_prob = max(sys_probs_dict.values()) if sys_probs_dict else 0.0
         predicted_class = max(sys_probs_dict, key=sys_probs_dict.get) if sys_probs_dict else "未知"
         
+        # 获取 TopK 模块（跳过禁用模块）
+        topk_modules = get_topk_modules(mod_probs, k=args.topk, skip_disabled=True)
+        topk_list = [{"module": name, "probability": float(prob)} for name, prob in topk_modules]
+        
+        # 证据字段使用 features 中的真实值，保证一致性
+        viol_rate = float(features.get('viol_rate', 0.0))
+        
         result = {
             "status": "success",
-            "input_file": str(input_path.absolute()),
+            "meta": {
+                "sample_id": sample_id,
+                "input_file": str(input_path.absolute()),
+            },
             "data_points": len(freq_raw),
             "frequency_range": {
                 "min": float(freq_raw.min()),
@@ -176,19 +232,56 @@ def main():
                 "max_prob": float(max_prob),
                 "is_normal": is_normal,
             },
-            "module_diagnosis": {k: float(v) for k, v in mod_probs.items()},
+            "module_diagnosis": {
+                "probabilities": {k: float(v) for k, v in mod_probs.items()},
+                "topk": topk_list,
+                "disabled_modules": list(DISABLED_MODULES),
+            },
             "evidence": {
-                "envelope_violation": features.get('X11', 0) > 0.1,
-                "violation_max_db": float(features.get('X12', 0)),
-                "violation_energy": float(features.get('X13', 0)),
+                "viol_rate": viol_rate,
+                "envelope_violation": viol_rate > 0.1,
+                "violation_max_db": float(features.get('X12', features.get('env_overrun_max', 0.0))),
+                "violation_energy": float(features.get('X13', features.get('env_violation_energy', 0.0))),
+                "baseline_coverage": 1.0 - viol_rate,
             },
             "config": {
                 "mode": args.mode,
                 "run_name": args.run_name,
+                "topk": args.topk,
             }
         }
         
-        # 6. 保存结果
+        # 6. 如果提供了 labels.json，加载 ground_truth
+        if args.labels:
+            labels_path = Path(args.labels)
+            if labels_path.exists():
+                try:
+                    with open(labels_path, 'r', encoding='utf-8') as f:
+                        labels_data = json.load(f)
+                    
+                    if sample_id in labels_data:
+                        gt = labels_data[sample_id]
+                        gt_sys_class = gt.get("system_fault_class")
+                        gt_sys_cn = SYS_CLASS_TO_CN.get(gt_sys_class, "正常") if gt_sys_class else "正常"
+                        
+                        result["ground_truth"] = {
+                            "type": gt.get("type", "unknown"),
+                            "system_class_en": gt_sys_class or "normal",
+                            "system_class_cn": gt_sys_cn,
+                            "module": gt.get("module"),
+                            "fault_params": gt.get("fault_params", {}),
+                        }
+                        
+                        if args.verbose:
+                            print(f"[INFO] 已加载 ground_truth: {gt_sys_cn}", file=sys.stderr)
+                    else:
+                        if args.verbose:
+                            print(f"[WARN] sample_id '{sample_id}' 不在 labels.json 中", file=sys.stderr)
+                except Exception as e:
+                    if args.verbose:
+                        print(f"[WARN] 加载 labels.json 失败: {e}", file=sys.stderr)
+        
+        # 7. 保存结果
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -200,18 +293,33 @@ def main():
             print("\n" + "="*50, file=sys.stderr)
             print("[系统级诊断结果]", file=sys.stderr)
             print("="*50, file=sys.stderr)
+            print(f"  样本ID: {sample_id}", file=sys.stderr)
             print(f"  预测类别: {predicted_class}", file=sys.stderr)
-            print(f"  最大概率: {max_prob:.4f}", file=sys.stderr)
+            print(f"  最大概率: {max_prob:.4f} ({max_prob*100:.2f}%)", file=sys.stderr)
             print(f"  是否正常: {is_normal}", file=sys.stderr)
             print("\n  概率分布:", file=sys.stderr)
             for k, v in sys_probs_dict.items():
-                print(f"    {k}: {v:.4f}", file=sys.stderr)
+                print(f"    {k}: {v:.4f} ({v*100:.2f}%)", file=sys.stderr)
             print("\n" + "="*50, file=sys.stderr)
-            print("[模块级诊断TOP5]", file=sys.stderr)
+            print(f"[模块级诊断 TOP{args.topk}]（跳过禁用: {DISABLED_MODULES}）", file=sys.stderr)
             print("="*50, file=sys.stderr)
-            sorted_mods = sorted(mod_probs.items(), key=lambda x: x[1], reverse=True)[:5]
-            for i, (k, v) in enumerate(sorted_mods, 1):
-                print(f"  {i}. {k}: {v:.4f}", file=sys.stderr)
+            for i, item in enumerate(topk_list, 1):
+                print(f"  {i}. {item['module']}: {item['probability']:.4f} ({item['probability']*100:.2f}%)", file=sys.stderr)
+            print("\n" + "="*50, file=sys.stderr)
+            print("[证据特征]", file=sys.stderr)
+            print("="*50, file=sys.stderr)
+            print(f"  viol_rate: {viol_rate:.4f}", file=sys.stderr)
+            print(f"  violation_max_db: {result['evidence']['violation_max_db']:.4f}", file=sys.stderr)
+            print(f"  violation_energy: {result['evidence']['violation_energy']:.4f}", file=sys.stderr)
+            print(f"  baseline_coverage: {result['evidence']['baseline_coverage']:.4f}", file=sys.stderr)
+            if "ground_truth" in result:
+                print("\n" + "="*50, file=sys.stderr)
+                print("[Ground Truth]", file=sys.stderr)
+                print("="*50, file=sys.stderr)
+                gt = result["ground_truth"]
+                print(f"  类型: {gt['type']}", file=sys.stderr)
+                print(f"  系统级: {gt['system_class_cn']}", file=sys.stderr)
+                print(f"  模块: {gt['module']}", file=sys.stderr)
             print("\n" + "="*50, file=sys.stderr)
             print(f"[输出文件] {output_path}", file=sys.stderr)
             print("="*50, file=sys.stderr)
