@@ -1872,7 +1872,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.58,
+      "compression_threshold_db": -9.68,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1886,7 +1886,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.34850818345606915,
-      "compression_threshold_db": -9.588,
+      "compression_threshold_db": -9.68,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1900,7 +1900,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.35775971787025596,
-      "compression_threshold_db": -9.629999999999999,
+      "compression_threshold_db": -9.67,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1914,7 +1914,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.21473369413656146,
-      "compression_threshold_db": -9.639999999999999,
+      "compression_threshold_db": -9.62,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1928,7 +1928,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.59,
+      "compression_threshold_db": -9.649999999999999,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1942,7 +1942,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.8186735403795649,
       "compression_coef": 0.21171050539071382,
-      "compression_threshold_db": -9.061326459620435,
+      "compression_threshold_db": -9.081326459620435,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1956,7 +1956,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.32029031247981116,
       "compression_coef": 0.2986260276669374,
-      "compression_threshold_db": -9.529709687520189,
+      "compression_threshold_db": -9.56970968752019,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1970,7 +1970,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3083227245562312,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.58167727544377,
+      "compression_threshold_db": -9.60167727544377,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -1984,7 +1984,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.18511734633772314,
-      "compression_threshold_db": -9.77,
+      "compression_threshold_db": -9.59,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2040,7 +2040,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3249364959107448,
       "compression_coef": 0.28233663080882737,
-      "compression_threshold_db": -10.304936495910745,
+      "compression_threshold_db": -10.274936495910744,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2054,7 +2054,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.7388003934060112,
       "compression_coef": 0.2707334241810984,
-      "compression_threshold_db": -9.171199606593989,
+      "compression_threshold_db": -9.181199606593989,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2068,7 +2068,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.16263972162022589,
-      "compression_threshold_db": -10.280000000000001,
+      "compression_threshold_db": -10.25,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2082,7 +2082,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.35846725905855253,
-      "compression_threshold_db": -10.190000000000001,
+      "compression_threshold_db": -10.21,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2096,7 +2096,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.4480801522821735,
       "compression_coef": 0.2787775373023295,
-      "compression_threshold_db": -10.328080152282174,
+      "compression_threshold_db": -10.318080152282173,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2110,7 +2110,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.3011603247295947,
-      "compression_threshold_db": -10.190000000000001,
+      "compression_threshold_db": -10.260000000000002,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2124,7 +2124,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.19813128417286907,
-      "compression_threshold_db": -10.17,
+      "compression_threshold_db": -10.290000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2138,7 +2138,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.9297398248155194,
       "compression_coef": 0.16248439214908839,
-      "compression_threshold_db": -9.02026017518448,
+      "compression_threshold_db": -8.960260175184482,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2166,7 +2166,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.4040666520404802,
       "compression_coef": 0.20841927285476827,
-      "compression_threshold_db": -9.48393334795952,
+      "compression_threshold_db": -9.57593334795952,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2180,7 +2180,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.31221198628072255,
-      "compression_threshold_db": -10.25,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2194,7 +2194,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.5914918665792475,
       "compression_coef": 0.3036125821816298,
-      "compression_threshold_db": -10.521491866579247,
+      "compression_threshold_db": -10.511491866579247,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2208,7 +2208,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.49451888000914224,
       "compression_coef": 0.17062992026487717,
-      "compression_threshold_db": -10.424518880009142,
+      "compression_threshold_db": -10.464518880009143,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2222,7 +2222,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.38609833478329647,
       "compression_coef": 0.29284708232905116,
-      "compression_threshold_db": -9.493901665216704,
+      "compression_threshold_db": -9.483901665216703,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2236,7 +2236,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.22356166625048338,
-      "compression_threshold_db": -9.61,
+      "compression_threshold_db": -9.58,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2250,7 +2250,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.4599263900404371,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.390073609959563,
+      "compression_threshold_db": -9.430073609959564,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2264,7 +2264,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.39229542078594787,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.537704579214052,
+      "compression_threshold_db": -9.577704579214053,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2278,7 +2278,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.1686392356062687,
-      "compression_threshold_db": -9.58,
+      "compression_threshold_db": -9.68,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2292,7 +2292,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.8417712912033242,
       "compression_coef": 0.3286379088755173,
-      "compression_threshold_db": -9.088228708796676,
+      "compression_threshold_db": -9.048228708796676,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2320,7 +2320,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3771446409835071,
       "compression_coef": 0.15,
-      "compression_threshold_db": -10.297144640983507,
+      "compression_threshold_db": -10.267144640983508,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2334,7 +2334,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.15,
-      "compression_threshold_db": -10.180000000000001,
+      "compression_threshold_db": -10.280000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2348,7 +2348,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.4467081510949339,
-      "compression_threshold_db": -10.23,
+      "compression_threshold_db": -10.270000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2362,7 +2362,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.1621054425853689,
-      "compression_threshold_db": -9.629999999999999,
+      "compression_threshold_db": -9.67,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2376,7 +2376,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.37458391417701464,
-      "compression_threshold_db": -10.21,
+      "compression_threshold_db": -10.23,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2404,7 +2404,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.15389369209455464,
-      "compression_threshold_db": -10.180000000000001,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2418,7 +2418,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.39687789070377066,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.49312210929623,
+      "compression_threshold_db": -9.51312210929623,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2432,7 +2432,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.33153263148224693,
       "compression_coef": 0.28056672648159836,
-      "compression_threshold_db": -9.648467368517753,
+      "compression_threshold_db": -9.618467368517752,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2446,7 +2446,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3542880616710594,
       "compression_coef": 0.23818523517593998,
-      "compression_threshold_db": -9.55571193832894,
+      "compression_threshold_db": -9.53571193832894,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2460,7 +2460,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.24506768746602378,
-      "compression_threshold_db": -9.58,
+      "compression_threshold_db": -9.629999999999999,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2474,7 +2474,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.46726744184928426,
-      "compression_threshold_db": -10.21,
+      "compression_threshold_db": -10.180000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2488,7 +2488,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.15717375725101068,
-      "compression_threshold_db": -9.549999999999999,
+      "compression_threshold_db": -9.629999999999999,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2516,7 +2516,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.22345053534325557,
-      "compression_threshold_db": -10.25,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2530,7 +2530,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.5243766805987018,
       "compression_coef": 0.5115652716130417,
-      "compression_threshold_db": -9.4456233194013,
+      "compression_threshold_db": -9.3656233194013,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2544,7 +2544,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.15,
-      "compression_threshold_db": -10.280000000000001,
+      "compression_threshold_db": -10.25,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2558,7 +2558,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2914965042220072,
-      "compression_threshold_db": -10.17,
+      "compression_threshold_db": -10.290000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2572,7 +2572,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.19228917225429548,
-      "compression_threshold_db": -10.180000000000001,
+      "compression_threshold_db": -10.200000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2600,7 +2600,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.2394746002247758,
-      "compression_threshold_db": -9.629999999999999,
+      "compression_threshold_db": -9.67,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2614,7 +2614,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.33436838566614724,
       "compression_coef": 0.17028697628179018,
-      "compression_threshold_db": -9.545631614333853,
+      "compression_threshold_db": -9.535631614333852,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2628,7 +2628,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.18824006374784796,
-      "compression_threshold_db": -10.24,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2642,7 +2642,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.17635956747796444,
-      "compression_threshold_db": -10.15,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2656,7 +2656,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3188018305402538,
       "compression_coef": 0.3742934362449061,
-      "compression_threshold_db": -9.571198169459747,
+      "compression_threshold_db": -9.561198169459747,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2684,7 +2684,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.37850860078575593,
       "compression_coef": 0.19089281426508217,
-      "compression_threshold_db": -10.358508600785756,
+      "compression_threshold_db": -10.228508600785755,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2712,7 +2712,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.5931277473505533,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.296872252649447,
+      "compression_threshold_db": -9.326872252649446,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2726,7 +2726,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2894176178594533,
-      "compression_threshold_db": -10.200000000000001,
+      "compression_threshold_db": -10.17,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2740,7 +2740,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2783698510836375,
-      "compression_threshold_db": -10.25,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2754,7 +2754,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.2205758923149309,
-      "compression_threshold_db": -9.61,
+      "compression_threshold_db": -9.62,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2768,7 +2768,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.299381335983616,
-      "compression_threshold_db": -10.22,
+      "compression_threshold_db": -10.200000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2782,7 +2782,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3695513396225608,
       "compression_coef": 0.24364722594987714,
-      "compression_threshold_db": -10.28955133962256,
+      "compression_threshold_db": -10.259551339622561,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2796,7 +2796,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.7124649281884311,
       "compression_coef": 0.16713922681504176,
-      "compression_threshold_db": -9.227535071811568,
+      "compression_threshold_db": -9.207535071811568,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2824,7 +2824,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2813838924292689,
-      "compression_threshold_db": -10.21,
+      "compression_threshold_db": -10.370000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2838,7 +2838,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.3722175232936781,
-      "compression_threshold_db": -10.21,
+      "compression_threshold_db": -10.180000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2852,7 +2852,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.6126446838920857,
       "compression_coef": 0.26459767103572235,
-      "compression_threshold_db": -10.502644683892086,
+      "compression_threshold_db": -10.572644683892086,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2866,7 +2866,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.2404999245253803,
-      "compression_threshold_db": -9.61,
+      "compression_threshold_db": -9.77,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2880,7 +2880,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.5830225532744837,
       "compression_coef": 0.15,
-      "compression_threshold_db": -9.376977446725517,
+      "compression_threshold_db": -9.356977446725516,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2894,7 +2894,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.20739433260265666,
-      "compression_threshold_db": -10.22,
+      "compression_threshold_db": -10.15,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2908,7 +2908,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.4434507810508034,
-      "compression_threshold_db": -10.180000000000001,
+      "compression_threshold_db": -10.190000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2922,7 +2922,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.28798019871545394,
-      "compression_threshold_db": -10.190000000000001,
+      "compression_threshold_db": -10.21,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2936,7 +2936,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.21487193504654586,
-      "compression_threshold_db": -10.190000000000001,
+      "compression_threshold_db": -10.260000000000002,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2950,7 +2950,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.42591166511059325,
       "compression_coef": 0.320516468419674,
-      "compression_threshold_db": -9.494088334889407,
+      "compression_threshold_db": -9.474088334889407,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2964,7 +2964,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.28532310377257286,
-      "compression_threshold_db": -9.61,
+      "compression_threshold_db": -9.77,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2978,7 +2978,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.5942989953359131,
       "compression_coef": 0.24130793997845826,
-      "compression_threshold_db": -10.504298995335914,
+      "compression_threshold_db": -10.474298995335914,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -2992,7 +2992,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.3218616336669402,
-      "compression_threshold_db": -9.77,
+      "compression_threshold_db": -9.58,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3006,7 +3006,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.19374459729182478,
-      "compression_threshold_db": -10.280000000000001,
+      "compression_threshold_db": -10.15,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3020,7 +3020,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2342995144260076,
-      "compression_threshold_db": -10.280000000000001,
+      "compression_threshold_db": -10.15,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3034,7 +3034,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.24227133608398257,
-      "compression_threshold_db": -9.639999999999999,
+      "compression_threshold_db": -9.59,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3048,7 +3048,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.2302497620582737,
-      "compression_threshold_db": -9.61,
+      "compression_threshold_db": -9.58,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3062,7 +3062,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3328583702631291,
       "compression_coef": 0.31793667076554544,
-      "compression_threshold_db": -9.587141629736871,
+      "compression_threshold_db": -9.567141629736872,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3076,7 +3076,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.36427053431680856,
       "compression_coef": 0.4820237036738516,
-      "compression_threshold_db": -10.252270534316809,
+      "compression_threshold_db": -10.34427053431681,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3090,7 +3090,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.3902918760546863,
-      "compression_threshold_db": -9.59,
+      "compression_threshold_db": -9.629999999999999,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3118,7 +3118,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.20966919329588016,
-      "compression_threshold_db": -10.24,
+      "compression_threshold_db": -10.22,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3132,7 +3132,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.3,
       "compression_coef": 0.24419249889127584,
-      "compression_threshold_db": -9.58,
+      "compression_threshold_db": -9.6,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3146,7 +3146,7 @@
       "ref_type": "global_offset",
       "global_offset_db": 0.49599966784146654,
       "compression_coef": 0.3100327633404022,
-      "compression_threshold_db": -9.414000332158533,
+      "compression_threshold_db": -9.574000332158533,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3160,7 +3160,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.17978112774542182,
-      "compression_threshold_db": -10.22,
+      "compression_threshold_db": -10.15,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3174,7 +3174,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2352225921619129,
-      "compression_threshold_db": -10.24,
+      "compression_threshold_db": -10.22,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3188,7 +3188,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3,
       "compression_coef": 0.2262505100265084,
-      "compression_threshold_db": -10.23,
+      "compression_threshold_db": -10.270000000000001,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3202,7 +3202,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.48215573184084254,
       "compression_coef": 0.3519177370860452,
-      "compression_threshold_db": -10.412155731840842,
+      "compression_threshold_db": -10.452155731840843,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3216,7 +3216,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.7200334471410983,
       "compression_coef": 0.25501395722971276,
-      "compression_threshold_db": -10.650033447141098,
+      "compression_threshold_db": -10.610033447141099,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3230,7 +3230,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.35337362454465016,
       "compression_coef": 0.2792849077060008,
-      "compression_threshold_db": -10.24337362454465,
+      "compression_threshold_db": -10.26337362454465,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
@@ -3258,7 +3258,7 @@
       "ref_type": "global_offset",
       "global_offset_db": -0.3973545809686019,
       "compression_coef": 0.21290682623216184,
-      "compression_threshold_db": -10.317354580968601,
+      "compression_threshold_db": -10.277354580968602,
       "compression_start_percent": 0.8,
       "type": "ref_miscal"
     }
