@@ -111,6 +111,10 @@ def main():
                         help='labels.json 文件路径 (可选，用于回填 ground_truth)')
     parser.add_argument('--topk', type=int, default=3,
                         help='输出 TopK 模块数量 (默认: 3)')
+    parser.add_argument('--include_baseline', action='store_true',
+                        help='在输出 JSON 中包含基线信息 (用于前端绘图)')
+    parser.add_argument('--downsample_baseline', type=int, default=1,
+                        help='基线下采样率 (默认: 1 不下采样, 可选 4 降为 205 点)')
     
     args = parser.parse_args()
     
@@ -250,6 +254,32 @@ def main():
                 "topk": args.topk,
             }
         }
+        
+        # 5.5 如果需要包含基线信息（用于前端绘图）
+        if args.include_baseline:
+            ds = args.downsample_baseline
+            if ds > 1:
+                # 下采样
+                freq_ds = frequency[::ds].tolist()
+                rrs_ds = rrs[::ds].tolist()
+                upper_ds = bounds[0][::ds].tolist()
+                lower_ds = bounds[1][::ds].tolist()
+            else:
+                freq_ds = frequency.tolist()
+                rrs_ds = rrs.tolist()
+                upper_ds = bounds[0].tolist()
+                lower_ds = bounds[1].tolist()
+            
+            result["baseline"] = {
+                "frequency_hz": freq_ds,
+                "rrs": rrs_ds,
+                "upper": upper_ds,
+                "lower": lower_ds,
+                "chosen_k": meta.get("k_final", 3.5),
+                "coverage_target": meta.get("coverage_mean", 0.97),
+                "n_points": len(freq_ds),
+                "downsample_factor": ds,
+            }
         
         # 6. 如果提供了 labels.json，加载 ground_truth
         if args.labels:

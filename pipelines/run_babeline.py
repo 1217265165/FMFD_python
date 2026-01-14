@@ -73,6 +73,28 @@ def main():
 
     # 4) 可视化
     plot_rrs_envelope_switch(frequency, traces, rrs, bounds, switch_feats, plot_path)
+    
+    # 4.1) 新增：包络宽度可视化（用于检查是否有局部鼓包）
+    width = bounds[0] - bounds[1]  # upper - lower
+    width_plot_path = _resolve(repo_root, "Output/baseline_width.png")
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 4))
+        plt.plot(frequency / 1e9, width, 'b-', linewidth=1, label='Envelope Width')
+        plt.axhline(y=0.60, color='r', linestyle='--', alpha=0.7, label='Max threshold (0.60 dB)')
+        plt.axhline(y=np.median(width), color='g', linestyle=':', alpha=0.7, 
+                    label=f'Median ({np.median(width):.3f} dB)')
+        plt.xlabel('Frequency (GHz)')
+        plt.ylabel('Envelope Width (dB)')
+        plt.title('Envelope Width vs Frequency')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(width_plot_path, dpi=150)
+        plt.close()
+        print(f"Envelope width plot saved: {width_plot_path}")
+    except Exception as e:
+        print(f"Warning: Could not save width plot: {e}")
 
     # 5) 保存基线产物（包含 traces，供仿真脚本使用）
     np.savez(
@@ -85,6 +107,7 @@ def main():
     )
     
     # Build comprehensive metadata
+    width = bounds[0] - bounds[1]
     meta_dict = {
         "band_ranges": BAND_RANGES,
         "k_list": K_LIST,
@@ -97,6 +120,13 @@ def main():
         "freq_start_hz": float(frequency[0]),
         "freq_end_hz": float(frequency[-1]),
         "freq_step_hz": float(np.median(np.diff(frequency))),
+        # 新增 width 相关元数据
+        "width_min": float(np.min(width)),
+        "width_median": float(np.median(width)),
+        "width_max": float(np.max(width)),
+        "width_smoothness": float(np.std(np.diff(width))),
+        "rrs_mae": coverage_info.get('rrs_mae'),
+        "smooth_params": coverage_info.get('smooth_params', {}),
     }
     
     with open(baseline_meta, "w", encoding="utf-8") as f:
