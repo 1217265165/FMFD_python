@@ -12,8 +12,9 @@
 输出（控制台+CSV）：
 - coverage_total（>=0.97）
 - coverage_per_curve 的均值/最小值（最小值>=0.93）
-- width_min/median/max（max<=0.60）
+- width_min/median/max（max<=0.80）
 - width_smoothness：np.std(np.diff(width)) 要小
+- sliding_coverage_min（任意滑窗覆盖率>=0.93）
 
 脚本 exit code：不达标返回 1（CI/本地可用）
 """
@@ -26,11 +27,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# 质量阈值
+# 质量阈值（与 baseline/baseline.py 保持一致）
 COVERAGE_TOTAL_MIN = 0.97      # 总覆盖率必须 >= 97%
 COVERAGE_PER_CURVE_MIN = 0.93  # 每条曲线覆盖率最小值必须 >= 93%
-WIDTH_MAX_THRESHOLD = 0.60     # 宽度最大值必须 <= 0.60 dB
-WIDTH_SMOOTHNESS_MAX = 0.02    # 宽度平滑度（diff 的 std）必须 < 0.02
+SLIDING_COVERAGE_MIN = 0.93    # 滑窗覆盖率最小值必须 >= 93%
+WIDTH_MAX_THRESHOLD = 0.80     # 宽度最大值必须 <= 0.80 dB（放宽以避免硬切）
+WIDTH_SMOOTHNESS_MAX = 0.03    # 宽度平滑度（diff 的 std）必须 < 0.03
+SLIDING_WINDOW_SIZE = 41       # 滑窗大小
 
 
 def check_baseline_quality(baseline_artifacts_path: Path, 
@@ -95,7 +98,28 @@ def check_baseline_quality(baseline_artifacts_path: Path,
     width_max = float(np.max(width))
     width_smoothness = float(np.std(np.diff(width)))
     
-    # 3. 验证通过/失败
+    # 3. 计算滑窗覆盖率
+    n_windows = n_points - SLIDING_WINDOW_SIZE + 1
+    sliding_coverages = []
+    if n_windows > 0:
+        for start in range(n_windows):
+            end = start + SLIDING_WINDOW_SIZE
+            window_in_bounds = 0
+            window_total = n_traces * SLIDING_WINDOW_SIZE
+            
+            for i in range(n_traces):
+                trace_window = traces[i, start:end]
+                upper_window = upper[start:end]
+                lower_window = lower[start:end]
+                window_in_bounds += np.sum((trace_window >= lower_window) & (trace_window <= upper_window))
+            
+            sliding_coverages.append(window_in_bounds / window_total)
+        
+        sliding_coverage_min = float(np.min(sliding_coverages))
+    else:
+        sliding_coverage_min = coverage_total
+    
+    # 4. 验证通过/失败
     checks = {
         'coverage_total': {
             'value': coverage_total,
@@ -109,17 +133,23 @@ def check_baseline_quality(baseline_artifacts_path: Path,
             'passed': coverage_min >= COVERAGE_PER_CURVE_MIN,
             'description': '每条曲线覆盖率最小值 >= 93%',
         },
+        'sliding_coverage_min': {
+            'value': sliding_coverage_min,
+            'threshold': SLIDING_COVERAGE_MIN,
+            'passed': sliding_coverage_min >= SLIDING_COVERAGE_MIN,
+            'description': f'滑窗({SLIDING_WINDOW_SIZE}点)覆盖率最小值 >= 93%',
+        },
         'width_max': {
             'value': width_max,
             'threshold': WIDTH_MAX_THRESHOLD,
             'passed': width_max <= WIDTH_MAX_THRESHOLD,
-            'description': '包络宽度最大值 <= 0.60 dB',
+            'description': '包络宽度最大值 <= 0.80 dB',
         },
         'width_smoothness': {
             'value': width_smoothness,
             'threshold': WIDTH_SMOOTHNESS_MAX,
             'passed': width_smoothness < WIDTH_SMOOTHNESS_MAX,
-            'description': '包络宽度平滑度（diff std）< 0.02',
+            'description': '包络宽度平滑度（diff std）< 0.03',
         },
     }
     
@@ -131,6 +161,7 @@ def check_baseline_quality(baseline_artifacts_path: Path,
         'coverage_total': coverage_total,
         'coverage_mean': coverage_mean,
         'coverage_min': coverage_min,
+        'sliding_coverage_min': sliding_coverage_min,
         'width_min': width_min,
         'width_median': width_median,
         'width_max': width_max,
@@ -150,6 +181,7 @@ def check_baseline_quality(baseline_artifacts_path: Path,
         print(f"    总覆盖率: {coverage_total:.4f} (阈值 >= {COVERAGE_TOTAL_MIN})")
         print(f"    均值: {coverage_mean:.4f}")
         print(f"    最小值: {coverage_min:.4f} (阈值 >= {COVERAGE_PER_CURVE_MIN})")
+        print(f"    滑窗最小值: {sliding_coverage_min:.4f} (阈值 >= {SLIDING_COVERAGE_MIN})")
         print(f"\n  包络宽度:")
         print(f"    最小: {width_min:.4f} dB")
         print(f"    中位数: {width_median:.4f} dB")

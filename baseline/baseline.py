@@ -6,25 +6,30 @@ from scipy.signal import savgol_filter
 from scipy.ndimage import gaussian_filter1d
 from .config import BAND_RANGES, K_LIST, N_POINTS, SINGLE_BAND_MODE, COVERAGE_MEAN_MIN, COVERAGE_MIN_MIN
 
-# ============ 新版基线/包络常量配置 (2024-01 重构) ============
-# 目标：RRS 贴合正常曲线云中心，包络平滑、宽度合理、无局部鼓包
+# ============ 基线/包络配置参数 (2024-01 v2 重构) ============
+# 目标：
+# 1. RRS 默认使用 pointwise median（不做强平滑），保留原始细节起伏
+# 2. 包络平滑、宽度合理、不在局部频段突然鼓包
 
-# RRS 平滑参数
-RRS_PRESMOOTH_WINDOW = 31   # 预平滑窗口（对每条曲线）
-RRS_PRESMOOTH_POLY = 3      # 预平滑多项式阶数
-RRS_POSTSMOOTH_WINDOW = 61  # 后平滑窗口（对聚合后RRS）
-RRS_POSTSMOOTH_POLY = 3     # 后平滑多项式阶数
+# RRS 平滑参数（默认关闭或很小）
+RRS_SMOOTH_ENABLED = False        # 默认不对 RRS 做平滑
+RRS_SMOOTH_WINDOW = 15            # 若启用，使用小窗口（≤15）
+RRS_SMOOTH_POLY = 3               # Savitzky-Golay 多项式阶数
 
-# 包络宽度参数
-SIGMA_SMOOTH_GAUSSIAN = 6   # sigma 平滑高斯核 sigma
-WIDTH_MIN_DB = 0.05         # 包络最小宽度 (dB)
-WIDTH_MAX_DB = 0.60         # 包络最大宽度 (dB)
-WIDTH_POSTSMOOTH_GAUSSIAN = 8  # width 后平滑高斯核 sigma
+# 包络宽度参数（只平滑包络，不平滑 RRS）
+SIGMA_SMOOTH_GAUSSIAN = 8         # sigma 平滑高斯核 sigma（稍大以避免毛刺）
+WIDTH_MIN_DB = 0.03               # 包络最小宽度 (dB)
+WIDTH_MAX_DB = 0.80               # 包络最大宽度 (dB)，放宽以避免硬切
+WIDTH_POSTSMOOTH_GAUSSIAN = 12    # width 后平滑高斯核 sigma（使包络缓慢变化）
 
 # 覆盖率搜索参数
-K_SEARCH_MIN = 1.0          # k 搜索下界
-K_SEARCH_MAX = 6.0          # k 搜索上界
-K_SEARCH_STEP = 0.1         # k 搜索步长
+K_SEARCH_MIN = 1.5                # k 搜索下界
+K_SEARCH_MAX = 6.0                # k 搜索上界
+K_SEARCH_STEP = 0.1               # k 搜索步长
+
+# 滑窗覆盖率检查
+SLIDING_WINDOW_SIZE = 41          # 滑窗大小
+SLIDING_COVERAGE_MIN = 0.93       # 任意滑窗覆盖率最低要求
 
 
 def load_and_align(folder_path, use_spectrum_column=True):
@@ -147,31 +152,25 @@ def compute_coverage(traces, upper, lower):
     }
 
 
-def compute_rrs_robust(traces, presmooth=True, presmooth_window=RRS_PRESMOOTH_WINDOW, 
-                       presmooth_poly=RRS_PRESMOOTH_POLY,
-                       postsmooth_window=RRS_POSTSMOOTH_WINDOW, 
-                       postsmooth_poly=RRS_POSTSMOOTH_POLY):
-    """计算鲁棒的 RRS 基线（贴合正常曲线云中心）。
+def compute_rrs_robust(traces, smooth=RRS_SMOOTH_ENABLED, 
+                       smooth_window=RRS_SMOOTH_WINDOW, 
+                       smooth_poly=RRS_SMOOTH_POLY):
+    """计算鲁棒的 RRS 基线（pointwise median，保留原始细节）。
     
-    算法步骤：
-    1. 对每条正常曲线先做轻微平滑（Savitzky-Golay）
-    2. 然后做 pointwise median
-    3. 最后对聚合后的 rrs 再做一次更强平滑
+    新版逻辑（2024-01 v2）：
+    - 默认不做强平滑：直接使用 pointwise median
+    - 可选轻微平滑：若启用，仅对聚合后的 RRS 做小窗口（≤15）平滑
     
     Parameters
     ----------
     traces : np.ndarray
         Shape (n_traces, n_points)，正常曲线数据
-    presmooth : bool
-        是否对每条曲线预平滑
-    presmooth_window : int
-        预平滑窗口大小
-    presmooth_poly : int
-        预平滑多项式阶数
-    postsmooth_window : int
-        后平滑窗口大小
-    postsmooth_poly : int
-        后平滑多项式阶数
+    smooth : bool
+        是否对 RRS 做平滑（默认 False）
+    smooth_window : int
+        平滑窗口大小（默认 15）
+    smooth_poly : int
+        平滑多项式阶数
         
     Returns
     -------
@@ -180,22 +179,12 @@ def compute_rrs_robust(traces, presmooth=True, presmooth_window=RRS_PRESMOOTH_WI
     """
     n_traces, n_points = traces.shape
     
-    # Step 1: 对每条曲线预平滑
-    if presmooth and n_points >= presmooth_window:
-        smoothed_traces = np.zeros_like(traces)
-        for i in range(n_traces):
-            # 使用 reflect padding 处理端点
-            smoothed_traces[i] = savgol_filter(traces[i], presmooth_window, presmooth_poly, mode='nearest')
-        traces_for_median = smoothed_traces
-    else:
-        traces_for_median = traces
+    # 核心：直接计算 pointwise median（不对每条曲线预平滑）
+    rrs = np.median(traces, axis=0)
     
-    # Step 2: 计算 pointwise median（鲁棒聚合）
-    rrs = np.median(traces_for_median, axis=0)
-    
-    # Step 3: 对聚合后的 RRS 做更强的平滑
-    if n_points >= postsmooth_window:
-        rrs = savgol_filter(rrs, postsmooth_window, postsmooth_poly, mode='nearest')
+    # 可选：对聚合后的 RRS 做轻微平滑（默认关闭）
+    if smooth and n_points >= smooth_window:
+        rrs = savgol_filter(rrs, smooth_window, smooth_poly, mode='nearest')
     
     return rrs
 
@@ -320,22 +309,65 @@ def constrain_envelope_width(upper, lower, rrs,
     return constrained_upper, constrained_lower, width_smooth
 
 
+def compute_sliding_coverage(traces, upper, lower, window_size=SLIDING_WINDOW_SIZE):
+    """计算滑窗覆盖率（检查是否有局部覆盖率过低的区域）。
+    
+    Parameters
+    ----------
+    traces : np.ndarray
+        Shape (n_traces, n_points)
+    upper, lower : np.ndarray
+        包络边界
+    window_size : int
+        滑窗大小
+        
+    Returns
+    -------
+    np.ndarray
+        每个滑窗位置的覆盖率
+    """
+    n_traces, n_points = traces.shape
+    n_windows = n_points - window_size + 1
+    
+    if n_windows <= 0:
+        return np.array([1.0])
+    
+    window_coverages = []
+    for start in range(n_windows):
+        end = start + window_size
+        window_in_bounds = 0
+        window_total = n_traces * window_size
+        
+        for i in range(n_traces):
+            trace_window = traces[i, start:end]
+            upper_window = upper[start:end]
+            lower_window = lower[start:end]
+            window_in_bounds += np.sum((trace_window >= lower_window) & (trace_window <= upper_window))
+        
+        window_coverages.append(window_in_bounds / window_total)
+    
+    return np.array(window_coverages)
+
+
 def auto_expand_envelope(
     frequency, traces, 
     target_coverage_mean=COVERAGE_MEAN_MIN,
     target_coverage_min=COVERAGE_MIN_MIN,
+    rrs_smooth=RRS_SMOOTH_ENABLED,
 ):
-    """新版自适应包络计算（2024-01 重构）。
+    """新版自适应包络计算（2024-01 v2 重构）。
     
     目标：
-    1. RRS 贴合正常曲线云中心（使用 median + 平滑）
-    2. 包络平滑、宽度合理、无局部鼓包
+    1. RRS 使用 pointwise median（默认不平滑），保留原始细节
+    2. 包络平滑、宽度合理、不在局部频段突然鼓包
+    3. 覆盖率满足全局和滑窗要求
     
     算法步骤：
-    1. 使用 compute_rrs_robust() 计算 RRS
+    1. 使用 compute_rrs_robust() 计算 RRS（默认不平滑）
     2. 使用 compute_robust_sigma() 计算每点的鲁棒 sigma
     3. 使用 find_optimal_k() 找到满足覆盖率的最小 k
     4. 使用 constrain_envelope_width() 约束并平滑包络宽度
+    5. 检查滑窗覆盖率，必要时微调
     
     Parameters
     ----------
@@ -347,6 +379,8 @@ def auto_expand_envelope(
         目标平均覆盖率 (default 0.97).
     target_coverage_min : float
         目标最小覆盖率 (default 0.93).
+    rrs_smooth : bool
+        是否对 RRS 做轻微平滑（默认 False）
         
     Returns
     -------
@@ -355,16 +389,17 @@ def auto_expand_envelope(
     """
     n_traces, n_points = traces.shape
     print(f"[Baseline] Computing RRS from {n_traces} normal traces, {n_points} frequency points")
+    print(f"[Baseline] RRS smoothing: {'enabled' if rrs_smooth else 'disabled (pointwise median)'}")
     
-    # Step 1: 计算鲁棒 RRS
-    rrs = compute_rrs_robust(traces)
+    # Step 1: 计算 RRS（默认使用 pointwise median，不平滑）
+    rrs = compute_rrs_robust(traces, smooth=rrs_smooth)
     
-    # 验证 RRS 贴合度
+    # 验证 RRS 贴合度（不平滑时应该完全一致）
     pointwise_median = np.median(traces, axis=0)
     rrs_mae = np.mean(np.abs(rrs - pointwise_median))
-    print(f"[Baseline] RRS vs pointwise median MAE: {rrs_mae:.4f} dB")
+    print(f"[Baseline] RRS vs pointwise median MAE: {rrs_mae:.6f} dB")
     
-    # Step 2: 计算鲁棒 sigma
+    # Step 2: 计算鲁棒 sigma（对 sigma 做平滑，避免包络毛刺）
     sigma_smooth = compute_robust_sigma(traces, rrs)
     
     # Step 3: 找到满足覆盖率的最小 k
@@ -375,32 +410,51 @@ def auto_expand_envelope(
     upper0 = rrs + chosen_k * sigma_smooth
     lower0 = rrs - chosen_k * sigma_smooth
     
-    # Step 4: 约束并平滑包络宽度
+    # Step 4: 约束并平滑包络宽度（使包络缓慢变化）
     upper, lower, width = constrain_envelope_width(upper0, lower0, rrs)
+    
+    # Step 5: 检查滑窗覆盖率
+    sliding_cov = compute_sliding_coverage(traces, upper, lower)
+    sliding_cov_min = float(np.min(sliding_cov))
+    
+    # 如果滑窗覆盖率不满足要求，逐步扩大
+    if sliding_cov_min < SLIDING_COVERAGE_MIN:
+        print(f"[Baseline] Sliding coverage min={sliding_cov_min:.4f} < {SLIDING_COVERAGE_MIN}, expanding...")
+        for extra_k in np.arange(0.1, 1.5, 0.1):
+            upper_exp = rrs + (chosen_k + extra_k) * sigma_smooth
+            lower_exp = rrs - (chosen_k + extra_k) * sigma_smooth
+            upper, lower, width = constrain_envelope_width(upper_exp, lower_exp, rrs)
+            sliding_cov = compute_sliding_coverage(traces, upper, lower)
+            sliding_cov_min = float(np.min(sliding_cov))
+            if sliding_cov_min >= SLIDING_COVERAGE_MIN:
+                chosen_k += extra_k
+                print(f"[Baseline] Expanded to k={chosen_k:.2f}, sliding coverage min={sliding_cov_min:.4f}")
+                break
     
     # 计算最终覆盖率
     coverage = compute_coverage(traces, upper, lower)
     
     print(f"[Baseline] Final coverage: mean={coverage['coverage_mean']:.4f}, "
           f"min={coverage['coverage_min']:.4f}")
+    print(f"[Baseline] Sliding window coverage: min={sliding_cov_min:.4f}")
     print(f"[Baseline] Width stats: min={width.min():.4f}, median={np.median(width):.4f}, "
           f"max={width.max():.4f} dB")
-    print(f"[Baseline] Coverage per point: 5th={coverage['coverage_point_5th']:.4f}, "
-          f"50th={coverage['coverage_point_50th']:.4f}, 95th={coverage['coverage_point_95th']:.4f}")
     
     # 记录所有元数据
     coverage['k_final'] = chosen_k
     coverage['target_coverage_mean'] = target_coverage_mean
     coverage['target_coverage_min'] = target_coverage_min
     coverage['rrs_mae'] = rrs_mae
+    coverage['rrs_smooth_enabled'] = rrs_smooth
     coverage['width_min'] = float(width.min())
     coverage['width_median'] = float(np.median(width))
     coverage['width_max'] = float(width.max())
     coverage['width_smoothness'] = float(np.std(np.diff(width)))
+    coverage['sliding_coverage_min'] = sliding_cov_min
     coverage['n_normal_traces'] = n_traces
     coverage['smooth_params'] = {
-        'rrs_presmooth_window': RRS_PRESMOOTH_WINDOW,
-        'rrs_postsmooth_window': RRS_POSTSMOOTH_WINDOW,
+        'rrs_smooth_enabled': RRS_SMOOTH_ENABLED,
+        'rrs_smooth_window': RRS_SMOOTH_WINDOW,
         'sigma_smooth_gaussian': SIGMA_SMOOTH_GAUSSIAN,
         'width_postsmooth_gaussian': WIDTH_POSTSMOOTH_GAUSSIAN,
     }
