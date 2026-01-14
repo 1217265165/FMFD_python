@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
+from scipy.signal import savgol_filter
 from .config import BAND_RANGES, K_LIST, N_POINTS, SINGLE_BAND_MODE, COVERAGE_MEAN_MIN, COVERAGE_MIN_MIN
 
 
@@ -116,9 +117,14 @@ def auto_expand_envelope(
     initial_k=3.0, 
     target_coverage_mean=COVERAGE_MEAN_MIN,
     target_coverage_min=COVERAGE_MIN_MIN,
-    max_iterations=20
+    max_iterations=20,
+    smooth_envelope=True
 ):
     """自动扩大包络直到达到覆盖率要求。
+    
+    优化版（2024-01）：
+    - 使用 Savitzky-Golay 滤波器平滑包络，减少高频噪声
+    - 更稳健的包络计算
     
     Uses median ± k*MAD approach with adaptive k expansion.
     
@@ -136,6 +142,8 @@ def auto_expand_envelope(
         Minimum required min coverage (default 0.93).
     max_iterations : int
         Maximum iterations for envelope expansion.
+    smooth_envelope : bool
+        If True, apply Savitzky-Golay smoothing to envelope bounds.
         
     Returns
     -------
@@ -145,16 +153,35 @@ def auto_expand_envelope(
     # Compute baseline (median for robustness)
     rrs = np.median(traces, axis=0)
     
+    # Apply Savitzky-Golay smoothing to RRS baseline
+    if smooth_envelope and len(rrs) >= 101:
+        rrs = savgol_filter(rrs, window_length=101, polyorder=3)
+    elif smooth_envelope and len(rrs) >= 51:
+        rrs = savgol_filter(rrs, window_length=51, polyorder=3)
+    
     # MAD-based robust spread estimate
     mad = np.median(np.abs(traces - rrs), axis=0)
     # Convert MAD to sigma-equivalent: sigma ≈ 1.4826 * MAD
     sigma_est = 1.4826 * mad
+    
+    # Smooth sigma estimate to reduce envelope irregularities
+    if smooth_envelope and len(sigma_est) >= 51:
+        sigma_est = savgol_filter(sigma_est, window_length=51, polyorder=2)
     
     k = initial_k
     
     for iteration in range(max_iterations):
         upper = rrs + k * sigma_est
         lower = rrs - k * sigma_est
+        
+        # Apply smoothing to envelope bounds
+        if smooth_envelope:
+            if len(upper) >= 101:
+                upper = savgol_filter(upper, window_length=101, polyorder=3)
+                lower = savgol_filter(lower, window_length=101, polyorder=3)
+            elif len(upper) >= 51:
+                upper = savgol_filter(upper, window_length=51, polyorder=3)
+                lower = savgol_filter(lower, window_length=51, polyorder=3)
         
         coverage = compute_coverage(traces, upper, lower)
         
@@ -174,6 +201,7 @@ def auto_expand_envelope(
     
     coverage['k_final'] = k
     coverage['n_iterations'] = iteration + 1
+    coverage['smooth_envelope'] = smooth_envelope
     
     return rrs, (upper, lower), coverage
 

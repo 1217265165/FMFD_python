@@ -29,20 +29,32 @@ def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
     """
     幅度失准：A' = gain*A + bias + comp*A^2
     若 gain/bias/comp 未给出，则基于当前曲线的 σ 自适应随机生成。
+    
+    优化版（2024-01）：
+    - 增益偏差：N(1.0, 0.01σ)，减小波动幅度
+    - 偏置误差：N(0, 0.3σ)，模拟更合理的设备误差
+    - 非线性压缩：N(0.01, 0.005)，降低压缩度
     """
     rng = rng or np.random.default_rng()
     _, sig_med = _estimate_sigma(amp)
     if gain is None:
-        gain = 1.0 + rng.normal(0, 0.05 * max(1.0, sig_med))
+        # Optimized: reduced from 0.05σ to 0.01σ for more stable gain
+        gain = 1.0 + rng.normal(0, 0.01 * max(1.0, sig_med))
     if bias is None:
-        bias = rng.normal(0, 0.5 * max(0.2, sig_med))
+        # Optimized: reduced from 0.5σ to 0.3σ
+        bias = rng.normal(0, 0.3 * max(0.2, sig_med))
     if comp is None:
-        comp = rng.normal(0.02, 0.01)
+        # Optimized: reduced from N(0.02, 0.01) to N(0.01, 0.005)
+        comp = rng.normal(0.01, 0.005)
     return gain * amp + bias + comp * (amp ** 2)
 
 def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=False):
     """
     频率失准：频率轴整体平移后重采样；delta_f 未给出时按带宽 ppm 生成。
+    
+    优化版（2024-01）：
+    - 使用 cubic 插值替代 linear，实现更平滑的频率响应过渡
+    - 添加多次平滑操作减小插值误差
     
     Parameters
     ----------
@@ -82,8 +94,18 @@ def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=Fal
         ppm = delta_f / bw if bw > 0 else 0
     
     f_shift = frequency + delta_f
-    interp = interp1d(f_shift, amp, kind="linear", bounds_error=False, fill_value="extrapolate")
+    # Optimized: use cubic interpolation for smoother frequency response
+    interp = interp1d(f_shift, amp, kind="cubic", bounds_error=False, fill_value="extrapolate")
     result = interp(frequency)
+    
+    # Additional smoothing pass to reduce interpolation artifacts
+    try:
+        from scipy.signal import savgol_filter
+        # Gentle smoothing: window=11, polyorder=3
+        if len(result) >= 11:
+            result = savgol_filter(result, window_length=11, polyorder=3)
+    except ImportError:
+        pass
     
     # Calculate effective shift in bins
     shift_bins = delta_f / step_hz if step_hz > 0 else 0
@@ -105,6 +127,10 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     """
     参考电平失准：在切换点施加错误步进；高幅度区压缩。
     step_biases/compression_coef 未给出时按 σ 自适应随机生成。
+    
+    优化版（2024-01）：
+    - Type-A 全局偏移：N(0, 0.3σ)，避免偏移过大
+    - Type-B 高幅度压缩：|N(0.1, 0.05)|，避免过强压缩
     
     In single-band mode (single_band_mode=True or SINGLE_BAND_MODE global):
     - Switch-point step injection is DISABLED
@@ -144,22 +170,20 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
         params['ref_type'] = 'step'
         params['step_biases'] = [float(b) for b in step_biases]
     else:
-        # Single-band mode: Type-A global offset with stronger effect
-        # Increased range for detectability: ±0.5 to ±2.0 dB offset
-        global_offset = rng.normal(0, 0.8 * max(0.5, sig_med))
+        # Optimized: Type-A global offset reduced from N(0, 0.8σ) to N(0, 0.3σ)
+        global_offset = rng.normal(0, 0.3 * max(0.5, sig_med))
         # Ensure minimum offset for detectability
-        if abs(global_offset) < 0.3:
-            global_offset = 0.3 * np.sign(global_offset) if global_offset != 0 else rng.choice([-1, 1]) * 0.3
+        if abs(global_offset) < 0.15:
+            global_offset = 0.15 * np.sign(global_offset) if global_offset != 0 else rng.choice([-1, 1]) * 0.15
         out = out + global_offset
         params['ref_type'] = 'global_offset'
         params['global_offset_db'] = float(global_offset)
     
-    # Type-B: High-amplitude compression (always applied, with stronger effect)
+    # Optimized: Type-B compression reduced from |N(0.25, 0.10)| to |N(0.1, 0.05)|
     if compression_coef is None:
-        # Increased compression for detectability
-        compression_coef = abs(rng.normal(0.25, 0.10))  # Increased from 0.15±0.05
-        # Ensure minimum compression
-        compression_coef = max(0.15, compression_coef)
+        compression_coef = abs(rng.normal(0.1, 0.05))
+        # Ensure minimum compression for detectability
+        compression_coef = max(0.05, compression_coef)
     
     thr = np.percentile(out, 100 * compression_start_percent)
     mask = out >= thr

@@ -507,6 +507,13 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     
     x29, x30, x31 = 0.0, 0.0, 0.0
     
+    # ============ v9 NEW FEATURES: Enhanced spectrum analysis (user request 2024-01) ============
+    # X32: High/Low frequency energy ratio (using PSD - helps distinguish Amp vs Ref)
+    # X33: Spectrum smoothness (frequency response change rate)
+    # X34: Local spectrum feature variance (segmented statistics)
+    
+    x32, x33, x34 = 0.0, 0.0, 0.0
+    
     if baseline_curve is not None:
         baseline = np.asarray(baseline_curve, dtype=float)
         if baseline.shape == arr.shape and len(arr) > 10:
@@ -564,9 +571,58 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                     x31 = float(np.std(seg_means))
                 else:
                     x31 = 0.0
+                
+                # ============ v9 NEW FEATURES (user request 2024-01) ============
+                
+                # X32: High/Low frequency energy ratio using Power Spectral Density
+                # This feature helps distinguish amplitude and reference level errors
+                try:
+                    from scipy.signal import welch
+                    # Compute PSD of the residual
+                    fs = 1.0  # Normalized frequency
+                    nperseg = min(256, len(r) // 2)
+                    if nperseg > 8:
+                        freqs, psd = welch(r, fs=fs, nperseg=nperseg)
+                        mid_freq_idx = len(freqs) // 2
+                        low_freq_psd = np.sum(psd[:mid_freq_idx]) if mid_freq_idx > 0 else V8_EPSILON
+                        high_freq_psd = np.sum(psd[mid_freq_idx:]) if mid_freq_idx < len(psd) else V8_EPSILON
+                        x32 = float(np.log((high_freq_psd + V8_EPSILON) / (low_freq_psd + V8_EPSILON)))
+                    else:
+                        x32 = 0.0
+                except ImportError:
+                    x32 = 0.0
+                
+                # X33: Spectrum smoothness (frequency response change rate)
+                # Lower values indicate smoother spectrum, higher values indicate more variation
+                diff_arr = np.diff(arr)
+                if len(diff_arr) > 1:
+                    x33 = float(np.std(diff_arr) / (np.std(arr) + V8_EPSILON))
+                else:
+                    x33 = 0.0
+                
+                # X34: Local spectrum feature variance (segmented statistics)
+                # Compute variance of local statistics across segments
+                n_local_seg = 8
+                local_seg_size = n_points // n_local_seg
+                local_stats = []
+                
+                for i in range(n_local_seg):
+                    start = i * local_seg_size
+                    end = (i + 1) * local_seg_size if i < n_local_seg - 1 else n_points
+                    if end > start + 2:
+                        seg = arr[start:end]
+                        # Local statistics: [max, mean, std]
+                        local_stats.append([np.max(seg), np.mean(seg), np.std(seg)])
+                
+                if len(local_stats) > 1:
+                    local_stats_arr = np.array(local_stats)
+                    # Variance of local maxima, means, and stds
+                    x34 = float(np.mean([np.std(local_stats_arr[:, i]) for i in range(3)]))
+                else:
+                    x34 = 0.0
                     
             except Exception:
-                x29, x30, x31 = 0.0, 0.0, 0.0
+                x29, x30, x31, x32, x33, x34 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
     return {
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
@@ -577,6 +633,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X23": x23, "X24": x24, "X25": x25,  # New freq features
         "X26": x26, "X27": x27, "X28": x28,  # New ref features
         "X29": x29, "X30": x30, "X31": x31,  # v8: Amp vs Ref features
+        "X32": x32, "X33": x33, "X34": x34,  # v9: Enhanced spectrum analysis features
     }
 
 
