@@ -541,13 +541,15 @@ def detect_switch_steps(frequency, traces, band_ranges=BAND_RANGES, tol=0.2):
 
 
 # =============================================================================
-# 新版包络构建算法 (2024-01 v6) - 用户详细规格实现
+# 新版包络构建算法 (2024-01 v6/v7) - 用户详细规格实现
 # =============================================================================
-# 厂商分段容差（以 RRS 为中心的允许偏差，单位 dBm 差值）
+# v6: 厂商分段容差（以 RRS 为中心的允许偏差，单位 dBm 差值）
 # 10MHz~100MHz: ±0.80
 # 100MHz~3.25GHz: ±0.40 (稳定频段)
 # 3.25GHz~5.25GHz: ±0.60
 # 5.25GHz~8.2GHz: ±0.80
+#
+# v7: 统一 0.4 dB 作为基准参考，包络更平缓，无阶梯
 
 # 稳定频段（用于 offset 估计）
 STABLE_BAND_START_HZ = 100e6
@@ -555,6 +557,10 @@ STABLE_BAND_END_HZ = 3.25e9
 
 # 平滑参数
 SMOOTH_SIGMA_HZ_DEFAULT = 200e6  # 200MHz 高斯平滑尺度
+SMOOTH_SIGMA_HZ_V7 = 500e6  # v7 使用更大的平滑尺度 (500MHz)
+
+# v7 默认参数
+BASE_TOLERANCE_UNIFORM = 0.4  # 统一基准容差 (dBm)
 
 
 def vendor_tolerance_dbm(frequency_hz):
@@ -919,6 +925,223 @@ def compute_envelope_from_vendor_plus_quantile(
         'rrs_median_level': float(np.median(rrs)),
         'offsets': offsets.tolist() if normalize_offset else [],
         'vendor_tolerance_db': tol.tolist(),
+        'extra_smooth': extra_smooth.tolist(),
+    }
+    
+    return rrs, upper, lower, info
+
+
+def compute_envelope_smooth_v7(
+    frequency_hz,
+    traces,
+    *,
+    # Offset 归一化参数
+    normalize_offset=True,
+    max_offset_db=0.4,
+    # 异常剔除参数
+    drop_outliers=True,
+    exceed_rate_threshold=0.10,
+    max_exceed_threshold=0.80,
+    p95_exceed_threshold=0.30,
+    # 包络参数 (v7: 统一基准 + 强平滑)
+    base_tolerance=BASE_TOLERANCE_UNIFORM,  # 统一 0.4 dB 基准
+    quantile=0.97,
+    smooth_sigma_hz=SMOOTH_SIGMA_HZ_V7,  # 500MHz 大平滑尺度
+    extra_clip_max=0.25,
+    # 目标覆盖率
+    target_coverage_mean=0.97,
+    target_coverage_min=0.93,
+):
+    """基于统一基准容差 + 分位数残差构建平滑包络 (v7)。
+    
+    与 v6 的区别:
+    - 使用统一的 base_tolerance (默认 0.4 dB) 而非分段容差
+    - 使用更大的平滑尺度 (500MHz vs 200MHz) 让包络更平缓
+    - 包络形态类似用户提供的 "1.png" 图片
+    
+    算法步骤:
+    1) rrs0 = median(traces)
+    2) offsets = estimate_trace_offsets() 在稳定频段; traces_norm = traces - offsets
+    3) rrs = median(traces_norm)
+    4) base_tol = 统一 0.4 dB (用于异常检测参考)
+    5) 可选：drop_outlier_traces_by_spec 后重算 rrs
+    6) abs_resid = |traces_norm - rrs|
+    7) point_q = quantile(abs_resid, q=0.97, axis=0)
+    8) raw_extra = max(0, point_q - base_tol)
+    9) extra_smooth = gaussian_filter1d(raw_extra, sigma=大平滑尺度)
+    10) extra_smooth clip 到 [0, extra_clip_max]
+    11) half_width = base_tol + extra_smooth
+    12) 对 half_width 再次平滑使其更平缓
+    13) upper/lower = rrs ± half_width
+    
+    Parameters
+    ----------
+    frequency_hz : np.ndarray
+        频率轴 (Hz)
+    traces : np.ndarray
+        Shape (n_traces, n_points), 正常曲线数据 (dBm)
+    normalize_offset : bool
+        是否做全局偏移归一化
+    max_offset_db : float
+        最大允许偏移
+    drop_outliers : bool
+        是否剔除异常曲线
+    base_tolerance : float
+        统一基准容差 (dBm)，默认 0.4
+    quantile : float
+        残差分位数 (默认 0.97)
+    smooth_sigma_hz : float
+        extra 平滑的高斯 sigma (Hz)，默认 500MHz
+    extra_clip_max : float
+        extra 的最大值 (dBm)
+    target_coverage_mean, target_coverage_min : float
+        目标覆盖率
+        
+    Returns
+    -------
+    tuple
+        (rrs, upper, lower, info_dict)
+    """
+    n_traces, n_points = traces.shape
+    print(f"[Envelope v7] Computing smooth envelope from {n_traces} traces, {n_points} points")
+    print(f"[Envelope v7] Using uniform base tolerance: {base_tolerance} dBm")
+    print(f"[Envelope v7] Y-axis unit: dBm")
+    
+    # Step 1: 初始 RRS
+    rrs0 = compute_rrs_pointwise_median(traces)
+    
+    # Step 2: 估计偏移并归一化
+    if normalize_offset:
+        offsets = estimate_trace_offsets(traces, rrs0, frequency_hz,
+                                        use_stable_band=True,
+                                        max_offset_db=max_offset_db)
+        traces_norm = traces - offsets[:, np.newaxis]
+        offset_stats = {
+            'mean': float(np.mean(offsets)),
+            'std': float(np.std(offsets)),
+            'p50': float(np.median(offsets)),
+            'p95': float(np.percentile(np.abs(offsets), 95)),
+        }
+        print(f"[Envelope v7] Offset normalization: mean={offset_stats['mean']:.4f}, "
+              f"std={offset_stats['std']:.4f}, p95_abs={offset_stats['p95']:.4f} dB")
+    else:
+        traces_norm = traces.copy()
+        offsets = np.zeros(n_traces)
+        offset_stats = {}
+    
+    # Step 3: 重新计算 RRS (基于归一化后的曲线)
+    rrs = compute_rrs_pointwise_median(traces_norm)
+    
+    # Step 4: 使用统一基准容差 (用于异常检测)
+    tol = np.full(n_points, base_tolerance, dtype=np.float64)
+    
+    # Step 5: 可选异常剔除
+    dropped_indices = []
+    outlier_stats = {}
+    if drop_outliers:
+        valid_mask, dropped_indices, outlier_stats = drop_outlier_traces_by_spec(
+            traces_norm, rrs, frequency_hz, tol,
+            exceed_rate_threshold=exceed_rate_threshold,
+            max_exceed_threshold=max_exceed_threshold,
+            p95_exceed_threshold=p95_exceed_threshold,
+        )
+        if len(dropped_indices) > 0:
+            traces_norm = traces_norm[valid_mask]
+            # 重算 RRS
+            rrs = compute_rrs_pointwise_median(traces_norm)
+            print(f"[Envelope v7] Dropped {len(dropped_indices)} outlier traces, recomputed RRS")
+    
+    n_valid = traces_norm.shape[0]
+    
+    # Step 6: 计算残差绝对值
+    abs_resid = np.abs(traces_norm - rrs)
+    
+    # Step 7: 逐点分位数
+    point_q = np.percentile(abs_resid, quantile * 100, axis=0)
+    
+    # Step 8: raw_extra = max(0, point_q - base_tol)
+    raw_extra = np.maximum(0, point_q - base_tolerance)
+    
+    # Step 9: 平滑 extra (使用更大的平滑尺度)
+    df = frequency_hz[1] - frequency_hz[0] if len(frequency_hz) > 1 else smooth_sigma_hz / 50
+    sigma_points = smooth_sigma_hz / df
+    
+    if sigma_points > 0:
+        # 第一次平滑 raw_extra
+        extra_smooth = gaussian_filter1d(raw_extra, sigma=sigma_points, mode='reflect')
+    else:
+        extra_smooth = raw_extra.copy()
+    
+    # Step 10: clip extra 到 [0, extra_clip_max]
+    extra_smooth = np.clip(extra_smooth, 0, extra_clip_max)
+    
+    # Step 11: half_width = base_tol + extra_smooth
+    half_width = base_tolerance + extra_smooth
+    
+    # Step 12: 对 half_width 再次平滑使其更平缓
+    half_width = gaussian_filter1d(half_width, sigma=sigma_points * 0.5, mode='reflect')
+    
+    # Step 13: 构建包络
+    upper = rrs + half_width
+    lower = rrs - half_width
+    
+    # 计算覆盖率
+    coverage = compute_coverage(traces_norm, upper, lower)
+    
+    # 如果覆盖率不满足要求，逐步扩大 half_width
+    expansion_iterations = 0
+    while (coverage['coverage_mean'] < target_coverage_mean or
+           coverage['coverage_min'] < target_coverage_min):
+        expansion_iterations += 1
+        if expansion_iterations > 30:
+            print(f"[Envelope v7] Warning: Coverage targets not met after 30 iterations")
+            break
+        
+        # 均匀扩大 half_width
+        half_width = half_width + 0.01
+        half_width = np.clip(half_width, base_tolerance, base_tolerance + extra_clip_max)
+        # 再次平滑确保平缓
+        half_width = gaussian_filter1d(half_width, sigma=sigma_points * 0.5, mode='reflect')
+        upper = rrs + half_width
+        lower = rrs - half_width
+        coverage = compute_coverage(traces_norm, upper, lower)
+    
+    if expansion_iterations > 0:
+        print(f"[Envelope v7] Expanded envelope in {expansion_iterations} iterations")
+    
+    # 输出统计
+    width = upper - lower
+    print(f"[Envelope v7] half_width: min={half_width.min():.4f}, "
+          f"median={np.median(half_width):.4f}, max={half_width.max():.4f} dBm")
+    print(f"[Envelope v7] Coverage: mean={coverage['coverage_mean']:.4f}, "
+          f"min={coverage['coverage_min']:.4f}")
+    
+    # 构建 info 字典
+    info = {
+        'version': 'v7',
+        'n_traces': n_traces,
+        'n_valid_traces': n_valid,
+        'n_points': n_points,
+        'normalize_offset': normalize_offset,
+        'offset_stats': offset_stats,
+        'dropped_trace_ids': dropped_indices,
+        'outlier_stats': outlier_stats,
+        'base_tolerance': base_tolerance,
+        'quantile': quantile,
+        'smooth_sigma_hz': smooth_sigma_hz,
+        'sigma_points': sigma_points,
+        'extra_clip_max': extra_clip_max,
+        'coverage_mean': coverage['coverage_mean'],
+        'coverage_min': coverage['coverage_min'],
+        'half_width_min': float(np.min(half_width)),
+        'half_width_p50': float(np.median(half_width)),
+        'half_width_max': float(np.max(half_width)),
+        'width_min': float(np.min(width)),
+        'width_median': float(np.median(width)),
+        'width_max': float(np.max(width)),
+        'rrs_median_level': float(np.median(rrs)),
+        'offsets': offsets.tolist() if normalize_offset else [],
+        'vendor_tolerance_db': tol.tolist(),  # 这里是统一值
         'extra_smooth': extra_smooth.tolist(),
     }
     

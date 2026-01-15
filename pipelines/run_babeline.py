@@ -9,6 +9,7 @@ import pandas as pd
 from baseline.baseline import (
     load_and_align, compute_rrs_bounds, detect_switch_steps,
     compute_envelope_from_vendor_plus_quantile, vendor_tolerance_dbm,
+    compute_envelope_smooth_v7,
 )
 from baseline.rrs_envelope import vendor_tolerance_db
 from baseline.config import (
@@ -20,8 +21,11 @@ from baseline.config import (
 from baseline.viz import plot_rrs_envelope_switch
 from features.extract import extract_system_features
 
-# Envelope algorithm v6 parameters
-EXTRA_CLIP_MAX_DB = 0.25  # Maximum extra width above vendor tolerance
+# Envelope algorithm parameters
+EXTRA_CLIP_MAX_DB = 0.25  # Maximum extra width above base tolerance
+
+# Select envelope algorithm version: 'v6' (segmented tolerance) or 'v7' (uniform smooth)
+ENVELOPE_VERSION = 'v7'  # v7: uniform 0.4 dB base, smooth envelope
 
 
 def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
@@ -52,24 +56,43 @@ def main():
     print(f"Loaded {len(names)} traces, frequency points: {len(frequency)}")
     print(f"Frequency range: {frequency[0]:.2e} Hz to {frequency[-1]:.2e} Hz")
 
-    # 2) 使用新版包络算法 (v6): 基于厂商容差 + 分位数残差
-    # 不再使用旧的 k*sigma 搜索逻辑
-    print("\n[Baseline] Using new envelope algorithm (v6): vendor tolerance + quantile-based extra margin")
+    # 2) 使用包络算法: v7 (统一基准 + 平滑) 或 v6 (分段容差)
+    # v7: 统一 0.4 dB 基准容差，500MHz 平滑尺度，包络更平缓
+    # v6: 分段厂商容差，200MHz 平滑尺度
     
-    rrs, upper, lower, envelope_info = compute_envelope_from_vendor_plus_quantile(
-        frequency, traces,
-        normalize_offset=True,
-        max_offset_db=0.4,
-        drop_outliers=True,
-        exceed_rate_threshold=0.10,
-        max_exceed_threshold=0.80,
-        p95_exceed_threshold=0.30,
-        quantile=0.97,
-        smooth_sigma_hz=200e6,  # 200MHz 平滑
-        extra_clip_max=EXTRA_CLIP_MAX_DB,
-        target_coverage_mean=COVERAGE_MEAN_MIN,
-        target_coverage_min=COVERAGE_MIN_MIN,
-    )
+    if ENVELOPE_VERSION == 'v7':
+        print("\n[Baseline] Using envelope algorithm v7: uniform base tolerance + smooth envelope")
+        rrs, upper, lower, envelope_info = compute_envelope_smooth_v7(
+            frequency, traces,
+            normalize_offset=True,
+            max_offset_db=0.4,
+            drop_outliers=True,
+            exceed_rate_threshold=0.10,
+            max_exceed_threshold=0.80,
+            p95_exceed_threshold=0.30,
+            base_tolerance=0.4,  # 统一 0.4 dB 基准
+            quantile=0.97,
+            smooth_sigma_hz=500e6,  # 500MHz 大平滑尺度
+            extra_clip_max=EXTRA_CLIP_MAX_DB,
+            target_coverage_mean=COVERAGE_MEAN_MIN,
+            target_coverage_min=COVERAGE_MIN_MIN,
+        )
+    else:  # v6
+        print("\n[Baseline] Using envelope algorithm v6: segmented vendor tolerance")
+        rrs, upper, lower, envelope_info = compute_envelope_from_vendor_plus_quantile(
+            frequency, traces,
+            normalize_offset=True,
+            max_offset_db=0.4,
+            drop_outliers=True,
+            exceed_rate_threshold=0.10,
+            max_exceed_threshold=0.80,
+            p95_exceed_threshold=0.30,
+            quantile=0.97,
+            smooth_sigma_hz=200e6,  # 200MHz 平滑
+            extra_clip_max=EXTRA_CLIP_MAX_DB,
+            target_coverage_mean=COVERAGE_MEAN_MIN,
+            target_coverage_min=COVERAGE_MIN_MIN,
+        )
     bounds = (upper, lower)
     
     # 构建 coverage_info 用于后续兼容
