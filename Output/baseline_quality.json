@@ -1,0 +1,22 @@
+{
+  "coverage_mean": 0.9717416158536585,
+  "coverage_min": 0.36341463414634145,
+  "sliding_coverage_min": 0.9375,
+  "width_min": 0.1283280415062329,
+  "width_median": 0.31240414885124146,
+  "width_max": 0.5443861777932177,
+  "width_smoothness": 0.0026373570576631988,
+  "center_level_db": -9.934999999999999,
+  "n_traces": 64,
+  "k_final": 5.200000000000003,
+  "rrs_mae": 0.0,
+  "rrs_smooth_enabled": false,
+  "thresholds": {
+    "coverage_mean_min": 0.97,
+    "coverage_min_min": 0.93,
+    "sliding_coverage_min": 0.93,
+    "width_max": 0.8,
+    "width_smoothness_max": 0.03
+  },
+  "passed": false
+}
