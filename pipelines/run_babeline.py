@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from baseline.baseline import load_and_align, compute_rrs_bounds, detect_switch_steps
+from baseline.rrs_envelope import vendor_tolerance_db
 from baseline.config import (
     BAND_RANGES, K_LIST, SWITCH_TOL,
     BASELINE_ARTIFACTS, BASELINE_META,
@@ -114,6 +115,7 @@ def main():
         center_level_db=center_level_db,
         spec_center_db=spec_center_db,
         spec_tol_db=spec_tol_db,
+        vendor_tolerance_db=vendor_tolerance_db(frequency),
     )
     
     # Build comprehensive metadata

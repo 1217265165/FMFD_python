@@ -125,6 +125,7 @@ def main():
         # 导入FMFD模块
         from baseline.baseline import align_to_frequency
         from baseline.config import BASELINE_ARTIFACTS, BASELINE_META, BAND_RANGES
+        from baseline.rrs_envelope import vendor_tolerance_db
         from features.extract import extract_system_features
         from BRB.system_brb import system_level_infer
         from BRB.module_brb import module_level_infer, DISABLED_MODULES
@@ -289,6 +290,7 @@ def main():
                 "spec_tol_db": spec_tol_db,
                 "spec_upper_db": spec_upper_db,
                 "spec_lower_db": spec_lower_db,
+                "vendor_tolerance_db": vendor_tolerance_db(np.array(freq_ds)).tolist() if ds == 1 else vendor_tolerance_db(frequency[::ds]).tolist(),
                 "chosen_k": meta.get("k_final", 3.5),
                 "coverage_target": meta.get("coverage_mean", 0.97),
                 "n_points": len(freq_ds),
