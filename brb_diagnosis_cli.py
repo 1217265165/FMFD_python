@@ -270,11 +270,25 @@ def main():
                 upper_ds = bounds[0].tolist()
                 lower_ds = bounds[1].tolist()
             
+            # 计算基线整体电平中心（RRS 的中位数）
+            center_level_db = float(np.median(rrs))
+            
+            # 厂商规格容差（系统级：-10 ± 0.4 dB）
+            spec_center_db = -10.0
+            spec_tol_db = 0.4
+            spec_upper_db = spec_center_db + spec_tol_db  # -9.6
+            spec_lower_db = spec_center_db - spec_tol_db  # -10.4
+            
             result["baseline"] = {
                 "frequency_hz": freq_ds,
-                "rrs": rrs_ds,
-                "upper": upper_ds,
-                "lower": lower_ds,
+                "rrs_db": rrs_ds,
+                "upper_db": upper_ds,
+                "lower_db": lower_ds,
+                "center_level_db": center_level_db,
+                "spec_center_db": spec_center_db,
+                "spec_tol_db": spec_tol_db,
+                "spec_upper_db": spec_upper_db,
+                "spec_lower_db": spec_lower_db,
                 "chosen_k": meta.get("k_final", 3.5),
                 "coverage_target": meta.get("coverage_mean", 0.97),
                 "n_points": len(freq_ds),

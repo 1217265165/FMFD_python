@@ -97,6 +97,13 @@ def main():
         print(f"Warning: Could not save width plot: {e}")
 
     # 5) 保存基线产物（包含 traces，供仿真脚本使用）
+    # 计算基线整体电平中心
+    center_level_db = float(np.median(rrs))
+    
+    # 厂商规格容差（系统级：-10 ± 0.4 dB）
+    spec_center_db = -10.0
+    spec_tol_db = 0.4
+    
     np.savez(
         baseline_artifacts,
         frequency=frequency,
@@ -104,6 +111,9 @@ def main():
         rrs=rrs,
         upper=bounds[0],
         lower=bounds[1],
+        center_level_db=center_level_db,
+        spec_center_db=spec_center_db,
+        spec_tol_db=spec_tol_db,
     )
     
     # Build comprehensive metadata
@@ -120,7 +130,13 @@ def main():
         "freq_start_hz": float(frequency[0]),
         "freq_end_hz": float(frequency[-1]),
         "freq_step_hz": float(np.median(np.diff(frequency))),
-        # 新增 width 相关元数据
+        # 基线电平与规格容差
+        "center_level_db": center_level_db,
+        "spec_center_db": spec_center_db,
+        "spec_tol_db": spec_tol_db,
+        "spec_upper_db": spec_center_db + spec_tol_db,
+        "spec_lower_db": spec_center_db - spec_tol_db,
+        # width 相关元数据
         "width_min": float(np.min(width)),
         "width_median": float(np.median(width)),
         "width_max": float(np.max(width)),
@@ -131,6 +147,39 @@ def main():
     
     with open(baseline_meta, "w", encoding="utf-8") as f:
         json.dump(meta_dict, f, ensure_ascii=False, indent=2)
+    
+    # 5.5) 保存 baseline_quality.json（质量指标，供前端和验收使用）
+    quality_json_path = _resolve(repo_root, "Output/baseline_quality.json")
+    quality_dict = {
+        "coverage_mean": coverage_info.get('coverage_mean'),
+        "coverage_min": coverage_info.get('coverage_min'),
+        "sliding_coverage_min": coverage_info.get('sliding_coverage_min'),
+        "width_min": float(np.min(width)),
+        "width_median": float(np.median(width)),
+        "width_max": float(np.max(width)),
+        "width_smoothness": float(np.std(np.diff(width))),
+        "center_level_db": center_level_db,
+        "n_traces": len(names),
+        "k_final": coverage_info.get('k_final'),
+        "rrs_mae": coverage_info.get('rrs_mae'),
+        "rrs_smooth_enabled": coverage_info.get('rrs_smooth_enabled', False),
+        "thresholds": {
+            "coverage_mean_min": 0.97,
+            "coverage_min_min": 0.93,
+            "sliding_coverage_min": 0.93,
+            "width_max": 0.80,
+            "width_smoothness_max": 0.03,
+        },
+        "passed": (
+            coverage_info.get('coverage_mean', 0) >= 0.97 and
+            coverage_info.get('coverage_min', 0) >= 0.93 and
+            float(np.max(width)) <= 0.80 and
+            float(np.std(np.diff(width))) < 0.03
+        ),
+    }
+    with open(quality_json_path, "w", encoding="utf-8") as f:
+        json.dump(quality_dict, f, ensure_ascii=False, indent=2)
+    print(f"Baseline quality saved: {quality_json_path}")
 
     # 6) 保存切换点特性
     if switch_feats:
