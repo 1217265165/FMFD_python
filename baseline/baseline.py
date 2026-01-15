@@ -706,7 +706,7 @@ def drop_outlier_traces_by_spec(traces, rrs, frequency_hz, tol,
     
     # 限制最大剔除比例
     if n_outliers > n_traces * max_drop_fraction:
-        print(f"[Outlier] Warning: {n_outliers} outliers ({n_outliers/n_traces:.1%}) exceeds max_drop_fraction, keeping all")
+        print(f"[Outlier] Warning: {n_outliers} outliers ({n_outliers/n_traces:.1%}) exceeds max_drop_fraction ({max_drop_fraction:.1%}), keeping all")
         valid_mask = np.ones(n_traces, dtype=bool)
         n_outliers = 0
     
@@ -847,7 +847,7 @@ def compute_envelope_from_vendor_plus_quantile(
     raw_extra = np.maximum(0, point_q - tol)
     
     # Step 9: 平滑 extra (使用 Hz 参数换算到点数)
-    df = frequency_hz[1] - frequency_hz[0] if len(frequency_hz) > 1 else 10e6
+    df = frequency_hz[1] - frequency_hz[0] if len(frequency_hz) > 1 else SMOOTH_SIGMA_HZ_DEFAULT / 20
     sigma_points = smooth_sigma_hz / df
     
     if sigma_points > 0:

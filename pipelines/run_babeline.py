@@ -20,6 +20,9 @@ from baseline.config import (
 from baseline.viz import plot_rrs_envelope_switch
 from features.extract import extract_system_features
 
+# Envelope algorithm v6 parameters
+EXTRA_CLIP_MAX_DB = 0.25  # Maximum extra width above vendor tolerance
+
 
 def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
     """将相对路径锚定到仓库根目录"""
@@ -63,7 +66,7 @@ def main():
         p95_exceed_threshold=0.30,
         quantile=0.97,
         smooth_sigma_hz=200e6,  # 200MHz 平滑
-        extra_clip_max=0.25,
+        extra_clip_max=EXTRA_CLIP_MAX_DB,
         target_coverage_mean=COVERAGE_MEAN_MIN,
         target_coverage_min=COVERAGE_MIN_MIN,
     )
@@ -224,7 +227,7 @@ def main():
             "coverage_mean_min": 0.97,
             "coverage_min_min": 0.93,
             "sliding_coverage_min": 0.93,
-            "half_width_max": vendor_tol_max + 0.25,  # vendor_tol_max + extra_clip_max
+            "half_width_max": vendor_tol_max + EXTRA_CLIP_MAX_DB,  # vendor_tol_max + extra_clip_max
             "width_smoothness_max": 0.03,
         },
         # passed 规则: coverage_mean>=0.97 且 coverage_min>=0.93 且 half_width_max <= (vendor_tol_max+0.25)
