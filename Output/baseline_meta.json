@@ -9,12 +9,38 @@
     3.5
   ],
   "single_band_mode": true,
-  "coverage_mean": 0.9936928353658537,
-  "coverage_min": 0.8804878048780488,
-  "k_final": 9.0,
+  "envelope_version": "v6",
+  "coverage_mean": 1.0,
+  "coverage_min": 1.0,
+  "k_final": null,
   "n_traces": 64,
+  "n_valid_traces": 64,
   "n_frequency_points": 820,
   "freq_start_hz": 10000000.0,
   "freq_end_hz": 8200000000.0,
-  "freq_step_hz": 10000000.0
+  "freq_step_hz": 10000000.0,
+  "center_level_db": -9.9375,
+  "spec_center_db": -10.0,
+  "spec_tol_db": 0.4,
+  "spec_upper_db": -9.6,
+  "spec_lower_db": -10.4,
+  "width_min": 0.8000000000000007,
+  "width_median": 1.1999999999999993,
+  "width_max": 1.6000000000000014,
+  "width_smoothness": 0.03423683940087306,
+  "half_width_max": 0.8,
+  "half_width_p50": 0.6,
+  "offset_stats": {
+    "mean": -0.012343750000000167,
+    "std": 0.042938625804018124,
+    "p50": 0.0,
+    "p95": 0.07000000000000028
+  },
+  "rrs_mae": 0.0,
+  "dropped_trace_ids": [],
+  "smooth_params": {
+    "smooth_sigma_hz": 200000000.0,
+    "extra_clip_max": 0.25,
+    "quantile": 0.97
+  }
 }

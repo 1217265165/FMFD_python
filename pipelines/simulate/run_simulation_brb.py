@@ -154,7 +154,7 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
         csv_path = raw_dir / f"{sample_id}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["freq_Hz", "amplitude_dB"])
+            writer.writerow(["freq_Hz", "amplitude_dBm"])
             for freq, amp in zip(frequency, curve):
                 writer.writerow([freq, amp])
 
@@ -392,7 +392,7 @@ def run_simulation(args: argparse.Namespace):
 
                 labels[sample_id] = {
                     "type": "normal" if fault_class == "normal" else "fault",
-                    "system_fault_class": fault_class if fault_class != "normal" else None,
+                    "system_fault_class": fault_class,  # Always include, "normal" for normal samples
                     "module": None if fault_class == "normal" else label_mod,
                     "fault_params": fault_params,  # Include injection parameters
                 }
@@ -448,7 +448,7 @@ def run_simulation(args: argparse.Namespace):
 
             labels[sample_id] = {
                 "type": "normal" if fault_class == "normal" else "fault",
-                "system_fault_class": fault_class if fault_class != "normal" else None,
+                "system_fault_class": fault_class,  # Always include, "normal" for normal samples
                 "module": None if fault_class == "normal" else label_mod,
                 "fault_params": fault_params,
             }
@@ -484,7 +484,25 @@ def run_simulation(args: argparse.Namespace):
     # Generate freq_ref_effect_check.csv
     _generate_effect_check(out_dir, feature_rows, labels)
 
-    print(f"已保存特征/预测至 {out_dir}，comparison/评估脚本可直接使用 features_brb.csv + labels.json")
+    # Print summary statistics
+    print()
+    print("=" * 60)
+    print("仿真完成摘要")
+    print("=" * 60)
+    print(f"  raw_curves 路径: {out_dir / 'raw_curves'}")
+    print(f"  labels.json 路径: {out_dir / 'labels.json'}")
+    print(f"  生成样本数: {len(curves)}")
+    print()
+    print("  系统级分布:")
+    sys_class_dist = {}
+    for sample_id, lbl in labels.items():
+        cls = lbl.get('system_fault_class', 'normal')
+        sys_class_dist[cls] = sys_class_dist.get(cls, 0) + 1
+    for cls in ['normal', 'amp_error', 'freq_error', 'ref_error']:
+        count = sys_class_dist.get(cls, 0)
+        pct = count / len(labels) * 100 if labels else 0
+        print(f"    {cls}: {count} ({pct:.1f}%)")
+    print("=" * 60)
 
 
 def _generate_effect_check(out_dir: Path, feature_rows: List[Dict], labels: dict):

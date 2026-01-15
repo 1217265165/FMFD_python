@@ -5,6 +5,26 @@ from scipy.interpolate import interp1d
 # Single-band mode flag: When True, preamp is disabled and switch-point step injection is disabled
 SINGLE_BAND_MODE = True
 
+# ============ 故障严重度配置 (2024-01 新增) ============
+# 每种故障注入支持三档严重度: light, mid, severe
+
+SEVERITY_LEVELS = ['light', 'mid', 'severe']
+
+# 幅度失准参数（按严重度分档）
+AMP_MISCAL_PARAMS = {
+    'light':  {'gain_sigma': 0.005, 'bias_sigma': 0.15, 'comp_mean': 0.005, 'comp_std': 0.002},
+    'mid':    {'gain_sigma': 0.010, 'bias_sigma': 0.25, 'comp_mean': 0.010, 'comp_std': 0.004},
+    'severe': {'gain_sigma': 0.020, 'bias_sigma': 0.40, 'comp_mean': 0.015, 'comp_std': 0.006},
+}
+
+# 参考电平失准参数（按严重度分档）
+REFLEVEL_PARAMS = {
+    'light':  {'offset_sigma': 0.2, 'offset_clip': 0.6, 'comp_mean': 0.06, 'comp_std': 0.03},
+    'mid':    {'offset_sigma': 0.4, 'offset_clip': 0.8, 'comp_mean': 0.10, 'comp_std': 0.05},
+    'severe': {'offset_sigma': 0.7, 'offset_clip': 1.0, 'comp_mean': 0.15, 'comp_std': 0.07},
+}
+
+
 # 辅助：估计局部/全局 sigma，用于自适应幅度/噪声
 def _estimate_sigma(amp, window_frac=0.02, min_window=21):
     x = np.asarray(amp, dtype=float)
@@ -25,24 +45,56 @@ def _estimate_sigma(amp, window_frac=0.02, min_window=21):
 # -------------------------
 # 系统级故障/畸变注入（自适应幅度）
 # -------------------------
-def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None):
+def inject_amplitude_miscal(amp, gain=None, bias=None, comp=None, rng=None, 
+                            severity='mid', return_params=False):
     """
     幅度失准：A' = gain*A + bias + comp*A^2
-    若 gain/bias/comp 未给出，则基于当前曲线的 σ 自适应随机生成。
+    若 gain/bias/comp 未给出，则基于严重度和当前曲线的 σ 自适应随机生成。
+    
+    优化版（2024-01）：
+    - 支持 severity 参数：light/mid/severe 三档
+    - 避免与参考电平失准重叠太多
+    
+    Parameters
+    ----------
+    severity : str
+        故障严重度: 'light', 'mid', 'severe'
+    return_params : bool
+        If True, return (curve, params_dict) instead of just curve
     """
     rng = rng or np.random.default_rng()
     _, sig_med = _estimate_sigma(amp)
+    
+    # 获取对应严重度的参数
+    params_cfg = AMP_MISCAL_PARAMS.get(severity, AMP_MISCAL_PARAMS['mid'])
+    
     if gain is None:
-        gain = 1.0 + rng.normal(0, 0.05 * max(1.0, sig_med))
+        gain = 1.0 + rng.normal(0, params_cfg['gain_sigma'] * max(1.0, sig_med))
     if bias is None:
-        bias = rng.normal(0, 0.5 * max(0.2, sig_med))
+        bias = rng.normal(0, params_cfg['bias_sigma'] * max(0.2, sig_med))
     if comp is None:
-        comp = rng.normal(0.02, 0.01)
-    return gain * amp + bias + comp * (amp ** 2)
+        comp = rng.normal(params_cfg['comp_mean'], params_cfg['comp_std'])
+        # 限制 comp 范围，避免二次项把低频段放大成类似 ref 的整体偏移
+        comp = np.clip(comp, -0.03, 0.03)
+    
+    result = gain * amp + bias + comp * (amp ** 2)
+    
+    if return_params:
+        return result, {
+            'severity': severity,
+            'gain': float(gain),
+            'bias': float(bias),
+            'comp': float(comp),
+        }
+    return result
 
 def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=False):
     """
     频率失准：频率轴整体平移后重采样；delta_f 未给出时按带宽 ppm 生成。
+    
+    优化版（2024-01）：
+    - 使用 cubic 插值替代 linear，实现更平滑的频率响应过渡
+    - 添加多次平滑操作减小插值误差
     
     Parameters
     ----------
@@ -82,8 +134,18 @@ def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=Fal
         ppm = delta_f / bw if bw > 0 else 0
     
     f_shift = frequency + delta_f
-    interp = interp1d(f_shift, amp, kind="linear", bounds_error=False, fill_value="extrapolate")
+    # Optimized: use cubic interpolation for smoother frequency response
+    interp = interp1d(f_shift, amp, kind="cubic", bounds_error=False, fill_value="extrapolate")
     result = interp(frequency)
+    
+    # Additional smoothing pass to reduce interpolation artifacts
+    try:
+        from scipy.signal import savgol_filter
+        # Gentle smoothing: window=11, polyorder=3
+        if len(result) >= 11:
+            result = savgol_filter(result, window_length=11, polyorder=3)
+    except ImportError:
+        pass
     
     # Calculate effective shift in bins
     shift_bins = delta_f / step_hz if step_hz > 0 else 0
@@ -101,10 +163,15 @@ def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=Fal
 
 def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compression_coef=None,
                            compression_start_percent=0.8, rng=None, single_band_mode=None,
-                           return_params=False):
+                           return_params=False, severity='mid'):
     """
     参考电平失准：在切换点施加错误步进；高幅度区压缩。
-    step_biases/compression_coef 未给出时按 σ 自适应随机生成。
+    step_biases/compression_coef 未给出时按严重度和 σ 自适应随机生成。
+    
+    优化版（2024-01）：
+    - 支持 severity 参数：light/mid/severe 三档
+    - Type-A 全局偏移限制在 [-1.0, +1.0] dB
+    - Type-B 压缩可限制在特定频段（高频段）
     
     In single-band mode (single_band_mode=True or SINGLE_BAND_MODE global):
     - Switch-point step injection is DISABLED
@@ -113,6 +180,8 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     
     Parameters
     ----------
+    severity : str
+        故障严重度: 'light', 'mid', 'severe'
     return_params : bool
         If True, return (curve, params_dict) instead of just curve
     """
@@ -120,12 +189,16 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
     out = amp.copy()
     _, sig_med = _estimate_sigma(amp)
     
+    # 获取对应严重度的参数
+    params_cfg = REFLEVEL_PARAMS.get(severity, REFLEVEL_PARAMS['mid'])
+    
     # Determine if single-band mode is active
     if single_band_mode is None:
         single_band_mode = SINGLE_BAND_MODE
     
     params = {
         'single_band_mode': single_band_mode,
+        'severity': severity,
         'ref_type': 'none',
         'global_offset_db': 0.0,
         'compression_coef': 0.0,
@@ -144,22 +217,22 @@ def inject_reflevel_miscal(frequency, amp, band_ranges, step_biases=None, compre
         params['ref_type'] = 'step'
         params['step_biases'] = [float(b) for b in step_biases]
     else:
-        # Single-band mode: Type-A global offset with stronger effect
-        # Increased range for detectability: ±0.5 to ±2.0 dB offset
-        global_offset = rng.normal(0, 0.8 * max(0.5, sig_med))
+        # Type-A global offset with severity-based parameters
+        global_offset = rng.normal(0, params_cfg['offset_sigma'] * max(0.5, sig_med))
+        # Clip to physical limits
+        global_offset = np.clip(global_offset, -params_cfg['offset_clip'], params_cfg['offset_clip'])
         # Ensure minimum offset for detectability
-        if abs(global_offset) < 0.3:
-            global_offset = 0.3 * np.sign(global_offset) if global_offset != 0 else rng.choice([-1, 1]) * 0.3
+        if abs(global_offset) < 0.10:
+            global_offset = 0.10 * np.sign(global_offset) if global_offset != 0 else rng.choice([-1, 1]) * 0.10
         out = out + global_offset
         params['ref_type'] = 'global_offset'
         params['global_offset_db'] = float(global_offset)
     
-    # Type-B: High-amplitude compression (always applied, with stronger effect)
+    # Type-B compression with severity-based parameters
     if compression_coef is None:
-        # Increased compression for detectability
-        compression_coef = abs(rng.normal(0.25, 0.10))  # Increased from 0.15±0.05
-        # Ensure minimum compression
-        compression_coef = max(0.15, compression_coef)
+        compression_coef = abs(rng.normal(params_cfg['comp_mean'], params_cfg['comp_std']))
+        # Ensure minimum compression for detectability
+        compression_coef = max(0.03, compression_coef)
     
     thr = np.percentile(out, 100 * compression_start_percent)
     mask = out >= thr
