@@ -30,7 +30,7 @@ def plot_rrs_envelope_switch(frequency, traces, rrs, bounds, switch_feats, out_p
                  color="green" if ok else "red", fontsize=10, rotation=45)
     plt.xlim(left=0)
     plt.xlabel("频率 (Hz)")
-    plt.ylabel("幅度 (dB)")
+    plt.ylabel("幅度 (dBm)")
     plt.title("RRS 与分段动态包络及切换点特性")
     plt.legend()
     plt.grid()

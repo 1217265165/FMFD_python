@@ -160,7 +160,7 @@ def main():
         if args.verbose:
             print(f"[INFO] 读取数据点数: {len(freq_raw)}", file=sys.stderr)
             print(f"[INFO] 频率范围: {freq_raw.min():.2e} - {freq_raw.max():.2e} Hz", file=sys.stderr)
-            print(f"[INFO] 幅度范围: {amp_raw.min():.2f} - {amp_raw.max():.2f} dB", file=sys.stderr)
+            print(f"[INFO] 幅度范围: {amp_raw.min():.2f} - {amp_raw.max():.2f} dBm", file=sys.stderr)
         
         # 2. 加载基线数据
         if args.baseline:

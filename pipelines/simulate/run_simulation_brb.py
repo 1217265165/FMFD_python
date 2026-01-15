@@ -154,7 +154,7 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
         csv_path = raw_dir / f"{sample_id}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["freq_Hz", "amplitude_dB"])
+            writer.writerow(["freq_Hz", "amplitude_dBm"])
             for freq, amp in zip(frequency, curve):
                 writer.writerow([freq, amp])
 
