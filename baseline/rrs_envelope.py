@@ -146,12 +146,41 @@ def _smooth_1d(x: np.ndarray, *, gaussian_sigma_bins: float = 0.0,
 
 
 # =============================================================================
-# Global Offset Estimation (Per-Trace Drift Removal)
+# Stable Band Definition (100MHz ~ 3.25GHz where tolerance is tightest: ±0.40 dB)
+# =============================================================================
+STABLE_BAND_START_HZ = 100e6
+STABLE_BAND_END_HZ = 3.25e9
+
+
+def get_stable_band_mask(freq_hz: np.ndarray) -> np.ndarray:
+    """Get mask for stable frequency band (100MHz ~ 3.25GHz).
+    
+    This band has the tightest vendor tolerance (±0.40 dB), so it's best
+    for computing global offset without being affected by edge effects.
+    
+    Parameters
+    ----------
+    freq_hz : np.ndarray
+        Frequency axis in Hz.
+        
+    Returns
+    -------
+    np.ndarray
+        Boolean mask for stable band.
+    """
+    return (freq_hz >= STABLE_BAND_START_HZ) & (freq_hz <= STABLE_BAND_END_HZ)
+
+
+# =============================================================================
+# Global Offset Estimation (Per-Trace Drift Removal) - v5 with Stable Band
 # =============================================================================
 def estimate_global_offset(trace: np.ndarray, rrs: np.ndarray,
-                          max_offset_db: float = 0.4) -> float:
+                          max_offset_db: float = 0.4,
+                          freq_hz: np.ndarray = None,
+                          use_stable_band: bool = True) -> float:
     """Estimate global offset of a single trace relative to RRS.
     
+    v5: Uses stable band (100MHz ~ 3.25GHz) for more reliable offset estimation.
     This helps absorb time-dependent drift as normal variation,
     avoiding false positives for reference level errors.
     
@@ -163,14 +192,25 @@ def estimate_global_offset(trace: np.ndarray, rrs: np.ndarray,
         Reference response spectrum.
     max_offset_db : float
         Maximum allowed offset (clips to ±max_offset_db).
+    freq_hz : np.ndarray, optional
+        Frequency axis in Hz (needed for stable band selection).
+    use_stable_band : bool
+        If True and freq_hz provided, use only stable band for offset estimation.
         
     Returns
     -------
     float
         Estimated global offset in dB (clipped).
     """
-    # Use robust median of difference
     diff = trace - rrs
+    
+    # Use stable band for offset estimation if possible
+    if use_stable_band and freq_hz is not None:
+        mask = get_stable_band_mask(freq_hz)
+        if np.sum(mask) > 10:  # Need enough points
+            diff = diff[mask]
+    
+    # Use robust median of difference
     offset = np.median(diff)
     
     # Clip to maximum allowed offset
@@ -180,8 +220,12 @@ def estimate_global_offset(trace: np.ndarray, rrs: np.ndarray,
 
 
 def remove_global_offsets(traces: np.ndarray, rrs: np.ndarray,
-                         max_offset_db: float = 0.4) -> tuple:
+                         max_offset_db: float = 0.4,
+                         freq_hz: np.ndarray = None,
+                         use_stable_band: bool = True) -> tuple:
     """Remove global offset from each trace for residual computation.
+    
+    v5: Uses stable band (100MHz ~ 3.25GHz) for offset estimation.
     
     Parameters
     ----------
@@ -191,6 +235,10 @@ def remove_global_offsets(traces: np.ndarray, rrs: np.ndarray,
         Reference response spectrum.
     max_offset_db : float
         Maximum allowed offset.
+    freq_hz : np.ndarray, optional
+        Frequency axis in Hz.
+    use_stable_band : bool
+        If True, use stable band for offset estimation.
         
     Returns
     -------
@@ -202,7 +250,8 @@ def remove_global_offsets(traces: np.ndarray, rrs: np.ndarray,
     corrected = np.zeros_like(traces)
     
     for i in range(n_traces):
-        offset = estimate_global_offset(traces[i], rrs, max_offset_db)
+        offset = estimate_global_offset(traces[i], rrs, max_offset_db, 
+                                        freq_hz=freq_hz, use_stable_band=use_stable_band)
         offsets[i] = offset
         corrected[i] = traces[i] - offset
     
@@ -839,6 +888,394 @@ def build_rrs_and_envelope_v4(
         },
         # For frontend display
         'center_level_dbm': float(np.median(rrs)),  # Note: dBm unit
+        'spec_center_dbm': -10.0,
+        'spec_tol_db': 0.4,
+        'spec_upper_dbm': -9.6,
+        'spec_lower_dbm': -10.4,
+    }
+    
+    return result
+
+
+# =============================================================================
+# Outlier Detection Based on Vendor Tolerance Exceed (v5)
+# =============================================================================
+def detect_outliers_by_vendor_exceed(
+    traces: np.ndarray,
+    rrs: np.ndarray,
+    vendor_tol: np.ndarray,
+    *,
+    exceed_rate_threshold: float = 0.10,  # >10% of points exceed vendor tolerance
+    max_exceed_threshold: float = 0.5,     # max exceed > 0.5 dB
+    p95_exceed_threshold: float = 0.3,     # p95 exceed > 0.3 dB
+) -> dict:
+    """Detect outlier traces based on how much they exceed vendor tolerance.
+    
+    Parameters
+    ----------
+    traces : np.ndarray
+        Shape (n_traces, n_points), offset-normalized traces.
+    rrs : np.ndarray
+        Reference response spectrum.
+    vendor_tol : np.ndarray
+        Vendor tolerance at each frequency point.
+    exceed_rate_threshold : float
+        Maximum allowed fraction of points exceeding vendor tolerance.
+    max_exceed_threshold : float
+        Maximum allowed exceed (dB).
+    p95_exceed_threshold : float
+        Maximum allowed 95th percentile exceed (dB).
+        
+    Returns
+    -------
+    dict
+        Contains outlier mask and statistics.
+    """
+    n_traces, n_points = traces.shape
+    residuals = traces - rrs
+    abs_resid = np.abs(residuals)
+    
+    # Exceed = how much residual exceeds vendor tolerance
+    exceed = np.maximum(0, abs_resid - vendor_tol)
+    
+    # Compute per-trace statistics
+    trace_stats = []
+    valid_mask = np.ones(n_traces, dtype=bool)
+    
+    for i in range(n_traces):
+        exc_i = exceed[i]
+        exceed_rate = np.mean(exc_i > 0)
+        max_exceed = np.max(exc_i)
+        p95_exceed = np.percentile(exc_i, 95)
+        
+        stats = {
+            'exceed_rate': exceed_rate,
+            'max_exceed': max_exceed,
+            'p95_exceed': p95_exceed,
+        }
+        trace_stats.append(stats)
+        
+        # Mark as outlier if any threshold exceeded
+        if (exceed_rate > exceed_rate_threshold or
+            max_exceed > max_exceed_threshold or
+            p95_exceed > p95_exceed_threshold):
+            valid_mask[i] = False
+    
+    n_outliers = n_traces - np.sum(valid_mask)
+    
+    return {
+        'valid_mask': valid_mask,
+        'n_outliers': n_outliers,
+        'outlier_indices': list(np.where(~valid_mask)[0]),
+        'trace_stats': trace_stats,
+        'thresholds': {
+            'exceed_rate': exceed_rate_threshold,
+            'max_exceed': max_exceed_threshold,
+            'p95_exceed': p95_exceed_threshold,
+        },
+    }
+
+
+# =============================================================================
+# Segmented Extra Margin Computation (v5)
+# =============================================================================
+def compute_segmented_extra_margin(
+    residuals: np.ndarray,
+    freq_hz: np.ndarray,
+    vendor_tol: np.ndarray,
+    *,
+    target_coverage: float = 0.98,
+    smooth_sigma: float = 3.0,
+) -> np.ndarray:
+    """Compute extra margin per frequency segment based on residual distribution.
+    
+    Instead of a single global extra margin, compute per-segment margin
+    to better capture local variation while respecting vendor tolerance.
+    
+    Parameters
+    ----------
+    residuals : np.ndarray
+        Shape (n_traces, n_points), offset-normalized residuals.
+    freq_hz : np.ndarray
+        Frequency axis in Hz.
+    vendor_tol : np.ndarray
+        Vendor tolerance at each frequency point.
+    target_coverage : float
+        Target per-point coverage.
+    smooth_sigma : float
+        Gaussian sigma for smoothing extra margin.
+        
+    Returns
+    -------
+    np.ndarray
+        Extra margin in dB for each frequency point.
+    """
+    n_traces, n_points = residuals.shape
+    abs_resid = np.abs(residuals)
+    
+    # Per-point: find extra needed to achieve target coverage
+    extra = np.zeros(n_points)
+    
+    for j in range(n_points):
+        col = abs_resid[:, j]
+        sorted_col = np.sort(col)
+        target_idx = int(np.ceil(target_coverage * n_traces)) - 1
+        target_idx = min(target_idx, n_traces - 1)
+        
+        # Extra needed beyond vendor tolerance
+        needed = sorted_col[target_idx] - vendor_tol[j]
+        extra[j] = max(0, needed)
+    
+    # Smooth extra margin to avoid spikes
+    if smooth_sigma > 0 and _HAS_SCIPY:
+        extra = gaussian_filter1d(extra, sigma=smooth_sigma, mode='reflect')
+    
+    return extra
+
+
+# =============================================================================
+# New Main Function: Build RRS and Envelope v5 (2024-01) - Final Version
+# =============================================================================
+def build_rrs_and_envelope_v5(
+    freq_hz: np.ndarray,
+    traces: np.ndarray,
+    *,
+    # RRS parameters
+    rrs_smooth_sigma: float = 0.0,  # Default: NO smoothing for RRS
+    # Global offset parameters
+    absorb_global_offset: bool = True,
+    max_offset_db: float = 0.4,
+    use_stable_band: bool = True,
+    # Outlier detection (vendor tolerance based)
+    outlier_removal: bool = True,
+    exceed_rate_threshold: float = 0.10,
+    max_exceed_threshold: float = 0.5,
+    p95_exceed_threshold: float = 0.3,
+    max_outlier_fraction: float = 0.20,  # Don't drop more than 20%
+    # Envelope parameters
+    extra_max: float = EXTRA_MAX_DEFAULT,
+    use_segmented_extra: bool = True,
+    width_smooth: float = 6.0,
+    # Coverage targets
+    target_coverage_mean: float = COVERAGE_MEAN_TARGET,
+    target_coverage_min: float = COVERAGE_MIN_TARGET,
+) -> dict:
+    """Build RRS and dynamic envelope with vendor tolerance bounds - Final v5.
+    
+    Key improvements in v5:
+    1. RRS = pointwise median (NO smoothing) - diagnosis must use this
+    2. Global offset estimated on stable band (100MHz ~ 3.25GHz) only
+    3. Outlier detection based on vendor tolerance exceed metrics
+    4. Segmented extra margin computation (not a single global value)
+    5. All smoothing constraints validated
+    
+    Parameters
+    ----------
+    freq_hz : np.ndarray
+        Frequency axis in Hz.
+    traces : np.ndarray
+        Shape (n_traces, n_points), normal response curves in dBm.
+    rrs_smooth_sigma : float
+        Gaussian sigma for RRS smoothing (0 = disabled, required for diagnosis).
+    absorb_global_offset : bool
+        If True, remove global offset from each trace as normal drift.
+    max_offset_db : float
+        Maximum offset to absorb.
+    use_stable_band : bool
+        If True, use only stable band (100MHz~3.25GHz) for offset estimation.
+    outlier_removal : bool
+        If True, remove outlier traces based on vendor tolerance exceed.
+    exceed_rate_threshold : float
+        Max fraction of points exceeding vendor tolerance for a valid trace.
+    max_exceed_threshold : float
+        Max single-point exceed for a valid trace.
+    p95_exceed_threshold : float
+        Max 95th percentile exceed for a valid trace.
+    max_outlier_fraction : float
+        Don't remove more than this fraction of traces.
+    extra_max : float
+        Maximum extra width above vendor tolerance (dB).
+    use_segmented_extra : bool
+        If True, compute extra margin per segment instead of global.
+    width_smooth : float
+        Gaussian sigma for smoothing final envelope width.
+    target_coverage_mean : float
+        Target mean coverage.
+    target_coverage_min : float
+        Target minimum coverage.
+        
+    Returns
+    -------
+    dict
+        Contains: rrs, rrs_smooth_for_viz, upper, lower, coverage, metadata
+    """
+    n_traces, n_points = traces.shape
+    print(f"[RRS/Envelope v5] Building from {n_traces} normal traces, {n_points} points")
+    print(f"[RRS/Envelope v5] Y-axis unit: dBm")
+    print(f"[RRS/Envelope v5] Single-band mode: no switch points detection")
+    
+    # Step 1: Compute RRS (pointwise median, NO smoothing for diagnosis)
+    rrs = compute_rrs(traces, smooth_sigma=0.0)  # ALWAYS unsmoothed for diagnosis
+    
+    # Optional: smoothed version for visualization only
+    if rrs_smooth_sigma > 0 and _HAS_SCIPY:
+        rrs_smooth_for_viz = gaussian_filter1d(rrs, sigma=rrs_smooth_sigma, mode='reflect')
+    else:
+        rrs_smooth_for_viz = rrs.copy()
+    
+    print(f"[RRS/Envelope v5] RRS computed (unsmoothed for diagnosis, smooth_viz_sigma={rrs_smooth_sigma})")
+    
+    # Step 2: Global offset removal (using stable band for estimation)
+    if absorb_global_offset:
+        corrected_traces, offsets = remove_global_offsets(
+            traces, rrs, max_offset_db, 
+            freq_hz=freq_hz, use_stable_band=use_stable_band
+        )
+        offset_stats = {
+            'mean': float(np.mean(offsets)),
+            'std': float(np.std(offsets)),
+            'p50': float(np.percentile(offsets, 50)),
+            'p95': float(np.percentile(np.abs(offsets), 95)),
+        }
+        print(f"[RRS/Envelope v5] Global offsets (stable band={use_stable_band}): "
+              f"mean={offset_stats['mean']:.4f}, std={offset_stats['std']:.4f}, "
+              f"max_abs={np.max(np.abs(offsets)):.4f} dB")
+    else:
+        corrected_traces = traces
+        offsets = np.zeros(n_traces)
+        offset_stats = {}
+    
+    # Step 3: Outlier detection based on vendor tolerance exceed
+    vendor_tol = vendor_tolerance_db(freq_hz)
+    dropped_trace_ids = []
+    valid_mask = np.ones(n_traces, dtype=bool)
+    outlier_stats = {}
+    
+    if outlier_removal:
+        outlier_result = detect_outliers_by_vendor_exceed(
+            corrected_traces, rrs, vendor_tol,
+            exceed_rate_threshold=exceed_rate_threshold,
+            max_exceed_threshold=max_exceed_threshold,
+            p95_exceed_threshold=p95_exceed_threshold,
+        )
+        
+        n_outliers = outlier_result['n_outliers']
+        
+        if n_outliers > 0 and n_outliers < n_traces * max_outlier_fraction:
+            valid_mask = outlier_result['valid_mask']
+            dropped_trace_ids = outlier_result['outlier_indices']
+            print(f"[RRS/Envelope v5] Dropped {n_outliers} outlier traces "
+                  f"(exceed_rate>{exceed_rate_threshold}, max_exceed>{max_exceed_threshold})")
+        elif n_outliers >= n_traces * max_outlier_fraction:
+            print(f"[RRS/Envelope v5] Warning: {n_outliers} outliers detected but exceeds max_outlier_fraction, keeping all")
+        
+        outlier_stats = {
+            'n_detected': n_outliers,
+            'n_dropped': len(dropped_trace_ids),
+            'thresholds': outlier_result['thresholds'],
+        }
+    
+    valid_traces = corrected_traces[valid_mask]
+    n_valid = valid_traces.shape[0]
+    
+    # Step 4: Compute extra margin
+    if use_segmented_extra:
+        # Per-segment extra margin based on residual distribution
+        residuals = valid_traces - rrs
+        extra_margin = compute_segmented_extra_margin(
+            residuals, freq_hz, vendor_tol,
+            target_coverage=0.98,  # Aim for high per-point coverage
+            smooth_sigma=width_smooth,
+        )
+        # Cap at extra_max
+        extra_margin = np.minimum(extra_margin, extra_max)
+    else:
+        # Single global extra
+        extra_margin = np.zeros_like(vendor_tol)
+    
+    # Step 5: Build envelope with vendor tolerance + extra margin
+    half_width = vendor_tol + extra_margin
+    
+    # Apply smoothing to width
+    if width_smooth > 0 and _HAS_SCIPY:
+        half_width = gaussian_filter1d(half_width, sigma=width_smooth, mode='reflect')
+    
+    upper = rrs + half_width
+    lower = rrs - half_width
+    
+    # Step 6: Check coverage and expand if needed
+    coverage = compute_coverage(valid_traces, upper, lower)
+    
+    expansion_iterations = 0
+    while (coverage['coverage_mean'] < target_coverage_mean or 
+           coverage['coverage_min'] < target_coverage_min):
+        
+        expansion_iterations += 1
+        if expansion_iterations > 20:
+            print(f"[RRS/Envelope v5] Warning: Coverage targets not met after 20 iterations")
+            break
+        
+        # Expand extra margin uniformly
+        extra_margin = extra_margin + 0.01
+        extra_margin = np.minimum(extra_margin, EXTRA_MAX_LIMIT)
+        
+        half_width = vendor_tol + extra_margin
+        if width_smooth > 0 and _HAS_SCIPY:
+            half_width = gaussian_filter1d(half_width, sigma=width_smooth, mode='reflect')
+        
+        upper = rrs + half_width
+        lower = rrs - half_width
+        coverage = compute_coverage(valid_traces, upper, lower)
+    
+    if expansion_iterations > 0:
+        print(f"[RRS/Envelope v5] Expanded envelope in {expansion_iterations} iterations")
+    
+    # Step 7: Check smoothness constraints
+    width = upper - lower
+    step_hz = freq_hz[1] - freq_hz[0] if len(freq_hz) > 1 else 10e6
+    smoothness = check_width_smoothness(width, freq_hz, step_hz)
+    
+    print(f"[RRS/Envelope v5] Extra margin: min={extra_margin.min():.4f}, "
+          f"median={np.median(extra_margin):.4f}, max={extra_margin.max():.4f} dB")
+    print(f"[RRS/Envelope v5] Width: min={width.min():.4f}, median={np.median(width):.4f}, "
+          f"max={width.max():.4f} dB")
+    print(f"[RRS/Envelope v5] Coverage: mean={coverage['coverage_mean']:.4f}, "
+          f"min={coverage['coverage_min']:.4f}")
+    print(f"[RRS/Envelope v5] Smoothness: diff_std={smoothness['width_diff_std']:.6f}, "
+          f"max_window_var={smoothness['max_window_variation']:.4f}, passed={smoothness['smoothness_passed']}")
+    
+    # Build result
+    result = {
+        'frequency_hz': freq_hz,
+        'rrs': rrs,                         # Unsmoothed - use for diagnosis/features
+        'rrs_smooth_for_viz': rrs_smooth_for_viz,  # Optional smoothed for display
+        'upper': upper,
+        'lower': lower,
+        'coverage': coverage,
+        'smoothness': smoothness,
+        'metadata': {
+            'version': 'v5',
+            'n_traces': n_traces,
+            'n_valid_traces': n_valid,
+            'n_points': n_points,
+            'rrs_smooth_sigma': rrs_smooth_sigma,
+            'absorb_global_offset': absorb_global_offset,
+            'use_stable_band': use_stable_band,
+            'max_offset_db': max_offset_db,
+            'offsets': offsets.tolist() if absorb_global_offset else [],
+            'offset_stats': offset_stats,
+            'dropped_trace_ids': dropped_trace_ids,
+            'outlier_stats': outlier_stats,
+            'extra_margin': extra_margin.tolist(),
+            'extra_max': extra_max,
+            'use_segmented_extra': use_segmented_extra,
+            'width_smooth': width_smooth,
+            'target_coverage_mean': target_coverage_mean,
+            'target_coverage_min': target_coverage_min,
+            'vendor_tolerance_db': vendor_tol.tolist(),
+        },
+        # For frontend display (dBm unit)
+        'center_level_dbm': float(np.median(rrs)),
         'spec_center_dbm': -10.0,
         'spec_tol_db': 0.4,
         'spec_upper_dbm': -9.6,
