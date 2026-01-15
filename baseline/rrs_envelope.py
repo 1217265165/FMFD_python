@@ -4,17 +4,28 @@ RRS (Reference Response Spectrum) and Dynamic Envelope Implementation
 This module implements a robust baseline and envelope computation for
 single-band spectrum data (10 MHz → 8.2 GHz, 820 points).
 
-Key design principles:
-1. RRS uses pointwise median (no secondary smoothing) - preserves real curve detail
-2. Envelope uses vendor tolerance as minimum width, with residual-based expansion
-3. Global offset drift (±0.4 dB) is absorbed as normal variation to avoid false positives
-4. Only envelope width is smoothed (not RRS)
+Key design principles (2024-01 v4):
+1. RRS uses pointwise median (no smoothing) - preserves real curve detail
+   - Diagnosis/feature extraction MUST use the unsmoothed RRS
+   - Optional rrs_smooth_for_viz for frontend display only
+2. Envelope follows vendor tolerance strictly:
+   - Lower bound: width(f) >= vendor_tol(f)
+   - Upper bound: width(f) <= vendor_tol(f) + extra_max (default 0.15 dB)
+3. Envelope smoothness constraints to prevent local bulges:
+   - std(diff(width)) < SMOOTHNESS_THRESHOLD (default 0.01)
+   - max-min within 100MHz window < WINDOW_VARIATION_MAX (default 0.08 dB)
+4. Coverage requirements:
+   - Mean coverage >= 0.97
+   - Min coverage >= 0.93
+5. Single-band mode: no switch points detection
 
-Vendor tolerance by frequency band:
+Vendor tolerance by frequency band (y-axis unit: dBm):
 - 10 MHz ~ 100 MHz: ±0.80 dB
 - 100 MHz ~ 3.25 GHz: ±0.40 dB
 - 3.25 GHz ~ 5.25 GHz: ±0.60 dB
 - 5.25 GHz ~ 8.2 GHz: ±0.80 dB
+
+Note: dBm differences are dB, so vendor tolerances apply directly.
 """
 
 import numpy as np
@@ -24,6 +35,23 @@ try:
     _HAS_SCIPY = True
 except ImportError:
     _HAS_SCIPY = False
+
+
+# =============================================================================
+# Envelope Configuration Constants (2024-01 v4)
+# =============================================================================
+# Width bounds
+EXTRA_MAX_DEFAULT = 0.15          # Maximum extra width above vendor tolerance (dB)
+EXTRA_MAX_LIMIT = 0.25            # Absolute limit for extra_max expansion (dB)
+
+# Smoothness constraints
+SMOOTHNESS_THRESHOLD = 0.01       # Max std(diff(width)) to avoid spikes
+WINDOW_VARIATION_MAX = 0.08       # Max width variation within 100MHz window (dB)
+WINDOW_SIZE_MHZ = 100             # Window size for local variation check
+
+# Coverage targets
+COVERAGE_MEAN_TARGET = 0.97
+COVERAGE_MIN_TARGET = 0.93
 
 
 # =============================================================================
@@ -249,14 +277,105 @@ def compute_robust_sigma_from_residuals(residuals: np.ndarray,
 
 
 # =============================================================================
-# Envelope Width Computation (Vendor Tolerance as Minimum)
+# Envelope Width Computation (Vendor Tolerance Bounds - 2024-01 v4)
 # =============================================================================
+def compute_envelope_width_v4(
+    freq_hz: np.ndarray,
+    *,
+    extra_width: float = 0.0,
+    extra_max: float = EXTRA_MAX_DEFAULT,
+    smooth_sigma: float = 6.0,
+) -> np.ndarray:
+    """Compute envelope half-width using vendor tolerance with bounded extra.
+    
+    New algorithm (2024-01 v4):
+    - width(f) = vendor_tol(f) + extra
+    - where: 0 <= extra <= extra_max
+    - Smooth the width to ensure slow variation
+    
+    Parameters
+    ----------
+    freq_hz : np.ndarray
+        Frequency axis in Hz.
+    extra_width : float
+        Extra width above vendor tolerance (dB).
+    extra_max : float
+        Maximum allowed extra width (dB).
+    smooth_sigma : float
+        Gaussian smoothing sigma for width.
+        
+    Returns
+    -------
+    np.ndarray
+        Envelope half-width in dB.
+    """
+    vendor_tol = vendor_tolerance_db(freq_hz)
+    
+    # Clamp extra to [0, extra_max]
+    extra = np.clip(extra_width, 0.0, extra_max)
+    
+    # Width = vendor tolerance + bounded extra
+    half_width = vendor_tol + extra
+    
+    # Smooth width (makes envelope slowly varying, reduces segment steps)
+    if smooth_sigma > 0 and _HAS_SCIPY:
+        half_width = gaussian_filter1d(half_width, sigma=smooth_sigma, mode='reflect')
+    
+    return half_width
+
+
+def check_width_smoothness(width: np.ndarray, freq_hz: np.ndarray, 
+                           step_hz: float = 10e6) -> dict:
+    """Check if envelope width satisfies smoothness constraints.
+    
+    Parameters
+    ----------
+    width : np.ndarray
+        Envelope width (upper - lower).
+    freq_hz : np.ndarray
+        Frequency axis in Hz.
+    step_hz : float
+        Frequency step in Hz.
+        
+    Returns
+    -------
+    dict
+        Smoothness metrics and pass/fail status.
+    """
+    # Constraint 1: std(diff(width)) < SMOOTHNESS_THRESHOLD
+    width_diff_std = float(np.std(np.diff(width)))
+    diff_ok = width_diff_std < SMOOTHNESS_THRESHOLD
+    
+    # Constraint 2: max-min within 100MHz window < WINDOW_VARIATION_MAX
+    window_bins = max(1, int(WINDOW_SIZE_MHZ * 1e6 / step_hz))
+    n_points = len(width)
+    
+    max_variation = 0.0
+    for start in range(0, n_points - window_bins + 1, max(1, window_bins // 2)):
+        end = start + window_bins
+        window_width = width[start:end]
+        variation = float(np.max(window_width) - np.min(window_width))
+        max_variation = max(max_variation, variation)
+    
+    window_ok = max_variation < WINDOW_VARIATION_MAX
+    
+    return {
+        'width_diff_std': width_diff_std,
+        'width_diff_threshold': SMOOTHNESS_THRESHOLD,
+        'diff_passed': diff_ok,
+        'max_window_variation': max_variation,
+        'window_variation_threshold': WINDOW_VARIATION_MAX,
+        'window_passed': window_ok,
+        'smoothness_passed': diff_ok and window_ok,
+    }
+
+
 def compute_envelope_width(sigma: np.ndarray, freq_hz: np.ndarray,
                           k: float = 2.5,
                           use_vendor_floor: bool = True,
                           smooth_sigma: float = 8.0,
                           width_max_db: float = 1.0) -> np.ndarray:
-    """Compute envelope half-width.
+    """Compute envelope half-width (legacy compatibility).
     
     Parameters
     ----------
@@ -538,3 +657,192 @@ def compute_rrs_bounds_v2(frequency, traces, target_coverage=0.97):
     })
     
     return result['rrs'], (result['upper'], result['lower']), coverage_info
+
+
+# =============================================================================
+# New Main Function: Build RRS and Envelope v4 (2024-01)
+# =============================================================================
+def build_rrs_and_envelope_v4(
+    freq_hz: np.ndarray,
+    traces: np.ndarray,
+    *,
+    # RRS parameters
+    rrs_smooth_sigma: float = 0.0,  # Default: NO smoothing for RRS
+    # Global offset parameters
+    absorb_global_offset: bool = True,
+    max_offset_db: float = 0.4,
+    # Envelope parameters (new v4)
+    extra_max: float = EXTRA_MAX_DEFAULT,
+    width_smooth: float = 6.0,
+    # Coverage targets
+    target_coverage_mean: float = COVERAGE_MEAN_TARGET,
+    target_coverage_min: float = COVERAGE_MIN_TARGET,
+    # Outlier removal
+    outlier_removal: bool = True,
+    outlier_threshold_db: float = 0.5,
+) -> dict:
+    """Build RRS and dynamic envelope with vendor tolerance bounds.
+    
+    New v4 algorithm (2024-01):
+    1. RRS = pointwise median (NO smoothing) - diagnosis must use this
+    2. Envelope width = vendor_tol(f) + extra, where 0 <= extra <= extra_max
+    3. extra is calibrated to meet coverage targets
+    4. Outliers are removed first if coverage fails
+    5. Smoothness constraints are validated
+    
+    Parameters
+    ----------
+    freq_hz : np.ndarray
+        Frequency axis in Hz.
+    traces : np.ndarray
+        Shape (n_traces, n_points), normal response curves in dBm.
+    rrs_smooth_sigma : float
+        Gaussian sigma for RRS smoothing (0 = disabled, required for diagnosis).
+    absorb_global_offset : bool
+        If True, remove global offset from each trace as normal drift.
+    max_offset_db : float
+        Maximum offset to absorb.
+    extra_max : float
+        Maximum extra width above vendor tolerance (dB).
+    width_smooth : float
+        Gaussian sigma for smoothing final envelope width.
+    target_coverage_mean : float
+        Target mean coverage.
+    target_coverage_min : float
+        Target minimum coverage.
+    outlier_removal : bool
+        If True, remove outlier traces before coverage expansion.
+    outlier_threshold_db : float
+        Threshold for outlier detection.
+        
+    Returns
+    -------
+    dict
+        Contains: rrs, rrs_smooth_for_viz, upper, lower, coverage, metadata
+    """
+    n_traces, n_points = traces.shape
+    print(f"[RRS/Envelope v4] Building from {n_traces} normal traces, {n_points} points")
+    print(f"[RRS/Envelope v4] Y-axis unit: dBm")
+    
+    # Step 1: Compute RRS (pointwise median, NO smoothing for diagnosis)
+    rrs = compute_rrs(traces, smooth_sigma=0.0)  # ALWAYS unsmoothed for diagnosis
+    
+    # Optional: smoothed version for visualization only
+    if rrs_smooth_sigma > 0 and _HAS_SCIPY:
+        rrs_smooth_for_viz = gaussian_filter1d(rrs, sigma=rrs_smooth_sigma, mode='reflect')
+    else:
+        rrs_smooth_for_viz = rrs.copy()
+    
+    print(f"[RRS/Envelope v4] RRS computed (unsmoothed for diagnosis, smooth_viz_sigma={rrs_smooth_sigma})")
+    
+    # Step 2: Global offset removal
+    if absorb_global_offset:
+        corrected_traces, offsets = remove_global_offsets(traces, rrs, max_offset_db)
+        print(f"[RRS/Envelope v4] Global offsets absorbed: mean={np.mean(offsets):.4f}, "
+              f"std={np.std(offsets):.4f}, max_abs={np.max(np.abs(offsets)):.4f} dB")
+    else:
+        corrected_traces = traces
+        offsets = np.zeros(n_traces)
+    
+    # Step 3: Outlier detection (before envelope computation)
+    dropped_trace_ids = []
+    valid_mask = np.ones(n_traces, dtype=bool)
+    
+    if outlier_removal:
+        residuals = corrected_traces - rrs
+        trace_mae = np.array([np.mean(np.abs(residuals[i])) for i in range(n_traces)])
+        threshold = np.median(trace_mae) + 2 * 1.4826 * np.median(np.abs(trace_mae - np.median(trace_mae)))
+        threshold = max(threshold, outlier_threshold_db)
+        
+        valid_mask = trace_mae <= threshold
+        n_dropped = n_traces - np.sum(valid_mask)
+        
+        if n_dropped > 0 and n_dropped < n_traces * 0.2:  # Don't drop more than 20%
+            print(f"[RRS/Envelope v4] Dropped {n_dropped} outlier traces (threshold={threshold:.4f} dB)")
+            dropped_trace_ids = list(np.where(~valid_mask)[0])
+        else:
+            valid_mask = np.ones(n_traces, dtype=bool)
+    
+    valid_traces = corrected_traces[valid_mask]
+    n_valid = valid_traces.shape[0]
+    
+    # Step 4: Compute envelope using vendor tolerance bounds
+    vendor_tol = vendor_tolerance_db(freq_hz)
+    
+    # Start with extra = 0
+    extra_width = 0.0
+    
+    for attempt in range(20):  # Max 20 iterations
+        half_width = compute_envelope_width_v4(
+            freq_hz,
+            extra_width=extra_width,
+            extra_max=extra_max,
+            smooth_sigma=width_smooth,
+        )
+        
+        upper = rrs + half_width
+        lower = rrs - half_width
+        
+        coverage = compute_coverage(valid_traces, upper, lower)
+        
+        if coverage['coverage_mean'] >= target_coverage_mean and coverage['coverage_min'] >= target_coverage_min:
+            break
+        
+        # Expand extra_width
+        extra_width += 0.02
+        
+        if extra_width > extra_max:
+            # Try expanding extra_max up to EXTRA_MAX_LIMIT
+            if extra_max < EXTRA_MAX_LIMIT:
+                extra_max = min(extra_max + 0.05, EXTRA_MAX_LIMIT)
+                extra_width = extra_max
+                print(f"[RRS/Envelope v4] Expanding extra_max to {extra_max:.2f} dB")
+            else:
+                print(f"[RRS/Envelope v4] Warning: Coverage targets not met at extra_max limit")
+                break
+    
+    # Step 5: Check smoothness constraints
+    width = upper - lower
+    step_hz = freq_hz[1] - freq_hz[0] if len(freq_hz) > 1 else 10e6
+    smoothness = check_width_smoothness(width, freq_hz, step_hz)
+    
+    print(f"[RRS/Envelope v4] Final extra_width={extra_width:.4f} dB, extra_max={extra_max:.4f} dB")
+    print(f"[RRS/Envelope v4] Width: min={width.min():.4f}, median={np.median(width):.4f}, max={width.max():.4f} dB")
+    print(f"[RRS/Envelope v4] Coverage: mean={coverage['coverage_mean']:.4f}, min={coverage['coverage_min']:.4f}")
+    print(f"[RRS/Envelope v4] Smoothness: diff_std={smoothness['width_diff_std']:.6f}, "
+          f"max_window_var={smoothness['max_window_variation']:.4f}, passed={smoothness['smoothness_passed']}")
+    
+    # Build result
+    result = {
+        'frequency_hz': freq_hz,
+        'rrs': rrs,                         # Unsmoothed - use for diagnosis/features
+        'rrs_smooth_for_viz': rrs_smooth_for_viz,  # Optional smoothed for display
+        'upper': upper,
+        'lower': lower,
+        'coverage': coverage,
+        'smoothness': smoothness,
+        'metadata': {
+            'n_traces': n_traces,
+            'n_valid_traces': n_valid,
+            'n_points': n_points,
+            'rrs_smooth_sigma': rrs_smooth_sigma,
+            'absorb_global_offset': absorb_global_offset,
+            'max_offset_db': max_offset_db,
+            'offsets': offsets.tolist() if absorb_global_offset else [],
+            'dropped_trace_ids': dropped_trace_ids,
+            'extra_width': extra_width,
+            'extra_max': extra_max,
+            'width_smooth': width_smooth,
+            'target_coverage_mean': target_coverage_mean,
+            'target_coverage_min': target_coverage_min,
+            'vendor_tolerance_db': vendor_tol.tolist(),
+        },
+        # For frontend display
+        'center_level_dbm': float(np.median(rrs)),  # Note: dBm unit
+        'spec_center_dbm': -10.0,
+        'spec_tol_db': 0.4,
+        'spec_upper_dbm': -9.6,
+        'spec_lower_dbm': -10.4,
+    }
+    
+    return result
