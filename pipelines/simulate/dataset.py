@@ -6,7 +6,7 @@ from .faults import (
     inject_clock_drift, inject_lo_path_error, inject_adc_bias, inject_vbw_smoothing,
     inject_power_noise
 )
-from FMFD.features.extract import extract_system_features
+from features.extract import extract_system_features
 
 def simulate_fault_dataset(baseline, n_samples=120, seed=0):
     """
