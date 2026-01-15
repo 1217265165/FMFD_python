@@ -557,10 +557,10 @@ STABLE_BAND_END_HZ = 3.25e9
 
 # 平滑参数
 SMOOTH_SIGMA_HZ_DEFAULT = 200e6  # 200MHz 高斯平滑尺度
-SMOOTH_SIGMA_HZ_V7 = 500e6  # v7 使用更大的平滑尺度 (500MHz)
+SMOOTH_SIGMA_HZ_V7 = 800e6  # v7 使用更大的平滑尺度 (800MHz) 让包络更平缓
 
 # v7 默认参数
-BASE_TOLERANCE_UNIFORM = 0.4  # 统一基准容差 (dBm)
+BASE_TOLERANCE_UNIFORM = 0.20  # 统一基准容差 (dBm)，目标范围 ~[-9.85, -10.25]
 
 
 def vendor_tolerance_dbm(frequency_hz):

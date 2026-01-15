@@ -57,7 +57,7 @@ def main():
     print(f"Frequency range: {frequency[0]:.2e} Hz to {frequency[-1]:.2e} Hz")
 
     # 2) 使用包络算法: v7 (统一基准 + 平滑) 或 v6 (分段容差)
-    # v7: 统一 0.4 dB 基准容差，500MHz 平滑尺度，包络更平缓
+    # v7: 统一 0.20 dB 基准容差，800MHz 平滑尺度，包络更窄更平缓
     # v6: 分段厂商容差，200MHz 平滑尺度
     
     if ENVELOPE_VERSION == 'v7':
@@ -70,9 +70,9 @@ def main():
             exceed_rate_threshold=0.10,
             max_exceed_threshold=0.80,
             p95_exceed_threshold=0.30,
-            base_tolerance=0.4,  # 统一 0.4 dB 基准
+            base_tolerance=0.20,  # 统一 0.20 dB 基准，目标区间 [-9.85, -10.25]
             quantile=0.97,
-            smooth_sigma_hz=500e6,  # 500MHz 大平滑尺度
+            smooth_sigma_hz=800e6,  # 800MHz 大平滑尺度，更平缓
             extra_clip_max=EXTRA_CLIP_MAX_DB,
             target_coverage_mean=COVERAGE_MEAN_MIN,
             target_coverage_min=COVERAGE_MIN_MIN,
