@@ -353,11 +353,15 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             band_means.append(np.mean(arr[start:end]))
     x10 = float(np.std(band_means)) if len(band_means) > 1 else 0.0
 
-    # X11-X15: 基于包络/残差的通用特征
+    # X11-X15: 基于包络/残差的通用特征（使用 offset 对齐后的残差）
+    offset_db = 0.0
+    arr_aligned = arr
     if baseline_curve is not None:
         baseline = np.asarray(baseline_curve, dtype=float)
         if baseline.shape == arr.shape:
-            envelope_residual = arr - baseline
+            offset_db = float(np.median(arr - baseline))
+            arr_aligned = arr - offset_db
+            envelope_residual = arr_aligned - baseline
         else:
             envelope_residual = residual
     else:
@@ -368,8 +372,8 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
         if upper.shape == arr.shape and lower.shape == arr.shape:
-            above = arr > upper
-            below = arr < lower
+            above = arr_aligned > upper
+            below = arr_aligned < lower
             x11 = float(np.mean(above | below))
         else:
             x11 = float(np.mean(np.abs(envelope_residual) > 3 * np.std(envelope_residual)))
@@ -380,8 +384,8 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
         if upper.shape == arr.shape and lower.shape == arr.shape:
-            above = np.maximum(arr - upper, 0)
-            below = np.maximum(lower - arr, 0)
+            above = np.maximum(arr_aligned - upper, 0)
+            below = np.maximum(lower - arr_aligned, 0)
             x12 = float(np.max(above + below))
         else:
             x12 = float(np.max(np.abs(envelope_residual)))
@@ -416,7 +420,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             # X16: Enhanced cross-correlation lag (in actual bins, not normalized)
             try:
                 # Full cross-correlation for better peak detection
-                arr_centered = arr - np.mean(arr)
+                arr_centered = arr_aligned - np.mean(arr_aligned)
                 baseline_centered = baseline - np.mean(baseline)
                 corr = np.correlate(arr_centered, baseline_centered, mode='full')
                 lag_idx = np.argmax(corr) - (len(arr) - 1)  # Actual lag in bins
@@ -434,7 +438,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                         x_new = x_axis * scale + shift
                         x_new = np.clip(x_new, 0, 1)
                         baseline_interp = np.interp(x_new, x_axis, baseline)
-                        error = np.sum((arr - baseline_interp) ** 2)
+                        error = np.sum((arr_aligned - baseline_interp) ** 2)
                         if error < min_error:
                             min_error = error
                             best_scale, best_shift = scale, shift
@@ -449,14 +453,14 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                 x_optimal = x_axis * best_scale + best_shift
                 x_optimal = np.clip(x_optimal, 0, 1)
                 baseline_aligned = np.interp(x_optimal, x_axis, baseline)
-                warp_residual = arr - baseline_aligned
+                warp_residual = arr_aligned - baseline_aligned
                 x23 = float(np.sum(warp_residual ** 2) / len(arr))  # MSE
             except Exception:
                 x23 = 0.0
             
             # X24: Phase/derivative slope difference
             try:
-                arr_diff = np.diff(arr)
+                arr_diff = np.diff(arr_aligned)
                 baseline_diff = np.diff(baseline)
                 if len(arr_diff) > 1:
                     # Correlation between derivatives
@@ -474,11 +478,11 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                     abs_lag = abs(optimal_lag)
                     if optimal_lag > 0:
                         # Signal shifted right relative to baseline
-                        arr_shifted = arr[abs_lag:]
+                        arr_shifted = arr_aligned[abs_lag:]
                         baseline_shifted = baseline[:-abs_lag]
                     else:
                         # Signal shifted left relative to baseline
-                        arr_shifted = arr[:-abs_lag]
+                        arr_shifted = arr_aligned[:-abs_lag]
                         baseline_shifted = baseline[abs_lag:]
                     
                     # Ensure same length before MSE calculation
@@ -488,7 +492,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                     else:
                         x25 = 0.0
                 else:
-                    x25 = float(np.mean((arr - baseline) ** 2))
+                    x25 = float(np.mean((arr_aligned - baseline) ** 2))
             except Exception:
                 x25 = 0.0
 
@@ -729,7 +733,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
 
     robust_feats = {}
     if baseline_curve is not None and len(baseline_curve) == len(arr):
-        robust_feats = compute_residual_robust_features(arr, np.asarray(baseline_curve, dtype=float))
+        robust_feats = compute_residual_robust_features(arr_aligned, np.asarray(baseline_curve, dtype=float))
 
     return {
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
@@ -741,6 +745,9 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X26": x26, "X27": x27, "X28": x28,  # New ref features
         "X29": x29, "X30": x30, "X31": x31,  # v8: Amp vs Ref features
         "X32": x32, "X33": x33, "X34": x34,  # v9: Enhanced spectrum analysis features
+        "offset_db": offset_db,
+        "viol_rate_aligned": x11,
+        "viol_energy_aligned": x13,
         **robust_feats,
     }
 
@@ -793,11 +800,18 @@ def compute_dynamic_threshold_features(
     overrun_rate = 0.0
     overrun_max = 0.0
     overrun_mean = 0.0
+    offset_db = 0.0
+    arr_aligned = arr
+    if rrs is not None:
+        rrs_arr = np.asarray(rrs, dtype=float)
+        if rrs_arr.shape == arr.shape:
+            offset_db = float(np.median(arr - rrs_arr))
+            arr_aligned = arr - offset_db
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
-        if upper.shape == arr.shape and lower.shape == arr.shape:
-            above = np.maximum(arr - upper, 0)
-            below = np.maximum(lower - arr, 0)
+        if upper.shape == arr_aligned.shape and lower.shape == arr_aligned.shape:
+            above = np.maximum(arr_aligned - upper, 0)
+            below = np.maximum(lower - arr_aligned, 0)
             total_violation = above + below
             overrun_rate = float(np.mean(total_violation > 0))
             overrun_max = float(np.max(total_violation))
@@ -816,7 +830,7 @@ def compute_dynamic_threshold_features(
     if rrs is not None:
         rrs_arr = np.asarray(rrs, dtype=float)
         if rrs_arr.shape == arr.shape:
-            robust_feats = compute_residual_robust_features(arr, rrs_arr)
+            robust_feats = compute_residual_robust_features(arr_aligned, rrs_arr)
 
     return {
         "env_overrun_rate": overrun_rate,
@@ -824,6 +838,9 @@ def compute_dynamic_threshold_features(
         "env_overrun_mean": overrun_mean,
         "switch_step_mean_abs": step_mean_abs,
         "switch_step_std": step_std,
+        "offset_db": offset_db,
+        "viol_rate_aligned": overrun_rate,
+        "viol_energy_aligned": overrun_mean,
         **robust_feats,
     }
 

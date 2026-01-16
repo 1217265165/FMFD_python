@@ -14,6 +14,9 @@ if str(REPO_ROOT) not in sys.path:
 from baseline.baseline import (
     load_and_align,
     compute_rrs_bounds,
+    compute_offsets,
+    align_traces_by_offsets,
+    summarize_residuals,
     detect_switch_steps,
     vendor_tolerance_dbm,
 )
@@ -21,6 +24,7 @@ from baseline.config import (
     BAND_RANGES, K_LIST, SWITCH_TOL,
     BASELINE_ARTIFACTS, BASELINE_META,
     NORMAL_FEATURE_STATS, SWITCH_CSV, SWITCH_JSON, PLOT_PATH,
+    BASELINE_OFFSETS, BASELINE_RESIDUAL_STATS,
     OUTPUT_DIR, SINGLE_BAND_MODE, COVERAGE_MEAN_MIN, COVERAGE_MIN_MIN,
 )
 from baseline.viz import plot_rrs_envelope_switch
@@ -48,6 +52,8 @@ def main():
     switch_json = _resolve(repo_root, SWITCH_JSON)
     normal_feat_stats = _resolve(repo_root, NORMAL_FEATURE_STATS)
     plot_path = _resolve(repo_root, PLOT_PATH)
+    offsets_csv = _resolve(repo_root, BASELINE_OFFSETS)
+    residual_stats_path = _resolve(repo_root, BASELINE_RESIDUAL_STATS)
 
     # 1) 加载并对齐正常数据（仓库根下 normal_response_data）
     folder_path = repo_root / "normal_response_data"
@@ -56,8 +62,8 @@ def main():
     print(f"Loaded {len(names)} traces, frequency points: {len(frequency)}")
     print(f"Frequency range: {frequency[0]:.2e} Hz to {frequency[-1]:.2e} Hz")
 
-    # 2) 使用单一权威包络算法：RRS pointwise median + quantile envelope
-    print("\n[Baseline] Using quantile envelope with soft vendor prior")
+    # 2) 使用单一权威包络算法：RRS pointwise median + quantile envelope（先对齐 offset）
+    print("\n[Baseline] Using quantile envelope with offset alignment")
     rrs, bounds, coverage_info = compute_rrs_bounds(
         frequency,
         traces,
@@ -82,8 +88,10 @@ def main():
     else:
         print(f"Detected {len(switch_feats)} switch points")
 
-    # 4) 可视化
-    plot_rrs_envelope_switch(frequency, traces, rrs, bounds, switch_feats, plot_path)
+    # 4) 可视化（使用 offset 对齐后的曲线）
+    offsets = compute_offsets(traces, rrs)
+    aligned_traces = align_traces_by_offsets(traces, offsets)
+    plot_rrs_envelope_switch(frequency, aligned_traces, rrs, bounds, switch_feats, plot_path)
     
     # 4.1) 新增：包络宽度可视化（用于检查是否有局部鼓包）
     width = bounds[0] - bounds[1]  # upper - lower
@@ -92,7 +100,7 @@ def main():
         import matplotlib.pyplot as plt
         plt.figure(figsize=(12, 4))
         plt.plot(frequency / 1e9, width, 'b-', linewidth=1, label='Envelope Width')
-        plt.axhline(y=0.60, color='r', linestyle='--', alpha=0.7, label='Max threshold (0.60 dB)')
+        plt.axhline(y=0.40, color='r', linestyle='--', alpha=0.7, label='Max threshold (0.40 dB)')
         plt.axhline(y=np.median(width), color='g', linestyle=':', alpha=0.7, 
                     label=f'Median ({np.median(width):.3f} dB)')
         plt.xlabel('Frequency (GHz)')
@@ -106,6 +114,34 @@ def main():
         print(f"Envelope width plot saved: {width_plot_path}")
     except Exception as e:
         print(f"Warning: Could not save width plot: {e}")
+
+    # 4.2) 保存 offset 对齐统计与残差分布
+    residual_before = traces - rrs
+    residual_after = aligned_traces - rrs
+    offsets_rows = []
+    for name, offset, res_before, res_after in zip(names, offsets, residual_before, residual_after):
+        offsets_rows.append(
+            {
+                "curve_id": name,
+                "offset_db": float(offset),
+                "median_residual_before": float(np.median(res_before)),
+                "median_residual_after": float(np.median(res_after)),
+            }
+        )
+    if offsets_rows:
+        with open(offsets_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(offsets_rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(offsets_rows)
+        print(f"Baseline offsets saved: {offsets_csv}")
+
+    residual_stats = {
+        "before_alignment": summarize_residuals(residual_before),
+        "after_alignment": summarize_residuals(residual_after),
+    }
+    with open(residual_stats_path, "w", encoding="utf-8") as f:
+        json.dump(residual_stats, f, ensure_ascii=False, indent=2)
+    print(f"Baseline residual stats saved: {residual_stats_path}")
 
     # 5) 保存基线产物（包含 traces，供仿真脚本使用）
     # 计算基线整体电平中心
@@ -137,7 +173,7 @@ def main():
     
     # Build comprehensive metadata
     width = bounds[0] - bounds[1]
-    offsets = np.median(traces - rrs, axis=1)
+    offsets = compute_offsets(traces, rrs)
     offset_p95 = float(np.percentile(np.abs(offsets), 95)) if offsets.size else 0.0
     meta_dict = {
         "band_ranges": BAND_RANGES,
@@ -169,15 +205,16 @@ def main():
         # offset 统计
         "offset_stats": {
             "p95_abs": offset_p95,
+            "median_abs": float(np.median(np.abs(offsets))) if offsets.size else 0.0,
         },
         # 其他
         "rrs_mae": coverage_info.get('rrs_mae'),
         "dropped_trace_ids": [],
         "smooth_params": {
-            "smooth_sigma_hz": coverage_info.get('smooth_params', {}).get('smooth_sigma_hz', 200e6),
-            "width_smooth_sigma_hz": coverage_info.get('smooth_params', {}).get('width_smooth_sigma_hz', 400e6),
+            "width_smooth_sigma_hz": coverage_info.get('smooth_params', {}).get('width_smooth_sigma_hz', 200e6),
             "quantiles": coverage_info.get('chosen_quantiles', {}),
         },
+        "clip_db": coverage_info.get("clip_db", 0.4),
     }
     
     with open(baseline_meta, "w", encoding="utf-8") as f:
@@ -189,7 +226,6 @@ def main():
     
     # 计算 half_width
     half_width = (bounds[0] - bounds[1]) / 2
-    vendor_tol_max = np.max(vendor_tolerance_dbm(frequency))
     
     quality_dict = {
         "coverage_mean": coverage_info.get('coverage_mean'),
@@ -199,6 +235,7 @@ def main():
         "width_min": float(np.min(width)),
         "width_median": float(np.median(width)),
         "width_max": float(np.max(width)),
+        "width_p95": float(np.percentile(width, 95)),
         "width_smoothness": float(np.std(np.diff(width))),
         # half_width 相关 (新增)
         "half_width_max": float(np.max(half_width)),
@@ -212,20 +249,20 @@ def main():
         "rrs_mae": coverage_info.get('rrs_mae'),
         "rrs_smooth_enabled": coverage_info.get('rrs_smooth_enabled', False),
         "chosen_quantiles": coverage_info.get('chosen_quantiles', {}),
-        "width_prior_alpha": coverage_info.get('width_prior_alpha'),
+        "clip_db": coverage_info.get("clip_db", 0.4),
         # 阈值定义
         "thresholds": {
             "coverage_mean_min": 0.97,
             "coverage_min_min": 0.93,
             "sliding_coverage_min": 0.93,
-            "half_width_max": vendor_tol_max * 2.0,  # soft prior scale (not a hard clip)
+            "width_p95_max": 0.4,
             "width_smoothness_max": 0.03,
         },
-        # passed 规则: coverage_mean>=0.97 且 coverage_min>=0.93 且 half_width_max <= (vendor_tol_max+0.25)
+        # passed 规则: coverage_mean>=0.97 且 coverage_min>=0.93 且 width_p95 <= 0.4
         "passed": bool(
             coverage_info.get('coverage_mean', 0) >= 0.97 and
             coverage_info.get('coverage_min', 0) >= 0.93 and
-            float(np.max(half_width)) <= (vendor_tol_max * 2.0)
+            float(np.percentile(width, 95)) <= 0.4
         ),
     }
     with open(quality_json_path, "w", encoding="utf-8") as f:
@@ -249,8 +286,8 @@ def main():
 
     # 7) 正常特征统计（用于阈值初设）
     feats_list = []
-    for i in range(traces.shape[0]):
-        amp = traces[i]
+    for i in range(aligned_traces.shape[0]):
+        amp = aligned_traces[i]
         feats = extract_system_features(frequency, rrs, bounds, BAND_RANGES, amp)
         feats_list.append(feats)
     keys = sorted({key for feat in feats_list for key in feat.keys()})

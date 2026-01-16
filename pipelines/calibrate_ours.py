@@ -515,6 +515,7 @@ def save_debug_output(
             'pred_class': class_names[pred_label],
             'correct': int(true_label == pred_label),
             'anchor_score': anchor_result['anchor_score'],
+            'anchor_score_aligned': anchor_result['anchor_score'],
             'logit_normal': logits.get('normal', 0),
             'logit_amp': logits.get('amp', 0),
             'logit_freq': logits.get('freq', 0),
@@ -523,6 +524,9 @@ def save_debug_output(
             'p_amp': probs.get('幅度失准', 0),
             'p_freq': probs.get('频率失准', 0),
             'p_ref': probs.get('参考电平失准', 0),
+            'offset_db': features.get('offset_db', 0.0),
+            'viol_rate_aligned': features.get('viol_rate_aligned', features.get('viol_rate', 0.0)),
+            'viol_energy_aligned': features.get('viol_energy_aligned', 0.0),
         }
         # Add anchor components
         for k, v in anchor_result['components'].items():

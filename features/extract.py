@@ -37,6 +37,20 @@ def envelope_violation_rate(amp, bounds):
     viol = (amp > upper) | (amp < lower)
     return float(np.mean(viol))
 
+
+def envelope_violation_stats(amp, bounds):
+    """Compute envelope violation rate/max/mean for aligned curves."""
+    upper, lower = bounds
+    above = np.maximum(amp - upper, 0.0)
+    below = np.maximum(lower - amp, 0.0)
+    total = above + below
+    return {
+        "rate": float(np.mean(total > 0)),
+        "max": float(np.max(total)) if total.size else 0.0,
+        "mean": float(np.mean(total)) if total.size else 0.0,
+        "energy": float(np.sum(total)) if total.size else 0.0,
+    }
+
 def switching_step_score(frequency, amp, band_ranges):
     """切换点步进评分：各切换点幅度差绝对值的总和。"""
     score = 0.0
@@ -233,13 +247,16 @@ def extract_system_features(frequency, rrs, bounds, band_ranges, amp):
     汇总系统级特征：增益/偏置、非线性、频率平移、越界率、步进评分、残差斜率、纹波，
     外加：切换点异常与非切换台阶异常。
     """
-    g, b = estimate_gain_bias(rrs, amp)
-    c = estimate_quadratic(rrs, amp)
-    df = estimate_freq_shift(frequency, rrs, amp)
-    viol = envelope_violation_rate(amp, bounds)
-    step = switching_step_score(frequency, amp, band_ranges)
-    slope = residual_slope(frequency, rrs, amp)
-    ripple = ripple_variance(rrs, amp)
+    offset_db = float(np.median(amp - rrs))
+    amp_aligned = amp - offset_db
+
+    g, b = estimate_gain_bias(rrs, amp_aligned)
+    c = estimate_quadratic(rrs, amp_aligned)
+    df = estimate_freq_shift(frequency, rrs, amp_aligned)
+    viol_stats = envelope_violation_stats(amp_aligned, bounds)
+    step = switching_step_score(frequency, amp_aligned, band_ranges)
+    slope = residual_slope(frequency, rrs, amp_aligned)
+    ripple = ripple_variance(rrs, amp_aligned)
 
     sw_err_max, sw_err_ratio, sw_err_count, sw_total = compute_switch_step_anomalies(
         frequency, amp, band_ranges, expected_step=0.0, tol=0.2, win=5
@@ -248,14 +265,20 @@ def extract_system_features(frequency, rrs, bounds, band_ranges, amp):
         frequency, amp, band_ranges, tol=0.3, block=200, margin=50
     )
 
-    robust_feats = compute_residual_robust_features(frequency, rrs, amp)
+    robust_feats = compute_residual_robust_features(frequency, rrs, amp_aligned)
 
     return {
         "gain": g,
         "bias": b,
         "comp": c,
         "df": df,
-        "viol_rate": viol,
+        "viol_rate": viol_stats["rate"],
+        "X11": viol_stats["rate"],
+        "X12": viol_stats["max"],
+        "X13": viol_stats["energy"],
+        "env_overrun_rate": viol_stats["rate"],
+        "env_overrun_max": viol_stats["max"],
+        "env_overrun_mean": viol_stats["mean"],
         "step_score": step,
         "res_slope": slope,
         "ripple_var": ripple,
@@ -263,5 +286,8 @@ def extract_system_features(frequency, rrs, bounds, band_ranges, amp):
         "switch_step_err_ratio": sw_err_ratio,
         "nonswitch_step_max": ns_max,
         "nonswitch_step_ratio": ns_ratio,
+        "offset_db": offset_db,
+        "viol_rate_aligned": viol_stats["rate"],
+        "viol_energy_aligned": viol_stats["energy"],
         **robust_feats,
     }

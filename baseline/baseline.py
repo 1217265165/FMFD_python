@@ -28,12 +28,11 @@ QUANTILE_COVERAGE_GRID = np.arange(0.94, 0.996, 0.004)
 SLIDING_WINDOW_SIZE = 41
 SLIDING_COVERAGE_MIN = 0.93
 
-# Smoothing (in Hz)
-ENVELOPE_SMOOTH_SIGMA_HZ = 200e6
-WIDTH_SMOOTH_SIGMA_HZ = 400e6
+# Residual envelope (dB)
+RESIDUAL_CLIP_DB = 0.4
 
-# Soft prior width (vendor tolerance guidance)
-WIDTH_PRIOR_ALPHA = 0.8
+# Smoothing (in Hz)
+WIDTH_SMOOTH_SIGMA_HZ = 200e6
 
 # Coverage expansion
 WIDTH_EXPAND_STEP = 0.01
@@ -116,6 +115,48 @@ def align_to_frequency(target_frequency, freq, amp):
     """Interpolate a curve to the target frequency grid."""
     interp = interp1d(freq, amp, kind="linear", fill_value="extrapolate")
     return interp(target_frequency)
+
+
+def compute_offsets(traces: np.ndarray, rrs: np.ndarray) -> np.ndarray:
+    """Compute robust global offsets (median residual) for each trace."""
+    return np.median(traces - rrs, axis=1)
+
+
+def align_traces_by_offsets(traces: np.ndarray, offsets: np.ndarray) -> np.ndarray:
+    """Align traces by subtracting per-trace offsets."""
+    return traces - offsets[:, None]
+
+
+def summarize_residuals(residuals: np.ndarray) -> Dict[str, float]:
+    """Summarize residual distribution statistics."""
+    flat = residuals.ravel()
+    if flat.size == 0:
+        return {
+            "median": 0.0,
+            "p05": 0.0,
+            "p25": 0.0,
+            "p75": 0.0,
+            "p95": 0.0,
+            "iqr": 0.0,
+            "mean": 0.0,
+            "std": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+        }
+    p25 = float(np.percentile(flat, 25))
+    p75 = float(np.percentile(flat, 75))
+    return {
+        "median": float(np.median(flat)),
+        "p05": float(np.percentile(flat, 5)),
+        "p25": p25,
+        "p75": p75,
+        "p95": float(np.percentile(flat, 95)),
+        "iqr": p75 - p25,
+        "mean": float(np.mean(flat)),
+        "std": float(np.std(flat)),
+        "min": float(np.min(flat)),
+        "max": float(np.max(flat)),
+    }
 
 
 def compute_coverage(traces, upper, lower):
@@ -201,32 +242,30 @@ def _sigma_points(frequency_hz: np.ndarray, sigma_hz: float) -> float:
 def _build_quantile_envelope(
     residuals: np.ndarray,
     rrs: np.ndarray,
-    vendor_tol: np.ndarray,
     q_low: float,
     q_high: float,
-    smooth_sigma_points: float,
     width_smooth_sigma_points: float,
-    width_prior_alpha: float,
+    clip_db: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    lower_raw = rrs + np.quantile(residuals, q_low, axis=0)
-    upper_raw = rrs + np.quantile(residuals, q_high, axis=0)
+    lower_res = np.quantile(residuals, q_low, axis=0)
+    upper_res = np.quantile(residuals, q_high, axis=0)
 
-    if smooth_sigma_points > 0:
-        lower_raw = gaussian_filter1d(lower_raw, sigma=smooth_sigma_points, mode="reflect")
-        upper_raw = gaussian_filter1d(upper_raw, sigma=smooth_sigma_points, mode="reflect")
+    lower_res = np.clip(lower_res, -clip_db, clip_db)
+    upper_res = np.clip(upper_res, -clip_db, clip_db)
 
-    width_data = upper_raw - lower_raw
-    width_prior = np.maximum(width_data, width_prior_alpha * 2.0 * vendor_tol)
+    mid_res = 0.5 * (upper_res + lower_res)
+    width = upper_res - lower_res
 
     if width_smooth_sigma_points > 0:
-        width_smooth = gaussian_filter1d(width_prior, sigma=width_smooth_sigma_points, mode="reflect")
-    else:
-        width_smooth = width_prior
+        width = gaussian_filter1d(width, sigma=width_smooth_sigma_points, mode="reflect")
 
-    upper = rrs + width_smooth / 2.0
-    lower = rrs - width_smooth / 2.0
+    upper_res_smooth = np.clip(mid_res + 0.5 * width, -clip_db, clip_db)
+    lower_res_smooth = np.clip(mid_res - 0.5 * width, -clip_db, clip_db)
 
-    return upper, lower, width_smooth, width_data
+    upper = rrs + upper_res_smooth
+    lower = rrs + lower_res_smooth
+
+    return upper, lower, width, upper_res - lower_res
 
 
 def compute_quantile_envelope(
@@ -236,23 +275,26 @@ def compute_quantile_envelope(
     target_coverage_min: float = COVERAGE_MIN_MIN,
     sliding_coverage_min: float = SLIDING_COVERAGE_MIN,
     quantile_grid: np.ndarray = QUANTILE_COVERAGE_GRID,
-    smooth_sigma_hz: float = ENVELOPE_SMOOTH_SIGMA_HZ,
     width_smooth_sigma_hz: float = WIDTH_SMOOTH_SIGMA_HZ,
-    width_prior_alpha: float = WIDTH_PRIOR_ALPHA,
     rrs_smooth: bool = RRS_SMOOTH_ENABLED,
+    clip_db: float = RESIDUAL_CLIP_DB,
 ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray], Dict[str, float]]:
     n_traces, n_points = traces.shape
     print(f"[Baseline] Computing RRS from {n_traces} traces, {n_points} points")
     print(f"[Baseline] RRS smoothing: {'enabled' if rrs_smooth else 'disabled (pointwise median)'}")
 
-    rrs = compute_rrs_robust(traces, smooth=rrs_smooth)
-    pointwise_median = np.median(traces, axis=0)
+    rrs0 = np.median(traces, axis=0)
+    offsets0 = compute_offsets(traces, rrs0)
+    aligned0 = align_traces_by_offsets(traces, offsets0)
+
+    rrs = compute_rrs_robust(aligned0, smooth=rrs_smooth)
+    pointwise_median = np.median(aligned0, axis=0)
     rrs_mae = float(np.mean(np.abs(rrs - pointwise_median)))
 
-    residuals = traces - rrs
-    vendor_tol = vendor_tolerance_dbm(frequency)
+    offsets = compute_offsets(traces, rrs)
+    aligned = align_traces_by_offsets(traces, offsets)
+    residuals = aligned - rrs
 
-    smooth_sigma_points = _sigma_points(frequency, smooth_sigma_hz)
     width_smooth_sigma_points = _sigma_points(frequency, width_smooth_sigma_hz)
 
     chosen = None
@@ -267,16 +309,14 @@ def compute_quantile_envelope(
         upper, lower, width, _ = _build_quantile_envelope(
             residuals,
             rrs,
-            vendor_tol,
             q_low,
             q_high,
-            smooth_sigma_points,
             width_smooth_sigma_points,
-            width_prior_alpha,
+            clip_db,
         )
 
-        coverage = compute_coverage(traces, upper, lower)
-        sliding_cov = compute_sliding_coverage(traces, upper, lower)
+        coverage = compute_coverage(aligned, upper, lower)
+        sliding_cov = compute_sliding_coverage(aligned, upper, lower)
         sliding_cov_min = float(np.min(sliding_cov))
 
         if (
@@ -294,15 +334,13 @@ def compute_quantile_envelope(
         upper, lower, width, _ = _build_quantile_envelope(
             residuals,
             rrs,
-            vendor_tol,
             q_low,
             q_high,
-            smooth_sigma_points,
             width_smooth_sigma_points,
-            width_prior_alpha,
+            clip_db,
         )
-        coverage = compute_coverage(traces, upper, lower)
-        sliding_cov = compute_sliding_coverage(traces, upper, lower)
+        coverage = compute_coverage(aligned, upper, lower)
+        sliding_cov = compute_sliding_coverage(aligned, upper, lower)
 
     # Expand width if needed to satisfy coverage constraints after smoothing
     expansion_iters = 0
@@ -318,8 +356,8 @@ def compute_quantile_envelope(
             width = gaussian_filter1d(width, sigma=width_smooth_sigma_points, mode="reflect")
         upper = rrs + width / 2.0
         lower = rrs - width / 2.0
-        coverage = compute_coverage(traces, upper, lower)
-        sliding_cov = compute_sliding_coverage(traces, upper, lower)
+        coverage = compute_coverage(aligned, upper, lower)
+        sliding_cov = compute_sliding_coverage(aligned, upper, lower)
         sliding_cov_min = float(np.min(sliding_cov))
 
     width_smoothness = float(np.std(np.diff(width))) if width is not None else 0.0
@@ -352,13 +390,14 @@ def compute_quantile_envelope(
         "width_smoothness": width_smoothness,
         "sliding_coverage_min": sliding_cov_min,
         "n_normal_traces": n_traces,
-        "width_prior_alpha": width_prior_alpha,
         "smooth_params": {
             "rrs_smooth_enabled": rrs_smooth,
-            "smooth_sigma_hz": smooth_sigma_hz,
             "width_smooth_sigma_hz": width_smooth_sigma_hz,
         },
         "expansion_iters": expansion_iters,
+        "clip_db": clip_db,
+        "offset_p95_abs": float(np.percentile(np.abs(offsets), 95)) if offsets.size else 0.0,
+        "offset_median_abs": float(np.median(np.abs(offsets))) if offsets.size else 0.0,
     }
 
     return rrs, (upper, lower), coverage_info
