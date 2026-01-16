@@ -1,0 +1,23 @@
+{
+  "alpha": 2.0,
+  "beta_amp": 0.3,
+  "beta_freq": 0.5,
+  "beta_ref": 0.5,
+  "branch_weights": {
+    "amp": 1.0,
+    "freq": 1.0,
+    "ref": 1.0
+  },
+  "gate_z_hi": 3.0,
+  "gate_z_mid": 2.0,
+  "ref_boost_on_offset": 0.35,
+  "amp_suppress_on_offset": 0.35,
+  "freq_boost_on_shift": 0.35,
+  "amp_boost_on_ripple": 0.30,
+  "metrics": {
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "confusion_matrix": [],
+    "class_order": ["ref_error", "amp_error", "normal", "freq_error"]
+  }
+}

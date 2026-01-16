@@ -22,6 +22,7 @@ Enhanced with:
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 from pathlib import Path
@@ -71,6 +72,51 @@ DEFAULT_CALIBRATION = {
     'T_rel': 0.6,           # Reliability threshold for module routing
 }
 
+_CALIBRATION_OVERRIDE: Optional[Dict] = None
+_NORMAL_FEATURE_STATS: Optional[Dict[str, Dict[str, float]]] = None
+
+
+def set_calibration_override(config: Optional[Dict]) -> None:
+    """Set a process-level calibration override (used by tuning scripts)."""
+    global _CALIBRATION_OVERRIDE
+    _CALIBRATION_OVERRIDE = config
+
+
+def _load_normal_feature_stats(stats_path: Optional[Path] = None) -> Dict[str, Dict[str, float]]:
+    """Load robust feature stats from normal_feature_stats.csv (cached)."""
+    global _NORMAL_FEATURE_STATS
+    if _NORMAL_FEATURE_STATS is not None:
+        return _NORMAL_FEATURE_STATS
+
+    repo_root = Path(__file__).resolve().parents[1]
+    stats_path = stats_path or (repo_root / "Output" / "normal_feature_stats.csv")
+    stats: Dict[str, Dict[str, float]] = {}
+    if stats_path.exists():
+        try:
+            with open(stats_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    stat_name = row.get("stat") or row.get("") or row.get("Unnamed: 0")
+                    if not stat_name:
+                        continue
+                    stats[stat_name] = {}
+                    for key, value in row.items():
+                        if key in {"stat", "", "Unnamed: 0"}:
+                            continue
+                        try:
+                            stats[stat_name][key] = float(value) if value not in {None, ""} else 0.0
+                        except ValueError:
+                            stats[stat_name][key] = 0.0
+        except Exception:
+            stats = {}
+
+    _NORMAL_FEATURE_STATS = stats
+    return stats
+
+
+def _stat_value(stats: Dict[str, Dict[str, float]], stat_name: str, key: str, default: float) -> float:
+    return float(stats.get(stat_name, {}).get(key, default))
+
 
 def load_calibration(calibration_path: Optional[Path] = None) -> Dict:
     """Load calibration parameters from JSON file.
@@ -85,10 +131,24 @@ def load_calibration(calibration_path: Optional[Path] = None) -> Dict:
     dict
         Calibration parameters.
     """
+    if _CALIBRATION_OVERRIDE is not None:
+        result = DEFAULT_CALIBRATION.copy()
+        result.update(_CALIBRATION_OVERRIDE)
+        return result
+
     if calibration_path is None:
         # Try default location
         repo_root = Path(__file__).resolve().parents[1]
-        calibration_path = repo_root / 'Output' / 'calibration.json'
+        candidates = [
+            repo_root / "Output" / "ours_best_config.json",
+            repo_root / "Output" / "calibration.json",
+        ]
+        for path in candidates:
+            if path.exists():
+                calibration_path = path
+                break
+        else:
+            calibration_path = repo_root / "Output" / "calibration.json"
     
     if calibration_path.exists():
         try:
@@ -215,7 +275,44 @@ def compute_evidence_gating(
     amp_boost = beta_amp * amp_evidence
     freq_boost = beta_freq * freq_evidence * freq_retain
     ref_boost = beta_ref * ref_evidence * ref_retain
-    
+
+    # === New robust gating based on envelope-insensitive features ===
+    stats = _load_normal_feature_stats()
+    z_hi = calibration.get("gate_z_hi", 3.0)
+    z_mid = calibration.get("gate_z_mid", 2.0)
+
+    def _robust_z(value: float, key: str) -> float:
+        if not stats:
+            return 0.0
+        med = _stat_value(stats, "median", key, 0.0)
+        mad = _stat_value(stats, "mad", key, 0.0)
+        if mad <= 1e-9:
+            return 0.0
+        return abs((value - med) / mad)
+
+    global_offset = float(features.get("global_offset_db", 0.0))
+    shape_rmse = float(features.get("shape_rmse", 0.0))
+    ripple_var = float(features.get("ripple_var", features.get("X2", 0.0)))
+    freq_shift_score = float(features.get("freq_shift_score", 0.0))
+
+    z_offset = _robust_z(global_offset, "global_offset_db")
+    z_shape = _robust_z(shape_rmse, "shape_rmse")
+    z_ripple = _robust_z(ripple_var, "ripple_var")
+    z_freq_shift = _robust_z(freq_shift_score, "freq_shift_score")
+
+    # Ref gate: large global offset + low shape variation
+    if z_offset > z_hi and z_shape < z_mid:
+        ref_boost += calibration.get("ref_boost_on_offset", 0.35) * min(1.0, z_offset / z_hi)
+        amp_boost *= 1.0 - calibration.get("amp_suppress_on_offset", 0.35) * min(1.0, z_offset / z_hi)
+
+    # Freq gate: strong correlation shift
+    if z_freq_shift > z_hi:
+        freq_boost += calibration.get("freq_boost_on_shift", 0.35) * min(1.0, z_freq_shift / z_hi)
+
+    # Amp gate: ripple/high-pass energy abnormal, but no large global offset
+    if z_ripple > z_hi and z_offset < z_mid:
+        amp_boost += calibration.get("amp_boost_on_ripple", 0.30) * min(1.0, z_ripple / z_hi)
+
     return amp_boost, freq_boost, ref_boost
 
 
@@ -494,7 +591,14 @@ def aggregate_system_results(
     activations = [
         amp_result['activation'],
         freq_result['activation'],
-        ref_result['activation']
+        ref_result['activation'],
+    ]
+
+    branch_weights = calibration.get("branch_weights", {"amp": 1.0, "freq": 1.0, "ref": 1.0})
+    activations = [
+        activations[0] * float(branch_weights.get("amp", 1.0)),
+        activations[1] * float(branch_weights.get("freq", 1.0)),
+        activations[2] * float(branch_weights.get("ref", 1.0)),
     ]
     
     # Apply evidence gating to prevent amp from absorbing everything

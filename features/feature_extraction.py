@@ -33,6 +33,8 @@ from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
+from baseline.config import FREQ_START_HZ, FREQ_STEP_HZ
+
 warnings.simplefilter("ignore")
 
 # ---------- CONFIG（可根据实验调整） ----------
@@ -168,6 +170,85 @@ def parse_trace_cell(cell):
     except Exception:
         return None
     return None
+
+
+def _default_frequency_axis(n_points: int) -> np.ndarray:
+    stop_hz = FREQ_START_HZ + (n_points - 1) * FREQ_STEP_HZ
+    return np.linspace(FREQ_START_HZ, stop_hz, n_points)
+
+
+def _vendor_band_masks(frequency: np.ndarray) -> list:
+    bands = [
+        (10e6, 100e6),
+        (100e6, 3.25e9),
+        (3.25e9, 5.25e9),
+        (5.25e9, 8.2e9),
+    ]
+    masks = []
+    for start, end in bands:
+        masks.append((frequency >= start) & (frequency < end))
+    return masks
+
+
+def compute_residual_robust_features(response_curve: np.ndarray, baseline_curve: np.ndarray) -> Dict[str, float]:
+    """Compute envelope-insensitive robust residual features."""
+    res = response_curve - baseline_curve
+    if res.size == 0:
+        return {
+            "global_offset_db": 0.0,
+            "shape_rmse": 0.0,
+            "ripple_var": 0.0,
+            "tail_asym": 0.0,
+            "compress_mask_ratio": 0.0,
+            "freq_shift_score": 0.0,
+            "band_offset_db_1": 0.0,
+            "band_offset_db_2": 0.0,
+            "band_offset_db_3": 0.0,
+            "band_offset_db_4": 0.0,
+        }
+
+    median_res = np.median(res)
+    mad = np.median(np.abs(res - median_res)) + 1e-9
+    global_offset_db = float(median_res)
+    shape_rmse = float(np.sqrt(np.mean((res - median_res) ** 2)))
+    ripple_var = float(np.std(np.diff(res))) if res.size > 1 else 0.0
+    p95 = float(np.percentile(res, 95))
+    p50 = float(np.percentile(res, 50))
+    p5 = float(np.percentile(res, 5))
+    tail_asym = (p95 - p50) - (p50 - p5)
+    compress_threshold = median_res + 2.0 * mad
+    compress_mask_ratio = float(np.mean(res > compress_threshold))
+
+    r1 = (baseline_curve - np.mean(baseline_curve)) / (np.std(baseline_curve) + 1e-9)
+    r2 = (response_curve - np.mean(response_curve)) / (np.std(response_curve) + 1e-9)
+    corr = np.correlate(r2, r1, mode="full")
+    lags = np.arange(-len(r1) + 1, len(r1))
+    best_idx = int(np.argmax(corr))
+    best_lag = lags[best_idx]
+    corr_coeff = float(corr[best_idx] / (len(r1) + 1e-9))
+    lag_norm = abs(best_lag) / max(1, len(r1))
+    freq_shift_score = float(np.sqrt(lag_norm ** 2 + (1.0 - corr_coeff) ** 2))
+
+    frequency = _default_frequency_axis(len(res))
+    band_offsets = []
+    for mask in _vendor_band_masks(frequency):
+        if np.any(mask):
+            band_offsets.append(float(np.median(res[mask])))
+        else:
+            band_offsets.append(0.0)
+
+    return {
+        "global_offset_db": global_offset_db,
+        "shape_rmse": shape_rmse,
+        "ripple_var": ripple_var,
+        "tail_asym": float(tail_asym),
+        "compress_mask_ratio": compress_mask_ratio,
+        "freq_shift_score": freq_shift_score,
+        "band_offset_db_1": band_offsets[0],
+        "band_offset_db_2": band_offsets[1],
+        "band_offset_db_3": band_offsets[2],
+        "band_offset_db_4": band_offsets[3],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -624,6 +705,10 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             except Exception:
                 x29, x30, x31, x32, x33, x34 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
+    robust_feats = {}
+    if baseline_curve is not None and len(baseline_curve) == len(arr):
+        robust_feats = compute_residual_robust_features(arr, np.asarray(baseline_curve, dtype=float))
+
     return {
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
         "X6": x6, "X7": x7, "X8": x8, "X9": x9, "X10": x10,
@@ -634,6 +719,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X26": x26, "X27": x27, "X28": x28,  # New ref features
         "X29": x29, "X30": x30, "X31": x31,  # v8: Amp vs Ref features
         "X32": x32, "X33": x33, "X34": x34,  # v9: Enhanced spectrum analysis features
+        **robust_feats,
     }
 
 
@@ -704,12 +790,19 @@ def compute_dynamic_threshold_features(
             step_std = float(np.std(step_abs))
     step_mean_abs = float(np.mean(step_abs)) if step_abs else 0.0
 
+    robust_feats = {}
+    if rrs is not None:
+        rrs_arr = np.asarray(rrs, dtype=float)
+        if rrs_arr.shape == arr.shape:
+            robust_feats = compute_residual_robust_features(arr, rrs_arr)
+
     return {
         "env_overrun_rate": overrun_rate,
         "env_overrun_max": overrun_max,
         "env_overrun_mean": overrun_mean,
         "switch_step_mean_abs": step_mean_abs,
         "switch_step_std": step_std,
+        **robust_feats,
     }
 
 

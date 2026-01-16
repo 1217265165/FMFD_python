@@ -69,6 +69,80 @@ def ripple_variance(rrs, amp, window=200):
         vals.append(np.var(seg))
     return float(np.mean(vals))
 
+# ---------------- 新增：包络不敏感的稳健残差特征 ----------------
+def _vendor_band_masks(frequency):
+    bands = [
+        (10e6, 100e6),
+        (100e6, 3.25e9),
+        (3.25e9, 5.25e9),
+        (5.25e9, 8.2e9),
+    ]
+    masks = []
+    for start, end in bands:
+        masks.append((frequency >= start) & (frequency < end))
+    return masks
+
+
+def compute_residual_robust_features(frequency, rrs, amp):
+    """Compute envelope-insensitive robust residual features."""
+    res = amp - rrs
+    if res.size == 0:
+        return {
+            "global_offset_db": 0.0,
+            "shape_rmse": 0.0,
+            "ripple_var": 0.0,
+            "tail_asym": 0.0,
+            "compress_mask_ratio": 0.0,
+            "freq_shift_score": 0.0,
+            "band_offset_db_1": 0.0,
+            "band_offset_db_2": 0.0,
+            "band_offset_db_3": 0.0,
+            "band_offset_db_4": 0.0,
+        }
+
+    median_res = np.median(res)
+    mad = np.median(np.abs(res - median_res)) + 1e-9
+    global_offset_db = float(median_res)
+    shape_rmse = float(np.sqrt(np.mean((res - median_res) ** 2)))
+    ripple_var = float(np.std(np.diff(res))) if res.size > 1 else 0.0
+    p95 = float(np.percentile(res, 95))
+    p50 = float(np.percentile(res, 50))
+    p5 = float(np.percentile(res, 5))
+    tail_asym = (p95 - p50) - (p50 - p5)
+    compress_threshold = median_res + 2.0 * mad
+    compress_mask_ratio = float(np.mean(res > compress_threshold))
+
+    # Frequency shift score via normalized correlation
+    r1 = (rrs - np.mean(rrs)) / (np.std(rrs) + 1e-9)
+    r2 = (amp - np.mean(amp)) / (np.std(amp) + 1e-9)
+    corr = correlate(r2, r1, mode="full")
+    lags = np.arange(-len(rrs) + 1, len(rrs))
+    best_idx = int(np.argmax(corr))
+    best_lag = lags[best_idx]
+    corr_coeff = float(corr[best_idx] / (len(rrs) + 1e-9))
+    lag_norm = abs(best_lag) / max(1, len(rrs))
+    freq_shift_score = float(np.sqrt(lag_norm ** 2 + (1.0 - corr_coeff) ** 2))
+
+    band_offsets = []
+    for mask in _vendor_band_masks(frequency):
+        if np.any(mask):
+            band_offsets.append(float(np.median(res[mask])))
+        else:
+            band_offsets.append(0.0)
+
+    return {
+        "global_offset_db": global_offset_db,
+        "shape_rmse": shape_rmse,
+        "ripple_var": ripple_var,
+        "tail_asym": float(tail_asym),
+        "compress_mask_ratio": compress_mask_ratio,
+        "freq_shift_score": freq_shift_score,
+        "band_offset_db_1": band_offsets[0],
+        "band_offset_db_2": band_offsets[1],
+        "band_offset_db_3": band_offsets[2],
+        "band_offset_db_4": band_offsets[3],
+    }
+
 # ---------------- 新增：切换点异常与非切换台阶异常 ----------------
 def compute_switch_step_anomalies(frequency, amp, band_ranges, expected_step=0.0, tol=0.2, win=5):
     """
@@ -152,6 +226,8 @@ def extract_system_features(frequency, rrs, bounds, band_ranges, amp):
         frequency, amp, band_ranges, tol=0.3, block=200, margin=50
     )
 
+    robust_feats = compute_residual_robust_features(frequency, rrs, amp)
+
     return {
         "gain": g,
         "bias": b,
@@ -165,4 +241,5 @@ def extract_system_features(frequency, rrs, bounds, band_ranges, amp):
         "switch_step_err_ratio": sw_err_ratio,
         "nonswitch_step_max": ns_max,
         "nonswitch_step_ratio": ns_ratio,
+        **robust_feats,
     }

@@ -10,15 +10,18 @@ import numpy as np
 
 from methods.base import MethodAdapter
 from BRB.system_brb import system_level_infer, SystemBRBConfig
+from BRB.aggregator import set_calibration_override
 from BRB.module_brb import module_level_infer, module_level_infer_with_activation
 
 
 def _load_calibration() -> Dict:
-    """Load calibration parameters from Output/calibration.json."""
+    """Load calibration parameters from Output/ours_best_config.json or calibration.json."""
     # Try multiple locations
     possible_paths = [
+        Path(__file__).parent.parent / 'Output' / 'ours_best_config.json',
         Path(__file__).parent.parent / 'Output' / 'calibration.json',
         Path(__file__).parent.parent / 'Output' / 'sim_spectrum' / 'calibration.json',
+        Path('Output/ours_best_config.json'),
         Path('Output/calibration.json'),
         Path('Output/sim_spectrum/calibration.json'),
     ]
@@ -52,9 +55,12 @@ class OursAdapter(MethodAdapter):
     
     name = "ours"
     
-    def __init__(self):
+    def __init__(self, calibration_override: Optional[Dict] = None):
         # Load calibration first
         self.calibration = _load_calibration()
+        if calibration_override:
+            self.calibration.update(calibration_override)
+        set_calibration_override(self.calibration if self.calibration else None)
         
         # Initialize config with calibration values
         self.config = SystemBRBConfig()
@@ -62,6 +68,10 @@ class OursAdapter(MethodAdapter):
             self.config.alpha = self.calibration.get('alpha', self.config.alpha)
             self.config.overall_threshold = self.calibration.get('T_low', self.calibration.get('overall_threshold', self.config.overall_threshold))
             self.config.max_prob_threshold = self.calibration.get('T_prob', self.calibration.get('max_prob_threshold', self.config.max_prob_threshold))
+            if 'attribute_weights' in self.calibration:
+                self.config.attribute_weights = tuple(self.calibration['attribute_weights'])
+            if 'rule_weights' in self.calibration:
+                self.config.rule_weights = tuple(self.calibration['rule_weights'])
         
         self.feature_names = None
         self.n_system_rules = 15  # 3 sub-BRBs with 5 rules each

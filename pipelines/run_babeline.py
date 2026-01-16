@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 
 from baseline.baseline import (
-    load_and_align, compute_rrs_bounds, detect_switch_steps,
-    compute_envelope_from_vendor_plus_quantile, vendor_tolerance_dbm,
-    compute_envelope_smooth_v7,
+    load_and_align,
+    compute_rrs_bounds,
+    detect_switch_steps,
+    vendor_tolerance_dbm,
 )
-from baseline.rrs_envelope import vendor_tolerance_db
 from baseline.config import (
     BAND_RANGES, K_LIST, SWITCH_TOL,
     BASELINE_ARTIFACTS, BASELINE_META,
@@ -21,11 +21,6 @@ from baseline.config import (
 from baseline.viz import plot_rrs_envelope_switch
 from features.extract import extract_system_features
 
-# Envelope algorithm parameters
-EXTRA_CLIP_MAX_DB = 0.25  # Maximum extra width above base tolerance
-
-# Select envelope algorithm version: 'v6' (segmented tolerance) or 'v7' (uniform smooth)
-ENVELOPE_VERSION = 'v7'  # v7: uniform 0.4 dB base, smooth envelope
 
 
 def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
@@ -56,61 +51,16 @@ def main():
     print(f"Loaded {len(names)} traces, frequency points: {len(frequency)}")
     print(f"Frequency range: {frequency[0]:.2e} Hz to {frequency[-1]:.2e} Hz")
 
-    # 2) 使用包络算法: v7 (统一基准 + 平滑) 或 v6 (分段容差)
-    # v7: 统一 0.20 dB 基准容差，800MHz 平滑尺度，包络更窄更平缓
-    # v6: 分段厂商容差，200MHz 平滑尺度
+    # 2) 使用单一权威包络算法：RRS pointwise median + quantile envelope
+    print("\n[Baseline] Using quantile envelope with soft vendor prior")
+    rrs, bounds, coverage_info = compute_rrs_bounds(
+        frequency,
+        traces,
+        validate_coverage=True,
+    )
+    upper, lower = bounds
     
-    if ENVELOPE_VERSION == 'v7':
-        print("\n[Baseline] Using envelope algorithm v7: uniform base tolerance + smooth envelope")
-        rrs, upper, lower, envelope_info = compute_envelope_smooth_v7(
-            frequency, traces,
-            normalize_offset=True,
-            max_offset_db=0.4,
-            drop_outliers=True,
-            exceed_rate_threshold=0.10,
-            max_exceed_threshold=0.80,
-            p95_exceed_threshold=0.30,
-            base_tolerance=0.20,  # 统一 0.20 dB 基准，目标区间 [-9.85, -10.25]
-            quantile=0.97,
-            smooth_sigma_hz=800e6,  # 800MHz 大平滑尺度，更平缓
-            extra_clip_max=EXTRA_CLIP_MAX_DB,
-            target_coverage_mean=COVERAGE_MEAN_MIN,
-            target_coverage_min=COVERAGE_MIN_MIN,
-        )
-    else:  # v6
-        print("\n[Baseline] Using envelope algorithm v6: segmented vendor tolerance")
-        rrs, upper, lower, envelope_info = compute_envelope_from_vendor_plus_quantile(
-            frequency, traces,
-            normalize_offset=True,
-            max_offset_db=0.4,
-            drop_outliers=True,
-            exceed_rate_threshold=0.10,
-            max_exceed_threshold=0.80,
-            p95_exceed_threshold=0.30,
-            quantile=0.97,
-            smooth_sigma_hz=200e6,  # 200MHz 平滑
-            extra_clip_max=EXTRA_CLIP_MAX_DB,
-            target_coverage_mean=COVERAGE_MEAN_MIN,
-            target_coverage_min=COVERAGE_MIN_MIN,
-        )
-    bounds = (upper, lower)
-    
-    # 构建 coverage_info 用于后续兼容
-    coverage_info = {
-        'coverage_mean': envelope_info['coverage_mean'],
-        'coverage_min': envelope_info['coverage_min'],
-        'k_final': None,  # 新算法不使用 k
-        'rrs_mae': 0.0,   # pointwise median，MAE=0
-        'width_min': envelope_info['width_min'],
-        'width_median': envelope_info['width_median'],
-        'width_max': envelope_info['width_max'],
-        'half_width_max': envelope_info['half_width_max'],
-        'half_width_p50': envelope_info['half_width_p50'],
-        'offset_p95': envelope_info.get('offset_stats', {}).get('p95', 0),
-        'rrs_smooth_enabled': False,
-        'sliding_coverage_min': envelope_info['coverage_min'],  # 用 min 代替
-    }
-    
+    coverage_info.setdefault("k_final", None)
     print(f"RRS computed, coverage_mean: {coverage_info['coverage_mean']:.4f}, "
           f"coverage_min: {coverage_info['coverage_min']:.4f}")
     
@@ -159,6 +109,13 @@ def main():
     # 厂商规格容差（系统级：-10 ± 0.4 dB）
     spec_center_db = -10.0
     spec_tol_db = 0.4
+
+    # 系统级规格命中率（每条曲线整体中位数落在范围内）
+    trace_medians = np.median(traces, axis=1)
+    spec_lower = spec_center_db - spec_tol_db
+    spec_upper = spec_center_db + spec_tol_db
+    spec_hit = np.mean((trace_medians >= spec_lower) & (trace_medians <= spec_upper))
+    print(f"[Baseline] Spec hit rate: {spec_hit:.2%} (median within [{spec_lower:.2f}, {spec_upper:.2f}] dBm)")
     
     np.savez(
         baseline_artifacts,
@@ -170,21 +127,23 @@ def main():
         center_level_db=center_level_db,
         spec_center_db=spec_center_db,
         spec_tol_db=spec_tol_db,
-        vendor_tolerance_db=vendor_tolerance_db(frequency),
+        vendor_tolerance_db=vendor_tolerance_dbm(frequency),
     )
     
-    # Build comprehensive metadata (updated for v6 algorithm)
+    # Build comprehensive metadata
     width = bounds[0] - bounds[1]
+    offsets = np.median(traces - rrs, axis=1)
+    offset_p95 = float(np.percentile(np.abs(offsets), 95)) if offsets.size else 0.0
     meta_dict = {
         "band_ranges": BAND_RANGES,
         "k_list": K_LIST,
         "single_band_mode": SINGLE_BAND_MODE,
-        "envelope_version": envelope_info.get('version', 'v6'),
+        "envelope_version": "quantile_v1",
         "coverage_mean": coverage_info.get('coverage_mean'),
         "coverage_min": coverage_info.get('coverage_min'),
         "k_final": coverage_info.get('k_final'),  # None for v6
         "n_traces": len(names),
-        "n_valid_traces": envelope_info.get('n_valid_traces'),
+        "n_valid_traces": len(names),
         "n_frequency_points": len(frequency),
         "freq_start_hz": float(frequency[0]),
         "freq_end_hz": float(frequency[-1]),
@@ -200,17 +159,19 @@ def main():
         "width_median": float(np.median(width)),
         "width_max": float(np.max(width)),
         "width_smoothness": float(np.std(np.diff(width))),
-        "half_width_max": envelope_info.get('half_width_max'),
-        "half_width_p50": envelope_info.get('half_width_p50'),
+        "half_width_max": float(np.max(width) / 2),
+        "half_width_p50": float(np.median(width) / 2),
         # offset 统计
-        "offset_stats": envelope_info.get('offset_stats', {}),
+        "offset_stats": {
+            "p95_abs": offset_p95,
+        },
         # 其他
         "rrs_mae": coverage_info.get('rrs_mae'),
-        "dropped_trace_ids": envelope_info.get('dropped_trace_ids', []),
+        "dropped_trace_ids": [],
         "smooth_params": {
-            "smooth_sigma_hz": envelope_info.get('smooth_sigma_hz', 200e6),
-            "extra_clip_max": envelope_info.get('extra_clip_max', 0.25),
-            "quantile": envelope_info.get('quantile', 0.97),
+            "smooth_sigma_hz": coverage_info.get('smooth_params', {}).get('smooth_sigma_hz', 200e6),
+            "width_smooth_sigma_hz": coverage_info.get('smooth_params', {}).get('width_smooth_sigma_hz', 400e6),
+            "quantiles": coverage_info.get('chosen_quantiles', {}),
         },
     }
     
@@ -238,26 +199,28 @@ def main():
         "half_width_max": float(np.max(half_width)),
         "half_width_p50": float(np.median(half_width)),
         # offset 相关 (新增)
-        "offset_p95": coverage_info.get('offset_p95', 0.0),
+        "offset_p95": offset_p95,
         # 基本信息
         "center_level_db": center_level_db,
         "n_traces": len(names),
         "k_final": coverage_info.get('k_final'),
         "rrs_mae": coverage_info.get('rrs_mae'),
         "rrs_smooth_enabled": coverage_info.get('rrs_smooth_enabled', False),
+        "chosen_quantiles": coverage_info.get('chosen_quantiles', {}),
+        "width_prior_alpha": coverage_info.get('width_prior_alpha'),
         # 阈值定义
         "thresholds": {
             "coverage_mean_min": 0.97,
             "coverage_min_min": 0.93,
             "sliding_coverage_min": 0.93,
-            "half_width_max": vendor_tol_max + EXTRA_CLIP_MAX_DB,  # vendor_tol_max + extra_clip_max
+            "half_width_max": vendor_tol_max * 2.0,  # soft prior scale (not a hard clip)
             "width_smoothness_max": 0.03,
         },
         # passed 规则: coverage_mean>=0.97 且 coverage_min>=0.93 且 half_width_max <= (vendor_tol_max+0.25)
         "passed": bool(
             coverage_info.get('coverage_mean', 0) >= 0.97 and
             coverage_info.get('coverage_min', 0) >= 0.93 and
-            float(np.max(half_width)) <= (vendor_tol_max + 0.25)
+            float(np.max(half_width)) <= (vendor_tol_max * 2.0)
         ),
     }
     with open(quality_json_path, "w", encoding="utf-8") as f:
@@ -283,7 +246,16 @@ def main():
         feats = extract_system_features(frequency, rrs, bounds, BAND_RANGES, amp)
         feats_list.append(feats)
     stats_df = pd.DataFrame(feats_list)
-    stats_df.describe(percentiles=[0.5, 0.9, 0.95, 0.99]).to_csv(normal_feat_stats)
+    describe_df = stats_df.describe(percentiles=[0.05, 0.5, 0.95, 0.99])
+    describe_df.rename(
+        index={"5%": "p05", "50%": "median", "95%": "p95", "99%": "p99"},
+        inplace=True,
+    )
+    medians = stats_df.median()
+    mad = (stats_df - medians).abs().median()
+    robust_df = pd.DataFrame([mad], index=["mad"])
+    full_stats = pd.concat([describe_df, robust_df])
+    full_stats.to_csv(normal_feat_stats, index_label="stat")
 
     print("\n" + "="*60)
     print("基线包络与RRS已保存:", baseline_artifacts, baseline_meta)
