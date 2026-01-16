@@ -29,6 +29,7 @@ from baseline.config import (
 )
 from baseline.viz import plot_rrs_envelope_switch
 from features.extract import extract_system_features
+from pipelines.default_paths import PROJECT_ROOT, OUTPUT_DIR as DEFAULT_OUTPUT_DIR, SINGLE_BAND, DISABLE_PREAMP, SEED, build_run_snapshot
 
 
 
@@ -40,10 +41,17 @@ def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
 
 def main():
     # 仓库根：当前文件在 repo_root/pipelines 下，parents[1] 即 repo_root
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = PROJECT_ROOT
 
-    out_dir = _resolve(repo_root, OUTPUT_DIR)
+    out_dir = _resolve(repo_root, DEFAULT_OUTPUT_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
+    build_run_snapshot(out_dir)
+
+    print(f"[INFO] project_root={repo_root}")
+    print(f"[INFO] single_band={SINGLE_BAND}")
+    print(f"[INFO] disable_preamp={DISABLE_PREAMP}")
+    print(f"[INFO] seed={SEED}")
+    print(f"[INFO] output_dir={out_dir}")
 
     # 输出文件路径全部锚定到仓库根
     baseline_artifacts = _resolve(repo_root, BASELINE_ARTIFACTS)

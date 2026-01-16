@@ -70,6 +70,19 @@ from pipelines.simulate.faults import (
     inject_ytf_variation,
     SINGLE_BAND_MODE,
 )
+from pipelines.default_paths import (
+    PROJECT_ROOT,
+    OUTPUT_DIR,
+    BASELINE_NPZ,
+    BASELINE_META,
+    SIM_DIR,
+    SEED,
+    SINGLE_BAND,
+    DISABLE_PREAMP,
+    DEFAULT_N_SAMPLES,
+    DEFAULT_BALANCED,
+    build_run_snapshot,
+)
 
 
 def _resolve(repo_root: Path, p: Path) -> Path:
@@ -159,7 +172,7 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
         csv_path = raw_dir / f"{sample_id}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["freq_Hz", "amplitude_dBm"])
+            writer.writerow(["freq_hz", "spec_reading_dbm"])
             for freq, amp in zip(frequency, curve):
                 writer.writerow([freq, amp])
 
@@ -323,9 +336,16 @@ def simulate_curve(
 
 
 def run_simulation(args: argparse.Namespace):
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = PROJECT_ROOT
     out_dir = _resolve(repo_root, Path(args.out_dir))
     out_dir.mkdir(parents=True, exist_ok=True)
+    build_run_snapshot(out_dir)
+
+    print(f"[INFO] project_root={repo_root}")
+    print(f"[INFO] single_band={SINGLE_BAND}")
+    print(f"[INFO] disable_preamp={DISABLE_PREAMP}")
+    print(f"[INFO] seed={args.seed}")
+    print(f"[INFO] output_dir={out_dir}")
 
     freq, rrs, bounds, band_ranges, switch_feats = load_baseline(
         repo_root,
@@ -480,6 +500,23 @@ def run_simulation(args: argparse.Namespace):
     (out_dir / "labels.json").write_text(json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8")
     _write_curves(out_dir / "simulated_curves.csv", freq, curves)
     np.savez(out_dir / "simulated_curves.npz", frequency=freq, curves=np.array(curves))
+
+    # Validate output counts
+    raw_count = len(list((out_dir / "raw_curves").glob("*.csv")))
+    label_count = len(labels)
+    features_path = out_dir / "features_brb.csv"
+    features_count = 0
+    if features_path.exists():
+        with features_path.open("r", encoding="utf-8-sig") as f:
+            features_count = max(0, sum(1 for _ in f) - 1)
+
+    expected = args.n_samples
+    if raw_count != expected or label_count != expected or features_count != expected:
+        print(
+            "[ERROR] Output counts mismatch: "
+            f"raw_curves={raw_count}, labels={label_count}, features={features_count}, expected={expected}"
+        )
+        raise SystemExit(1)
     
     # Save fault params CSV for effect check
     if fault_params_list:
@@ -562,15 +599,23 @@ def _generate_effect_check(out_dir: Path, feature_rows: List[Dict], labels: dict
 
 def build_argparser():
     parser = argparse.ArgumentParser(description="仿真频响并执行 BRB 诊断")
-    parser.add_argument("--baseline_npz", default=BASELINE_ARTIFACTS)
+    parser.add_argument("--baseline_npz", default=BASELINE_NPZ)
     parser.add_argument("--baseline_meta", default=BASELINE_META)
     parser.add_argument("--switch_json", default=SWITCH_JSON)
-    parser.add_argument("--out_dir", default=f"{OUTPUT_DIR}/sim_spectrum")
-    parser.add_argument("--n_samples", type=int, default=400, 
-                       help="总样本数（默认400，建议4的倍数以便完美平衡）")
-    parser.add_argument("--seed", type=int, default=2024)
-    parser.add_argument("--balanced", action="store_true", default=True,
-                       help="生成系统级均衡的样本（每类相同数量，默认开启）")
+    parser.add_argument("--out_dir", default=SIM_DIR)
+    parser.add_argument(
+        "--n_samples",
+        type=int,
+        default=DEFAULT_N_SAMPLES,
+        help="总样本数（默认400，建议4的倍数以便完美平衡）",
+    )
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument(
+        "--balanced",
+        action="store_true",
+        default=DEFAULT_BALANCED,
+        help="生成系统级均衡的样本（每类相同数量，默认开启）",
+    )
     parser.add_argument("--realistic", dest="balanced", action="store_false",
                        help="使用真实概率分布（反映模块多样性：幅度58%%,频率20%%,参考14%%,正常8%%）")
     return parser
@@ -583,7 +628,7 @@ if __name__ == "__main__":
     # Change to repository root for relative paths to work
     # This enables Windows double-click execution
     script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parents[1]
+    repo_root = PROJECT_ROOT
     os.chdir(repo_root)
     
     # Build parser and run

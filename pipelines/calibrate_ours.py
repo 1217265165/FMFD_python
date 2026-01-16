@@ -48,6 +48,16 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pipelines.default_paths import (
+    PROJECT_ROOT,
+    OUTPUT_DIR,
+    SIM_DIR,
+    SEED,
+    SINGLE_BAND,
+    DISABLE_PREAMP,
+    build_run_snapshot,
+)
+
 
 def load_features_and_labels(data_dir: Path) -> Tuple[Dict[str, Dict], Dict[str, Dict]]:
     """Load features and labels from data directory.
@@ -670,17 +680,30 @@ def save_calibration(calibration: Dict, output_path: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Calibrate ours method parameters (v2)")
-    parser.add_argument('--data_dir', default='Output/sim_spectrum',
-                       help='Directory containing features_brb.csv and labels.json')
-    parser.add_argument('--output_dir', default='Output',
-                       help='Output directory for calibration.json')
+    parser.add_argument(
+        '--data_dir',
+        default=SIM_DIR,
+        help='Directory containing features_brb.csv and labels.json',
+    )
+    parser.add_argument(
+        '--output_dir',
+        default=OUTPUT_DIR,
+        help='Output directory for calibration.json',
+    )
     parser.add_argument('--quiet', action='store_true',
                        help='Suppress progress output')
     args = parser.parse_args()
     
-    data_dir = Path(args.data_dir) if Path(args.data_dir).is_absolute() else ROOT / args.data_dir
-    output_dir = Path(args.output_dir) if Path(args.output_dir).is_absolute() else ROOT / args.output_dir
+    data_dir = Path(args.data_dir) if Path(args.data_dir).is_absolute() else PROJECT_ROOT / args.data_dir
+    output_dir = Path(args.output_dir) if Path(args.output_dir).is_absolute() else PROJECT_ROOT / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    build_run_snapshot(data_dir)
+    print(f"[INFO] project_root={PROJECT_ROOT}")
+    print(f"[INFO] single_band={SINGLE_BAND}")
+    print(f"[INFO] disable_preamp={DISABLE_PREAMP}")
+    print(f"[INFO] seed={SEED}")
+    print(f"[INFO] output_dir={output_dir}")
     
     print(f"Loading data from: {data_dir}")
     
@@ -725,6 +748,23 @@ def main():
     # Also save to sim_spectrum directory if different
     if data_dir != output_dir:
         save_calibration(best_params, data_dir / "calibration.json")
+
+    # Save best params for compare_methods.py
+    best_params_path = data_dir / "best_params.json"
+    save_calibration(best_params, best_params_path)
+
+    report_path = data_dir / "calibration_report.json"
+    report = {
+        "best_params_path": str(best_params_path),
+        "calibration_balanced_accuracy": best_balanced_acc,
+        "calibration_macro_f1": best_f1,
+        "objective": "improve_compare_system_accuracy",
+        "single_band": SINGLE_BAND,
+        "disable_preamp": DISABLE_PREAMP,
+        "seed": SEED,
+    }
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Saved calibration_report.json to: {report_path}")
     
     # Save calibration leaderboard
     if leaderboard:

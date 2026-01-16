@@ -38,6 +38,20 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pipelines.default_paths import (
+    PROJECT_ROOT,
+    OUTPUT_DIR,
+    SIM_DIR,
+    COMPARE_DIR,
+    SEED,
+    SINGLE_BAND,
+    DISABLE_PREAMP,
+    SPLIT,
+    build_run_snapshot,
+)
+
+SYS_LABEL_ORDER = ['参考电平失准', '幅度失准', '正常', '频率失准']
+
 
 def set_global_seed(seed: int = 42):
     """Set random seeds for reproducibility."""
@@ -253,9 +267,9 @@ def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np
         y_mod_list.append(y_mod_val if y_mod_val is not None else -1)
     
     # Convert system labels to numeric
-    unique_sys_labels = sorted(set(y_sys_list))
+    unique_sys_labels = list(SYS_LABEL_ORDER)
     sys_label_to_idx = {label: idx for idx, label in enumerate(unique_sys_labels)}
-    y_sys = np.array([sys_label_to_idx[label] for label in y_sys_list])
+    y_sys = np.array([sys_label_to_idx.get(label, 0) for label in y_sys_list])
     
     # Module labels (may have -1 for missing)
     y_mod = np.array(y_mod_list)
@@ -264,7 +278,7 @@ def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np
     
     print(f"Feature matrix shape: {X.shape}")
     print(f"System labels: {unique_sys_labels}")
-    print(f"System label distribution: {np.bincount(y_sys)}")
+    print(f"System label distribution: {np.bincount(y_sys, minlength=len(SYS_LABEL_ORDER))}")
     if y_mod is not None:
         print(f"Module labels available: {np.sum(y_mod >= 0)} samples")
     
@@ -592,7 +606,7 @@ def plot_comprehensive_comparison(all_results: List[Dict], output_dir: Path):
 # ============================================================================
 
 def evaluate_method(method, X_train, y_sys_train, y_mod_train, 
-                   X_test, y_sys_test, y_mod_test, 
+                   X_test, y_sys_test, y_mod_test,
                    feature_names, n_sys_classes):
     """Evaluate a single method."""
     print(f"\n{'='*60}")
@@ -656,28 +670,38 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
     print(f"Fit Time: {fit_time:.2f} sec")
     print(f"Inference Time: {infer_time_per_sample:.4f} ms/sample")
     print(f"Rules: {results['n_rules']}, Params: {results['n_params']}, Features: {results['n_features_used']}")
+
+    if method.name == 'ours':
+        print(f"Evaluating method: ours -> System Accuracy: {sys_acc:.4f}")
     
     return results
 
 
 def main():
     parser = argparse.ArgumentParser(description="Comprehensive method comparison")
-    parser.add_argument('--data_dir', default='Output/sim_spectrum', 
+    parser.add_argument('--data_dir', default=SIM_DIR,
                        help='Directory containing dataset')
-    parser.add_argument('--output_dir', default='Output/sim_spectrum',
+    parser.add_argument('--output_dir', default=COMPARE_DIR,
                        help='Output directory for results')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--train_size', type=float, default=0.6, help='Training set ratio')
-    parser.add_argument('--val_size', type=float, default=0.2, help='Validation set ratio')
+    parser.add_argument('--seed', type=int, default=SEED, help='Random seed')
+    parser.add_argument('--train_size', type=float, default=SPLIT[0], help='Training set ratio')
+    parser.add_argument('--val_size', type=float, default=SPLIT[1], help='Validation set ratio')
     parser.add_argument('--small_sample', action='store_true', 
                        help='Run small-sample adaptability experiments')
     args = parser.parse_args()
     
     # Setup
     set_global_seed(args.seed)
-    data_dir = Path(args.data_dir) if Path(args.data_dir).is_absolute() else ROOT / args.data_dir
-    output_dir = Path(args.output_dir) if Path(args.output_dir).is_absolute() else ROOT / args.output_dir
+    data_dir = Path(args.data_dir) if Path(args.data_dir).is_absolute() else PROJECT_ROOT / args.data_dir
+    output_dir = Path(args.output_dir) if Path(args.output_dir).is_absolute() else PROJECT_ROOT / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+    build_run_snapshot(output_dir)
+
+    print(f"[INFO] project_root={PROJECT_ROOT}")
+    print(f"[INFO] single_band={SINGLE_BAND}")
+    print(f"[INFO] disable_preamp={DISABLE_PREAMP}")
+    print(f"[INFO] seed={args.seed}")
+    print(f"[INFO] output_dir={output_dir}")
     
     print(f"Data directory: {data_dir}")
     print(f"Output directory: {output_dir}")
@@ -688,7 +712,7 @@ def main():
     print("="*60)
     X, y_sys, y_mod, feature_names, sample_ids = prepare_dataset(data_dir, use_pool_features=True)
     
-    n_sys_classes = len(np.unique(y_sys))
+    n_sys_classes = len(SYS_LABEL_ORDER)
     
     # Audit tracking: count samples at each stage
     audit_info = {
@@ -698,6 +722,42 @@ def main():
         'feature_names': feature_names,
         'n_sys_classes': n_sys_classes,
     }
+
+    raw_curves_dir = data_dir / "raw_curves"
+    raw_curves_count = len(list(raw_curves_dir.glob("*.csv"))) if raw_curves_dir.exists() else 0
+
+    def _hash_file(path: Path) -> str | None:
+        if not path.exists():
+            return None
+        import hashlib
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    repro_summary = {
+        "data_dir": str(data_dir),
+        "features_rows": len(X),
+        "labels_count": len(sample_ids),
+        "raw_curves_count": raw_curves_count,
+        "label_distribution": {
+            label: int(np.sum(y_sys == idx))
+            for idx, label in enumerate(SYS_LABEL_ORDER)
+        },
+        "class_index_map": {str(idx): label for idx, label in enumerate(SYS_LABEL_ORDER)},
+        "best_params": {
+            "path": str(data_dir / "best_params.json"),
+            "exists": (data_dir / "best_params.json").exists(),
+            "sha256": _hash_file(data_dir / "best_params.json"),
+        },
+        "single_band": SINGLE_BAND,
+        "disable_preamp": DISABLE_PREAMP,
+        "seed": args.seed,
+    }
+    repro_path = output_dir / "repro_check_summary.json"
+    repro_path.write_text(json.dumps(repro_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Saved repro_check_summary.json to: {repro_path}")
     
     # Split dataset
     print("\n" + "="*60)
@@ -736,8 +796,20 @@ def main():
     from methods.a_ibrb_adapter import AIBRBAdapter
     from methods.fast_brb_adapter import FastBRBAdapter
     
+    best_params_path = data_dir / "best_params.json"
+    best_params = None
+    if best_params_path.exists():
+        try:
+            best_params = json.loads(best_params_path.read_text(encoding="utf-8"))
+            print(f"[INFO] Loaded best params: {best_params_path}")
+        except json.JSONDecodeError:
+            print(f"[WARN] Failed to parse best params: {best_params_path}")
+            best_params = None
+    else:
+        print(f"[INFO] No best_params.json found at {best_params_path}")
+
     methods = [
-        OursAdapter(),
+        OursAdapter(calibration_override=best_params),
         HCFAdapter(),
         AIFDAdapter(),
         BRBPAdapter(),
@@ -795,9 +867,19 @@ def main():
             row = {k: result[k] for k in fieldnames if k in result}
             writer.writerow(row)
     print(f"Saved comparison table to: {comparison_path}")
+
+    performance_path = output_dir / "performance_table.csv"
+    with open(performance_path, 'w', newline='', encoding='utf-8') as f:
+        fieldnames = ['method', 'sys_accuracy', 'sys_macro_f1', 'mod_top1_accuracy']
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in all_results:
+            row = {k: result[k] for k in fieldnames if k in result}
+            writer.writerow(row)
+    print(f"Saved performance table to: {performance_path}")
     
     # Plot confusion matrices
-    sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+    sys_label_names = SYS_LABEL_ORDER[:n_sys_classes]
     for result in all_results:
         cm_path = output_dir / f"confusion_matrix_{result['method']}.png"
         plot_confusion_matrix(
@@ -919,7 +1001,7 @@ def main():
         cm = ours_result['confusion_matrix']
         with open(cm_csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+            sys_label_names = SYS_LABEL_ORDER[:n_sys_classes]
             writer.writerow(['Predicted\\Actual'] + sys_label_names)
             for i, row in enumerate(cm):
                 writer.writerow([sys_label_names[i]] + list(row))
@@ -929,7 +1011,7 @@ def main():
         cm_counts_path = output_dir / "ours_confusion_matrix_counts.csv"
         with open(cm_counts_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref'][:n_sys_classes]
+            sys_label_names = SYS_LABEL_ORDER[:n_sys_classes]
             # Header row
             writer.writerow(['True\\Pred'] + sys_label_names + ['Total'])
             for i, label in enumerate(sys_label_names):
@@ -969,7 +1051,7 @@ def main():
     with open(dist_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['class', 'train_count', 'val_count', 'test_count', 'total'])
-        sys_label_names = ['Normal', 'Amp', 'Freq', 'Ref']
+        sys_label_names = SYS_LABEL_ORDER
         for i, label in enumerate(sys_label_names):
             if i >= n_sys_classes:
                 break

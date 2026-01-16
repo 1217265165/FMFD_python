@@ -304,6 +304,7 @@ def compute_evidence_gating(
     compress_ratio = float(features.get("compress_ratio", 0.0))
     compress_ratio_high = float(features.get("compress_ratio_high", 0.0))
     low_band_offset = float(features.get("band_offset_db_1", 0.0))
+    high_low_energy_ratio = float(features.get("high_low_energy_ratio", 0.0))
 
     offset_thr = _q95("global_offset_db", 0.1)
     offset_low_thr = _median("global_offset_db", 0.05)
@@ -313,10 +314,13 @@ def compute_evidence_gating(
     compress_thr = _q95("compress_ratio", 0.2)
     compress_high_thr = _q95("compress_ratio_high", 0.2)
     low_band_thr = _q95("band_offset_db_1", 0.05)
+    ratio_med = _median("high_low_energy_ratio", 1.0)
+    ratio_p95 = _q95("high_low_energy_ratio", 1.5)
 
     w_offset = calibration.get("w_offset_to_ref", 0.5)
     w_ripple = calibration.get("w_ripple_to_amp", 0.5)
     w_shift = calibration.get("w_shift_to_freq", 0.5)
+    w_ratio = calibration.get("w_ratio_to_ref", 0.3)
 
     # Ref gate: large global offset + low shape variation
     offset_norm = abs(global_offset) / (offset_thr + 1e-9) if offset_thr > 0 else 0.0
@@ -346,6 +350,12 @@ def compute_evidence_gating(
             ref_boost += w_offset * min(1.0, abs(low_band_offset) / (low_band_thr + 1e-9))
         else:
             ref_boost *= max(0.0, 1.0 - ref_suppress * 0.5)
+
+    # Ref boost: balanced HF/LF residual energy when offset is significant
+    ratio_span = max(1e-9, ratio_p95 - ratio_med)
+    ratio_balance = max(0.0, 1.0 - abs(high_low_energy_ratio - ratio_med) / ratio_span)
+    if offset_norm > 1.0 and ratio_balance > 0.0:
+        ref_boost += w_ratio * ratio_balance
 
     return amp_boost, freq_boost, ref_boost
 

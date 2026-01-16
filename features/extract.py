@@ -113,6 +113,7 @@ def compute_residual_robust_features(frequency, rrs, amp):
             "compress_ratio_high": 0.0,
             "freq_shift_score": 0.0,
             "offset_slope": 0.0,
+            "high_low_energy_ratio": 0.0,
             "band_offset_db_1": 0.0,
             "band_offset_db_2": 0.0,
             "band_offset_db_3": 0.0,
@@ -150,13 +151,22 @@ def compute_residual_robust_features(frequency, rrs, amp):
         else:
             band_offsets.append(0.0)
 
+    low_band_mask = band_masks[0] if band_masks else np.zeros_like(res, dtype=bool)
     high_band_mask = band_masks[-1] if band_masks else np.zeros_like(res, dtype=bool)
+    if np.any(low_band_mask):
+        low_energy = float(np.mean(res[low_band_mask] ** 2))
+    else:
+        low_energy = 0.0
     if np.any(high_band_mask):
         high_res = res[high_band_mask]
         high_p80 = float(np.percentile(high_res, 80))
         compress_ratio_high = float(np.mean(high_res > high_p80))
+        high_energy = float(np.mean(high_res ** 2))
     else:
         compress_ratio_high = 0.0
+        high_energy = 0.0
+
+    high_low_energy_ratio = float(high_energy / (low_energy + 1e-9))
 
     if res.size > 1:
         coef = np.polyfit(frequency, res, 1)[0]
@@ -173,6 +183,7 @@ def compute_residual_robust_features(frequency, rrs, amp):
         "compress_ratio_high": compress_ratio_high,
         "freq_shift_score": freq_shift_score,
         "offset_slope": offset_slope,
+        "high_low_energy_ratio": high_low_energy_ratio,
         "band_offset_db_1": band_offsets[0],
         "band_offset_db_2": band_offsets[1],
         "band_offset_db_3": band_offsets[2],
