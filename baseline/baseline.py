@@ -2,7 +2,6 @@ import os
 from typing import Dict, List, Tuple
 
 import numpy as np
-import pandas as pd
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 from scipy.ndimage import gaussian_filter1d
@@ -62,29 +61,42 @@ def load_and_align(folder_path, use_spectrum_column=True):
     traces = []
     names = []
     for f in os.listdir(folder_path):
-        if f.endswith(".csv"):
+        if not f.endswith(".csv"):
+            continue
+        file_path = os.path.join(folder_path, f)
+        loaded = False
+        for encoding in ["utf-8", "gbk", "gb2312", "latin1"]:
             try:
-                for encoding in ["utf-8", "gbk", "gb2312", "latin1"]:
-                    try:
-                        df = pd.read_csv(os.path.join(folder_path, f), encoding=encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                else:
-                    df = pd.read_csv(os.path.join(folder_path, f), encoding="utf-8", errors="ignore")
-
-                if df.shape[1] >= 2:
-                    freq = df.iloc[:, 0].values.astype(float)
-                    if use_spectrum_column and df.shape[1] >= 3:
-                        amp = df.iloc[:, -2].values.astype(float)
-                    else:
-                        amp = df.iloc[:, 1].values.astype(float)
-
-                    traces.append((freq, amp))
+                freq_vals = []
+                amp_vals = []
+                with open(file_path, "r", encoding=encoding, errors="ignore") as handle:
+                    for line in handle:
+                        parts = [p.strip() for p in line.split(",")]
+                        if len(parts) < 2:
+                            continue
+                        try:
+                            freq_val = float(parts[0])
+                        except ValueError:
+                            continue
+                        if use_spectrum_column and len(parts) >= 3:
+                            amp_idx = -2
+                        else:
+                            amp_idx = 1
+                        try:
+                            amp_val = float(parts[amp_idx])
+                        except ValueError:
+                            continue
+                        freq_vals.append(freq_val)
+                        amp_vals.append(amp_val)
+                if freq_vals:
+                    traces.append((np.array(freq_vals, dtype=float), np.array(amp_vals, dtype=float)))
                     names.append(f)
-            except Exception as e:
-                print(f"Warning: Could not load {f}: {e}")
+                    loaded = True
+                    break
+            except OSError:
                 continue
+        if not loaded:
+            print(f"Warning: Could not load {f}")
 
     if not traces:
         raise FileNotFoundError("未找到有效 CSV 频响数据")

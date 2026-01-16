@@ -201,14 +201,30 @@ def compute_evidence_gating(
     beta_freq = calibration.get('beta_freq', 0.5)
     beta_ref = calibration.get('beta_ref', 0.5)
     
+    stats = calibration.get("normal_quantiles") or _load_normal_feature_stats()
+
+    def _q95(key: str, default: float) -> float:
+        if not stats:
+            return default
+        return _stat_value(stats, "p95", key, default)
+
+    def _median(key: str, default: float) -> float:
+        if not stats:
+            return default
+        return _stat_value(stats, "median", key, default)
+
     # Amplitude evidence thresholds
     amp_evidence = 0.0
     x11 = abs(float(features.get('X11', 0)))  # env_overrun_rate
     x12 = abs(float(features.get('X12', 0)))  # env_overrun_max
     x13 = abs(float(features.get('X13', 0)))  # env_violation_energy
-    
-    if x11 > 0.05 or x12 > 1.0 or x13 > 50.0:
-        amp_evidence = max(x11 / 0.3, x12 / 4.0, x13 / 500.0)
+
+    x11_thr = _q95("env_overrun_rate", 0.05)
+    x12_thr = _q95("env_overrun_max", 1.0)
+    x13_thr = _q95("env_overrun_mean", 50.0)
+
+    if x11 > x11_thr or x12 > x12_thr or x13 > x13_thr:
+        amp_evidence = max(x11 / (x11_thr + 1e-9), x12 / (x12_thr + 1e-9), x13 / (x13_thr + 1e-9))
         amp_evidence = min(1.0, amp_evidence)
     
     # Get X14, X29, X30 for v8 multi-evidence Ref Gate
@@ -221,9 +237,12 @@ def compute_evidence_gating(
     E_strong = AMP_EVIDENCE_STRONG_THRESHOLD
     amp_excess = max(0, amp_evidence - E_strong)
     suppression_factor = min(1.0, SOFT_SUPPRESSION_LAMBDA * amp_excess)
-    
+
+    freq_suppress = calibration.get("freq_suppress_multiplier", FREQ_SUPPRESS_MULTIPLIER)
+    ref_suppress = calibration.get("ref_suppress_multiplier", REF_SUPPRESS_MULTIPLIER)
+
     # freq gets soft suppression when amp is strong (but never zero out completely)
-    freq_retain = max(FREQ_MIN_RETAIN, 1.0 - suppression_factor * FREQ_SUPPRESS_MULTIPLIER)
+    freq_retain = max(FREQ_MIN_RETAIN, 1.0 - suppression_factor * freq_suppress)
     
     # ===== v8 FIX: Corrected Ref Gate based on data analysis =====
     # Key finding from feature_separation_amp_ref.csv:
@@ -268,8 +287,9 @@ def compute_evidence_gating(
     
     # Reference evidence thresholds - primarily X14
     ref_evidence = 0.0
-    if x14 > 0.05:  # normal is ~0.027, ref_error is ~0.376
-        ref_evidence = min(1.0, x14 / 0.15)
+    x14_thr = _q95("band_offset_db_1", 0.05)
+    if x14 > x14_thr:
+        ref_evidence = min(1.0, x14 / (x14_thr + 1e-9))
     
     # Apply gating with soft suppression
     amp_boost = beta_amp * amp_evidence
@@ -277,41 +297,55 @@ def compute_evidence_gating(
     ref_boost = beta_ref * ref_evidence * ref_retain
 
     # === New robust gating based on envelope-insensitive features ===
-    stats = _load_normal_feature_stats()
-    z_hi = calibration.get("gate_z_hi", 3.0)
-    z_mid = calibration.get("gate_z_mid", 2.0)
-
-    def _robust_z(value: float, key: str) -> float:
-        if not stats:
-            return 0.0
-        med = _stat_value(stats, "median", key, 0.0)
-        mad = _stat_value(stats, "mad", key, 0.0)
-        if mad <= 1e-9:
-            return 0.0
-        return abs((value - med) / mad)
-
     global_offset = float(features.get("global_offset_db", 0.0))
     shape_rmse = float(features.get("shape_rmse", 0.0))
-    ripple_var = float(features.get("ripple_var", features.get("X2", 0.0)))
+    ripple_hp = float(features.get("ripple_hp", 0.0))
     freq_shift_score = float(features.get("freq_shift_score", 0.0))
+    compress_ratio = float(features.get("compress_ratio", 0.0))
+    compress_ratio_high = float(features.get("compress_ratio_high", 0.0))
+    low_band_offset = float(features.get("band_offset_db_1", 0.0))
 
-    z_offset = _robust_z(global_offset, "global_offset_db")
-    z_shape = _robust_z(shape_rmse, "shape_rmse")
-    z_ripple = _robust_z(ripple_var, "ripple_var")
-    z_freq_shift = _robust_z(freq_shift_score, "freq_shift_score")
+    offset_thr = _q95("global_offset_db", 0.1)
+    offset_low_thr = _median("global_offset_db", 0.05)
+    shape_thr = _q95("shape_rmse", 0.1)
+    ripple_thr = _q95("ripple_hp", 0.05)
+    shift_thr = _q95("freq_shift_score", 0.05)
+    compress_thr = _q95("compress_ratio", 0.2)
+    compress_high_thr = _q95("compress_ratio_high", 0.2)
+    low_band_thr = _q95("band_offset_db_1", 0.05)
+
+    w_offset = calibration.get("w_offset_to_ref", 0.5)
+    w_ripple = calibration.get("w_ripple_to_amp", 0.5)
+    w_shift = calibration.get("w_shift_to_freq", 0.5)
 
     # Ref gate: large global offset + low shape variation
-    if z_offset > z_hi and z_shape < z_mid:
-        ref_boost += calibration.get("ref_boost_on_offset", 0.35) * min(1.0, z_offset / z_hi)
-        amp_boost *= 1.0 - calibration.get("amp_suppress_on_offset", 0.35) * min(1.0, z_offset / z_hi)
+    offset_norm = abs(global_offset) / (offset_thr + 1e-9) if offset_thr > 0 else 0.0
+    shape_norm = shape_rmse / (shape_thr + 1e-9) if shape_thr > 0 else 0.0
+    if offset_norm > 1.0 and shape_norm <= 1.0:
+        ref_boost += w_offset * min(2.0, offset_norm)
+        amp_boost *= max(0.0, 1.0 - ref_suppress * min(1.0, offset_norm))
 
-    # Freq gate: strong correlation shift
-    if z_freq_shift > z_hi:
-        freq_boost += calibration.get("freq_boost_on_shift", 0.35) * min(1.0, z_freq_shift / z_hi)
+    # Freq gate: strong correlation shift or slope drift
+    shift_norm = freq_shift_score / (shift_thr + 1e-9) if shift_thr > 0 else 0.0
+    offset_slope = float(features.get("offset_slope", 0.0))
+    slope_thr = _q95("offset_slope", 0.05)
+    slope_norm = abs(offset_slope) / (slope_thr + 1e-9) if slope_thr > 0 else 0.0
+    if shift_norm > 1.0 or slope_norm > 1.0:
+        freq_boost += w_shift * min(2.0, max(shift_norm, slope_norm))
 
-    # Amp gate: ripple/high-pass energy abnormal, but no large global offset
-    if z_ripple > z_hi and z_offset < z_mid:
-        amp_boost += calibration.get("amp_boost_on_ripple", 0.30) * min(1.0, z_ripple / z_hi)
+    # Amp gate: ripple/Compression abnormal, but no large global offset
+    ripple_norm = ripple_hp / (ripple_thr + 1e-9) if ripple_thr > 0 else 0.0
+    compress_norm = compress_ratio_high / (compress_high_thr + 1e-9) if compress_high_thr > 0 else 0.0
+    if (ripple_norm > 1.0 or compress_norm > 1.0) and abs(global_offset) <= offset_low_thr:
+        amp_boost += w_ripple * min(2.0, max(ripple_norm, compress_norm))
+        ref_boost *= max(0.0, 1.0 - ref_suppress * min(1.0, max(ripple_norm, compress_norm)))
+
+    # Amp->Ref confusion guard: low-band residual needs offset + compression evidence
+    if abs(low_band_offset) > low_band_thr:
+        if abs(global_offset) > offset_thr and (compress_ratio > compress_thr or compress_ratio_high > compress_high_thr):
+            ref_boost += w_offset * min(1.0, abs(low_band_offset) / (low_band_thr + 1e-9))
+        else:
+            ref_boost *= max(0.0, 1.0 - ref_suppress * 0.5)
 
     return amp_boost, freq_boost, ref_boost
 
@@ -727,7 +761,7 @@ def system_level_infer_with_sub_brbs(
         calibration = load_calibration()
     
     # Apply calibration to parameters
-    alpha_base = calibration.get('alpha', alpha)
+    alpha_base = calibration.get('alpha_base', calibration.get('alpha', alpha))
     gamma = calibration.get('gamma', 0.5)  # Reliability temperature factor
     
     # Stage-0: Normal Anchor Detection (v2: SOFT GATING)
@@ -773,6 +807,9 @@ def system_level_infer_with_sub_brbs(
     # Apply evidence gating (base boosts)
     amp_boost, freq_boost, ref_boost = compute_evidence_gating(features, calibration)
     
+    normal_prior_k = calibration.get("normal_prior_k", 1.0)
+    normal_logit *= normal_prior_k
+
     # === STEP 2: Build initial logits WITHOUT reliability weighting ===
     logits_base = [
         normal_logit,                    # Normal: from anchor
@@ -789,8 +826,10 @@ def system_level_infer_with_sub_brbs(
     
     # === v6 FIX: Only apply reliability mechanism when UNCERTAIN ===
     is_in_gray_zone = T_low < anchor_score < T_high
-    is_low_confidence = pmax_base < 0.55
-    is_low_margin = margin_base < 0.15
+    pmax_threshold = calibration.get("pmax_threshold", 0.55)
+    margin_threshold = calibration.get("margin_threshold", 0.15)
+    is_low_confidence = pmax_base < pmax_threshold
+    is_low_margin = margin_base < margin_threshold
     
     use_reliability = is_in_gray_zone or is_low_confidence or is_low_margin
     

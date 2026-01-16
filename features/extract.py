@@ -78,8 +78,11 @@ def _vendor_band_masks(frequency):
         (5.25e9, 8.2e9),
     ]
     masks = []
-    for start, end in bands:
-        masks.append((frequency >= start) & (frequency < end))
+    for idx, (start, end) in enumerate(bands):
+        if idx == 0:
+            masks.append((frequency >= start) & (frequency <= end))
+        else:
+            masks.append((frequency > start) & (frequency <= end))
     return masks
 
 
@@ -90,10 +93,12 @@ def compute_residual_robust_features(frequency, rrs, amp):
         return {
             "global_offset_db": 0.0,
             "shape_rmse": 0.0,
-            "ripple_var": 0.0,
+            "ripple_hp": 0.0,
             "tail_asym": 0.0,
-            "compress_mask_ratio": 0.0,
+            "compress_ratio": 0.0,
+            "compress_ratio_high": 0.0,
             "freq_shift_score": 0.0,
+            "offset_slope": 0.0,
             "band_offset_db_1": 0.0,
             "band_offset_db_2": 0.0,
             "band_offset_db_3": 0.0,
@@ -104,13 +109,13 @@ def compute_residual_robust_features(frequency, rrs, amp):
     mad = np.median(np.abs(res - median_res)) + 1e-9
     global_offset_db = float(median_res)
     shape_rmse = float(np.sqrt(np.mean((res - median_res) ** 2)))
-    ripple_var = float(np.std(np.diff(res))) if res.size > 1 else 0.0
+    ripple_hp = float(np.std(np.diff(res))) if res.size > 1 else 0.0
     p95 = float(np.percentile(res, 95))
     p50 = float(np.percentile(res, 50))
     p5 = float(np.percentile(res, 5))
     tail_asym = (p95 - p50) - (p50 - p5)
-    compress_threshold = median_res + 2.0 * mad
-    compress_mask_ratio = float(np.mean(res > compress_threshold))
+    p80 = float(np.percentile(res, 80))
+    compress_ratio = float(np.mean(res > p80))
 
     # Frequency shift score via normalized correlation
     r1 = (rrs - np.mean(rrs)) / (np.std(rrs) + 1e-9)
@@ -124,19 +129,36 @@ def compute_residual_robust_features(frequency, rrs, amp):
     freq_shift_score = float(np.sqrt(lag_norm ** 2 + (1.0 - corr_coeff) ** 2))
 
     band_offsets = []
-    for mask in _vendor_band_masks(frequency):
+    band_masks = _vendor_band_masks(frequency)
+    for mask in band_masks:
         if np.any(mask):
             band_offsets.append(float(np.median(res[mask])))
         else:
             band_offsets.append(0.0)
 
+    high_band_mask = band_masks[-1] if band_masks else np.zeros_like(res, dtype=bool)
+    if np.any(high_band_mask):
+        high_res = res[high_band_mask]
+        high_p80 = float(np.percentile(high_res, 80))
+        compress_ratio_high = float(np.mean(high_res > high_p80))
+    else:
+        compress_ratio_high = 0.0
+
+    if res.size > 1:
+        coef = np.polyfit(frequency, res, 1)[0]
+        offset_slope = float(coef * 1e9)  # dB per GHz
+    else:
+        offset_slope = 0.0
+
     return {
         "global_offset_db": global_offset_db,
         "shape_rmse": shape_rmse,
-        "ripple_var": ripple_var,
+        "ripple_hp": ripple_hp,
         "tail_asym": float(tail_asym),
-        "compress_mask_ratio": compress_mask_ratio,
+        "compress_ratio": compress_ratio,
+        "compress_ratio_high": compress_ratio_high,
         "freq_shift_score": freq_shift_score,
+        "offset_slope": offset_slope,
         "band_offset_db_1": band_offsets[0],
         "band_offset_db_2": band_offsets[1],
         "band_offset_db_3": band_offsets[2],

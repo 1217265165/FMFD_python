@@ -1,10 +1,15 @@
 import os
+import csv
 import json
+import sys
 from pathlib import Path
 from typing import Union
 
 import numpy as np
-import pandas as pd
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from baseline.baseline import (
     load_and_align,
@@ -229,7 +234,10 @@ def main():
 
     # 6) 保存切换点特性
     if switch_feats:
-        pd.DataFrame(switch_feats).to_csv(switch_csv, index=False)
+        with open(switch_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(switch_feats[0].keys()))
+            writer.writeheader()
+            writer.writerows(switch_feats)
         with open(switch_json, "w", encoding="utf-8") as f:
             json.dump(switch_feats, f, indent=4, ensure_ascii=False)
     else:
@@ -245,17 +253,26 @@ def main():
         amp = traces[i]
         feats = extract_system_features(frequency, rrs, bounds, BAND_RANGES, amp)
         feats_list.append(feats)
-    stats_df = pd.DataFrame(feats_list)
-    describe_df = stats_df.describe(percentiles=[0.05, 0.5, 0.95, 0.99])
-    describe_df.rename(
-        index={"5%": "p05", "50%": "median", "95%": "p95", "99%": "p99"},
-        inplace=True,
-    )
-    medians = stats_df.median()
-    mad = (stats_df - medians).abs().median()
-    robust_df = pd.DataFrame([mad], index=["mad"])
-    full_stats = pd.concat([describe_df, robust_df])
-    full_stats.to_csv(normal_feat_stats, index_label="stat")
+    keys = sorted({key for feat in feats_list for key in feat.keys()})
+    values = {key: np.array([feat.get(key, 0.0) for feat in feats_list], dtype=float) for key in keys}
+    stats_rows = {
+        "count": [len(feats_list)] * len(keys),
+        "mean": [float(np.mean(values[key])) for key in keys],
+        "std": [float(np.std(values[key], ddof=1)) if len(values[key]) > 1 else 0.0 for key in keys],
+        "min": [float(np.min(values[key])) for key in keys],
+        "max": [float(np.max(values[key])) for key in keys],
+        "p05": [float(np.percentile(values[key], 5)) for key in keys],
+        "median": [float(np.median(values[key])) for key in keys],
+        "p95": [float(np.percentile(values[key], 95)) for key in keys],
+        "p99": [float(np.percentile(values[key], 99)) for key in keys],
+        "mad": [float(np.median(np.abs(values[key] - np.median(values[key])))) for key in keys],
+    }
+
+    with open(normal_feat_stats, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["stat"] + keys)
+        for stat_name, row_values in stats_rows.items():
+            writer.writerow([stat_name] + row_values)
 
     print("\n" + "="*60)
     print("基线包络与RRS已保存:", baseline_artifacts, baseline_meta)

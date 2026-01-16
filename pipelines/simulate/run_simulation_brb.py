@@ -31,10 +31,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from baseline.baseline import compute_rrs_bounds
 from baseline.config import (
@@ -507,65 +512,52 @@ def run_simulation(args: argparse.Namespace):
 
 def _generate_effect_check(out_dir: Path, feature_rows: List[Dict], labels: dict):
     """Generate freq_ref_effect_check.csv to verify injection → feature correlation."""
-    import pandas as pd
-    
-    # Build dataframe with features and labels
-    df = pd.DataFrame(feature_rows)
-    df['system_class'] = df['sample_id'].apply(
-        lambda x: labels.get(x, {}).get('system_fault_class', 'normal') or 'normal'
-    )
-    
-    # Key freq features
     freq_features = ['X16', 'X17', 'X18', 'X23', 'X24', 'X25']
-    # Key ref features  
     ref_features = ['X3', 'X5', 'X26', 'X27', 'X28']
-    
-    # Compute statistics by class
+
     stats = []
     for cls in ['normal', 'amp_error', 'freq_error', 'ref_error']:
-        cls_df = df[df['system_class'] == cls]
-        if len(cls_df) == 0:
+        cls_rows = [
+            row for row in feature_rows
+            if labels.get(row.get('sample_id', ''), {}).get('system_fault_class', 'normal') == cls
+        ]
+        if not cls_rows:
             continue
-        
-        row = {'class': cls, 'n': len(cls_df)}
-        
-        # Freq features
-        for f in freq_features:
-            if f in cls_df.columns:
-                vals = cls_df[f].astype(float)
-                row[f'{f}_mean'] = vals.mean()
-                row[f'{f}_std'] = vals.std()
-                row[f'{f}_p90'] = vals.quantile(0.9) if len(vals) > 0 else 0
-        
-        # Ref features
-        for f in ref_features:
-            if f in cls_df.columns:
-                vals = cls_df[f].astype(float)
-                row[f'{f}_mean'] = vals.mean()
-                row[f'{f}_std'] = vals.std()
-                row[f'{f}_p90'] = vals.quantile(0.9) if len(vals) > 0 else 0
-        
-        stats.append(row)
-    
-    # Save effect check
+
+        row_stats = {'class': cls, 'n': len(cls_rows)}
+        for f in freq_features + ref_features:
+            vals = [float(r.get(f, 0.0)) for r in cls_rows if f in r]
+            if vals:
+                arr = np.array(vals, dtype=float)
+                row_stats[f'{f}_mean'] = float(np.mean(arr))
+                row_stats[f'{f}_std'] = float(np.std(arr))
+                row_stats[f'{f}_p90'] = float(np.percentile(arr, 90))
+        stats.append(row_stats)
+
     if stats:
-        effect_df = pd.DataFrame(stats)
-        effect_df.to_csv(out_dir / 'freq_ref_effect_check.csv', index=False, encoding='utf-8-sig')
-        print(f"Saved freq_ref_effect_check.csv")
+        output_path = out_dir / 'freq_ref_effect_check.csv'
+        keys = sorted({k for row in stats for k in row.keys()})
+        with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(stats)
+        print("Saved freq_ref_effect_check.csv")
         
-        # Print summary
+        stats_by_class = {row.get("class"): row for row in stats}
         print("\n=== Freq/Ref Feature Effect Check ===")
         print("Freq features (should be high for freq_error):")
         for f in ['X16', 'X23', 'X24']:
-            if f'{f}_mean' in effect_df.columns:
-                for _, row in effect_df.iterrows():
-                    print(f"  {row['class']:12s} {f}_mean={row.get(f'{f}_mean', 0):.4f}")
-        
+            for cls, row in stats_by_class.items():
+                key = f"{f}_mean"
+                if key in row:
+                    print(f"  {cls:12s} {f}_mean={row.get(key, 0):.4f}")
+
         print("\nRef features (should be high for ref_error):")
         for f in ['X26', 'X27', 'X28']:
-            if f'{f}_mean' in effect_df.columns:
-                for _, row in effect_df.iterrows():
-                    print(f"  {row['class']:12s} {f}_mean={row.get(f'{f}_mean', 0):.4f}")
+            for cls, row in stats_by_class.items():
+                key = f"{f}_mean"
+                if key in row:
+                    print(f"  {cls:12s} {f}_mean={row.get(key, 0):.4f}")
 
 
 def build_argparser():
