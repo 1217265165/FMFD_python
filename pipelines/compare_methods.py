@@ -56,6 +56,8 @@ SYS_LABEL_ORDER = ['正常', '幅度失准', '频率失准', '参考电平失准
 LEAK_PREFIXES = ("sys_", "label", "target", "gt_", "y_", "truth", "class_")
 LEAK_SUBSTRINGS = ("label", "target", "truth")
 
+EXPECTED_FEATURES_DIR = PROJECT_ROOT / "config" / "expected_features"
+
 
 class LeakageError(RuntimeError):
     def __init__(self, columns: List[str]):
@@ -131,11 +133,14 @@ def load_labels(labels_path: Path) -> Dict:
         raise ValueError(f"Unsupported label file format: {labels_path.suffix}")
 
 
-def load_features_csv(features_path: Path) -> Dict[str, Dict[str, float]]:
-    """Load features from CSV file."""
+def load_features_csv(features_path: Path) -> Tuple[Dict[str, Dict[str, float]], List[str]]:
+    """Load features from CSV file and preserve column order."""
     features_dict = {}
+    feature_names: List[str] = []
     with open(features_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
+        if reader.fieldnames:
+            feature_names = [name for name in reader.fieldnames if name not in ['sample_id', 'id']]
         for row in reader:
             sample_id = row.get('sample_id') or row.get('id')
             if sample_id:
@@ -148,7 +153,7 @@ def load_features_csv(features_path: Path) -> Dict[str, Dict[str, float]]:
                         except (ValueError, TypeError):
                             pass
                 features_dict[sample_id] = feat_row
-    return features_dict
+    return features_dict, feature_names
 
 
 def extract_system_label(entry: Dict) -> str:
@@ -217,6 +222,53 @@ def detect_leakage_columns(feature_names: List[str]) -> List[str]:
     return sorted(set(suspicious))
 
 
+def load_expected_features(
+    method_name: str,
+    default_features: List[str],
+    output_dir: Path,
+) -> List[str]:
+    expected_path = EXPECTED_FEATURES_DIR / f"{method_name}.json"
+    if expected_path.exists():
+        try:
+            payload = json.loads(expected_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and "features" in payload:
+                features = payload["features"]
+            else:
+                features = payload
+            if isinstance(features, list) and features:
+                return [str(f) for f in features]
+        except json.JSONDecodeError:
+            pass
+    fallback_path = output_dir / f"EXPECTED_FEATURES_{method_name}.json"
+    if fallback_path.exists():
+        try:
+            payload = json.loads(fallback_path.read_text(encoding="utf-8"))
+            features = payload.get("features", payload)
+            if isinstance(features, list) and features:
+                return [str(f) for f in features]
+        except json.JSONDecodeError:
+            pass
+    return list(default_features)
+
+
+def select_feature_matrix(
+    X: np.ndarray,
+    feature_names: List[str],
+    expected_features: List[str],
+    fill_value: float = 0.0,
+) -> Tuple[np.ndarray, List[str]]:
+    name_to_idx = {name: idx for idx, name in enumerate(feature_names)}
+    missing = []
+    selected = np.full((X.shape[0], len(expected_features)), fill_value, dtype=float)
+    for j, name in enumerate(expected_features):
+        idx = name_to_idx.get(name)
+        if idx is None:
+            missing.append(name)
+            continue
+        selected[:, j] = X[:, idx]
+    return selected, missing
+
+
 def prepare_dataset(
     data_dir: Path,
     use_pool_features: bool = False,
@@ -245,7 +297,7 @@ def prepare_dataset(
     
     # Load data
     labels_dict = load_labels(labels_path)
-    features_dict = load_features_csv(features_path)
+    features_dict, csv_feature_names = load_features_csv(features_path)
     
     # If using pool features and raw curves available, augment features
     if use_pool_features:
@@ -272,7 +324,10 @@ def prepare_dataset(
     
     # Build feature matrix and label vectors
     # Determine feature names from full union for consistent ordering
-    all_feature_names = sorted({k for feats in features_dict.values() for k in feats.keys()})
+    if csv_feature_names:
+        all_feature_names = list(csv_feature_names)
+    else:
+        all_feature_names = sorted({k for feats in features_dict.values() for k in feats.keys()})
     leak_columns = detect_leakage_columns(all_feature_names)
     if leak_columns and strict_leakage:
         raise LeakageError(leak_columns)
@@ -654,9 +709,21 @@ def plot_comprehensive_comparison(all_results: List[Dict], output_dir: Path):
 # Main Evaluation Pipeline
 # ============================================================================
 
-def evaluate_method(method, X_train, y_sys_train, y_mod_train, 
-                   X_test, y_sys_test, y_mod_test,
-                   feature_names, n_sys_classes):
+def evaluate_method(
+    method,
+    X_train,
+    y_sys_train,
+    y_mod_train,
+    X_test,
+    y_sys_test,
+    y_mod_test,
+    feature_names,
+    n_sys_classes,
+    sample_ids,
+    test_idx,
+    label_order,
+    label_map,
+):
     """Evaluate a single method."""
     print(f"\n{'='*60}")
     print(f"Evaluating method: {method.name}")
@@ -725,6 +792,25 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
 
     if method.name == 'ours':
         print(f"Evaluating method: ours -> System Accuracy: {sys_acc:.4f}")
+
+    # Mapping sanity check (sample a few predictions)
+    rng = np.random.RandomState(2025)
+    n_samples = min(10, len(y_sys_test))
+    if n_samples > 0:
+        indices = rng.choice(len(y_sys_test), size=n_samples, replace=False)
+        print("\n[Mapping Check] sample predictions:")
+        for idx in indices:
+            true_label = label_order[y_sys_test[idx]]
+            pred_label_raw = label_order[y_sys_pred[idx]]
+            mapped_label = label_order[label_map.get(y_sys_pred[idx], y_sys_pred[idx])]
+            sample_id = sample_ids[test_idx[idx]]
+            print(
+                f"  {sample_id}: true={true_label}, pred_raw={pred_label_raw}, mapped={mapped_label}"
+            )
+            if pred_label_raw != mapped_label:
+                raise ValueError(
+                    f"Label mapping mismatch for {method.name}: raw={pred_label_raw}, mapped={mapped_label}"
+                )
     
     return results
 
@@ -850,7 +936,11 @@ def main():
     audit_info['n_train'] = len(X_train)
     audit_info['n_val'] = len(X_val)
     audit_info['n_test'] = len(X_test)
+    audit_info['train_indices'] = train_idx.tolist()
+    audit_info['val_indices'] = val_idx.tolist()
     audit_info['test_indices'] = test_idx.tolist()
+    audit_info['train_sample_ids'] = [sample_ids[i] for i in train_idx]
+    audit_info['val_sample_ids'] = [sample_ids[i] for i in val_idx]
     audit_info['test_sample_ids'] = [sample_ids[i] for i in test_idx]
     
     # Import methods (will be implemented)
@@ -895,12 +985,38 @@ def main():
     all_results = []
     for method in methods:
         try:
+            expected_features = load_expected_features(method.name, feature_names, output_dir)
+            X_train_sel, missing_train = select_feature_matrix(X_train, feature_names, expected_features)
+            X_test_sel, missing_test = select_feature_matrix(X_test, feature_names, expected_features)
+            missing_features = sorted(set(missing_train + missing_test))
+            if missing_features:
+                print(
+                    f"[WARN] {method.name} missing {len(missing_features)} features, "
+                    f"filling with 0.0"
+                )
+            print(
+                f"[INFO] {method.name} features: {len(expected_features)} "
+                f"(first 10: {expected_features[:10]})"
+            )
             results = evaluate_method(
-                method, X_train, y_sys_train, y_mod_train,
-                X_test, y_sys_test, y_mod_test,
-                feature_names, n_sys_classes
+                method,
+                X_train_sel,
+                y_sys_train,
+                y_mod_train,
+                X_test_sel,
+                y_sys_test,
+                y_mod_test,
+                expected_features,
+                n_sys_classes,
+                sample_ids,
+                test_idx,
+                SYS_LABEL_ORDER,
+                {i: i for i in range(n_sys_classes)},
             )
             all_results.append(results)
+            audit_info[f"{method.name}_features"] = expected_features
+            audit_info[f"{method.name}_missing_features"] = missing_features
+            audit_info[f"{method.name}_label_map"] = {i: i for i in range(n_sys_classes)}
             
             # Validate confusion matrix sum
             cm = results.get('confusion_matrix', None)
@@ -986,20 +1102,23 @@ def main():
             
             for method in methods:
                 method_accs = []
+                expected_features = load_expected_features(method.name, feature_names, output_dir)
+                X_train_sel, _ = select_feature_matrix(X_train, feature_names, expected_features)
+                X_test_sel, _ = select_feature_matrix(X_test, feature_names, expected_features)
                 
                 for rep in range(n_repeats):
                     # Sample subset
                     rep_seed = args.seed + rep
                     rng = np.random.RandomState(rep_seed)
                     indices = rng.choice(len(X_train), size=train_size, replace=False)
-                    X_small = X_train[indices]
+                    X_small = X_train_sel[indices]
                     y_small = y_sys_train[indices]
                     
                     # Train and evaluate
                     try:
                         method_copy = method.__class__()  # Create fresh instance
-                        method_copy.fit(X_small, y_small, None, {'feature_names': feature_names})
-                        pred = method_copy.predict(X_test, {'feature_names': feature_names})
+                        method_copy.fit(X_small, y_small, None, {'feature_names': expected_features})
+                        pred = method_copy.predict(X_test_sel, {'feature_names': expected_features})
                         acc = calculate_accuracy(y_sys_test, pred['system_pred'])
                         method_accs.append(acc)
                     except Exception as e:
