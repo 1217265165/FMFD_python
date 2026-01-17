@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from methods.base import MethodAdapter
 from BRB.system_brb import system_level_infer, SystemBRBConfig
 from BRB.aggregator import set_calibration_override
-from BRB.module_brb import module_level_infer, module_level_infer_with_activation
+from BRB.module_brb import MODULE_LABELS, module_level_infer, module_level_infer_with_activation
 
 
 def _load_calibration() -> Dict:
@@ -131,7 +131,7 @@ class OursAdapter(MethodAdapter):
         # Initialize outputs
         sys_proba = np.zeros((n_test, n_sys_classes))
         sys_pred = np.zeros(n_test, dtype=int)
-        mod_proba = np.zeros((n_test, 21))  # 21 modules
+        mod_proba = np.zeros((n_test, len(MODULE_LABELS)))  # modules
         mod_pred = np.zeros(n_test, dtype=int)
 
         start_time = time.time()
@@ -190,7 +190,7 @@ class OursAdapter(MethodAdapter):
             # Module-level inference - 使用module_level_infer_with_activation以激活相关模块组
             mod_probs_dict = module_level_infer_with_activation(features, sys_result, only_activate_relevant=True)
             
-            # Convert to array (assume module IDs 1-21)
+            # Convert to array (assume module IDs 1-N)
             for mod_id_str, prob in mod_probs_dict.items():
                 try:
                     # Extract module ID from string like "模块1" or "1"
@@ -199,7 +199,7 @@ class OursAdapter(MethodAdapter):
                     else:
                         mod_id = int(mod_id_str)
                     
-                    if 1 <= mod_id <= 21:
+                    if 1 <= mod_id <= len(MODULE_LABELS):
                         mod_proba[i, mod_id - 1] = prob
                 except (ValueError, IndexError):
                     continue

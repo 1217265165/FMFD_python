@@ -41,7 +41,6 @@ LABELS = [
     "数字检波器",
     "VBW滤波器",
     "电源模块",
-    "未定义/其他",
 ]
 
 # ------- 复制自 module_brb，但 rule weight 改为可调 --------
@@ -73,7 +72,7 @@ def module_level_infer_param(features, sys_probs, rule_weights):
     # 规则的 belief 与原 module_brb 相同，仅 weight 可调
     rules = [
         (rule_weights[0] * sys_probs.get("参考电平失准", 0.3),
-         {"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16, "未定义/其他": 0.10}),
+         {"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16}),
         (rule_weights[1] * sys_probs.get("幅度失准", 0.3),
          {"前置放大器": 0.40, "中频放大器": 0.25, "数字放大器": 0.20, "衰减器": 0.10, "ADC": 0.05}),
         (rule_weights[2] * sys_probs.get("频率失准", 0.3),
@@ -81,8 +80,7 @@ def module_level_infer_param(features, sys_probs, rule_weights):
         (rule_weights[3], {"高频段YTF滤波器": 0.60, "高频段混频器": 0.40}),
         (rule_weights[4], {"低频段前置低通滤波器": 0.60, "低频段第一混频器": 0.40}),
         (rule_weights[5], {"数字RBW": 0.30, "数字检波器": 0.35, "VBW滤波器": 0.25, "ADC": 0.10}),
-        (rule_weights[6], {"电源模块": 0.80, "未定义/其他": 0.20}),
-        (rule_weights[7], {"未定义/其他": 1.0}),
+        (rule_weights[6], {"电源模块": 1.0}),
     ]
 
     acts = []
