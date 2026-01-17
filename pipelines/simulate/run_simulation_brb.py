@@ -431,7 +431,6 @@ def run_simulation(args: argparse.Namespace):
                         "sample_id": sample_id,
                         **sys_feats,
                         **dyn_feats,
-                        **{f"sys_{k}": v for k, v in sys_probs.items()},
                         **{f"mod_{k}": v for k, v in module_probs.items()},
                     }
                 )
@@ -487,7 +486,6 @@ def run_simulation(args: argparse.Namespace):
                     "sample_id": sample_id,
                     **sys_feats,
                     **dyn_feats,
-                    **{f"sys_{k}": v for k, v in sys_probs.items()},
                     **{f"mod_{k}": v for k, v in module_probs.items()},
                 }
             )

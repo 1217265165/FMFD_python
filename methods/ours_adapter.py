@@ -168,16 +168,14 @@ class OursAdapter(MethodAdapter):
             probs = sys_result.get('probabilities', {})
             
             # Map to probability array with better fallback handling
-            # Order (sorted Chinese alphabetically, as used in compare_methods):
-            # 参考电平失准(0), 幅度失准(1), 正常(2), 频率失准(3)
-            # = [Ref, Amp, Normal, Freq]
+            # Order: Normal, Amp, Freq, Ref
             total_prob = sum(probs.values()) if probs else 0.0
             
             if total_prob > 0.01:  # Valid probabilities
-                sys_proba[i, 0] = probs.get('参考电平失准', 0.0)  # Ref -> idx 0
+                sys_proba[i, 0] = probs.get('正常', 0.0)          # Normal -> idx 0
                 sys_proba[i, 1] = probs.get('幅度失准', 0.0)      # Amp -> idx 1
-                sys_proba[i, 2] = probs.get('正常', 0.0)          # Normal -> idx 2
-                sys_proba[i, 3] = probs.get('频率失准', 0.0)      # Freq -> idx 3
+                sys_proba[i, 2] = probs.get('频率失准', 0.0)      # Freq -> idx 2
+                sys_proba[i, 3] = probs.get('参考电平失准', 0.0)  # Ref -> idx 3
                 
                 # Normalize if needed
                 row_sum = np.sum(sys_proba[i])

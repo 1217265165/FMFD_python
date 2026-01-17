@@ -50,7 +50,17 @@ from pipelines.default_paths import (
     build_run_snapshot,
 )
 
-SYS_LABEL_ORDER = ['参考电平失准', '幅度失准', '正常', '频率失准']
+# Unified system label order (Normal, Amp, Freq, Ref)
+SYS_LABEL_ORDER = ['正常', '幅度失准', '频率失准', '参考电平失准']
+
+LEAK_PREFIXES = ("sys_", "label", "target", "gt_", "y_", "truth", "class_")
+LEAK_SUBSTRINGS = ("label", "target", "truth")
+
+
+class LeakageError(RuntimeError):
+    def __init__(self, columns: List[str]):
+        super().__init__(f"Leakage columns detected: {columns}")
+        self.columns = columns
 
 
 def set_global_seed(seed: int = 42):
@@ -195,7 +205,23 @@ def extract_module_label(entry: Dict) -> Optional[int]:
     return None
 
 
-def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], List[str], List[str]]:
+def detect_leakage_columns(feature_names: List[str]) -> List[str]:
+    suspicious = []
+    for name in feature_names:
+        lower = name.lower()
+        if lower.startswith(LEAK_PREFIXES):
+            suspicious.append(name)
+            continue
+        if any(sub in lower for sub in LEAK_SUBSTRINGS):
+            suspicious.append(name)
+    return sorted(set(suspicious))
+
+
+def prepare_dataset(
+    data_dir: Path,
+    use_pool_features: bool = False,
+    strict_leakage: bool = True,
+) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], List[str], List[str], List[str]]:
     """Load and prepare dataset with features and labels.
     
     Args:
@@ -245,8 +271,16 @@ def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np
     print(f"Found {len(common_ids)} samples with both features and labels")
     
     # Build feature matrix and label vectors
-    # First, determine feature names from first sample
-    feature_names = list(features_dict[common_ids[0]].keys())
+    # Determine feature names from full union for consistent ordering
+    all_feature_names = sorted({k for feats in features_dict.values() for k in feats.keys()})
+    leak_columns = detect_leakage_columns(all_feature_names)
+    if leak_columns and strict_leakage:
+        raise LeakageError(leak_columns)
+    if leak_columns:
+        for feats in features_dict.values():
+            for col in leak_columns:
+                feats.pop(col, None)
+    feature_names = [name for name in all_feature_names if name not in leak_columns]
     n_features = len(feature_names)
     n_samples = len(common_ids)
     
@@ -282,7 +316,22 @@ def prepare_dataset(data_dir: Path, use_pool_features: bool = False) -> Tuple[np
     if y_mod is not None:
         print(f"Module labels available: {np.sum(y_mod >= 0)} samples")
     
-    return X, y_sys, y_mod, feature_names, common_ids
+    return X, y_sys, y_mod, feature_names, common_ids, leak_columns
+
+
+def write_eval_audit(output_dir: Path, audit_info: Dict[str, object]) -> None:
+    eval_audit_path = output_dir / "eval_audit.json"
+    with open(eval_audit_path, 'w', encoding='utf-8') as f:
+        audit_serializable = {}
+        for k, v in audit_info.items():
+            if isinstance(v, (list, dict, str, int, float, bool, type(None))):
+                audit_serializable[k] = v
+            elif hasattr(v, 'tolist'):
+                audit_serializable[k] = v.tolist()
+            else:
+                audit_serializable[k] = str(v)
+        json.dump(audit_serializable, f, indent=2, ensure_ascii=False)
+    print(f"Saved evaluation audit to: {eval_audit_path}")
 
 
 def stratified_split(X: np.ndarray, y: np.ndarray, 
@@ -627,6 +676,7 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
     
     # Extract predictions
     y_sys_pred = predictions['system_pred']
+    sys_proba = predictions.get('system_proba')
     y_mod_pred = predictions.get('module_pred', None)
     
     # System-level metrics
@@ -656,6 +706,8 @@ def evaluate_method(method, X_train, y_sys_train, y_mod_train,
         'n_params': complexity.get('n_params', 0),
         'n_features_used': complexity.get('n_features_used', 0),
         'confusion_matrix': sys_cm,
+        'sys_pred': y_sys_pred,
+        'sys_proba': sys_proba,
     }
     
     # Update with method metadata
@@ -710,18 +762,38 @@ def main():
     print("\n" + "="*60)
     print("Loading dataset...")
     print("="*60)
-    X, y_sys, y_mod, feature_names, sample_ids = prepare_dataset(data_dir, use_pool_features=True)
+    audit_info = {
+        'data_dir': str(data_dir),
+        'output_dir': str(output_dir),
+        'seed': args.seed,
+        'single_band': SINGLE_BAND,
+        'disable_preamp': DISABLE_PREAMP,
+    }
+    try:
+        X, y_sys, y_mod, feature_names, sample_ids, leak_columns = prepare_dataset(
+            data_dir,
+            use_pool_features=True,
+            strict_leakage=True,
+        )
+    except LeakageError as exc:
+        audit_info['leakage_detected'] = True
+        audit_info['leakage_columns'] = exc.columns
+        write_eval_audit(output_dir, audit_info)
+        raise SystemExit(1) from exc
+    else:
+        audit_info['leakage_detected'] = False
+        audit_info['leakage_columns'] = leak_columns
     
     n_sys_classes = len(SYS_LABEL_ORDER)
     
     # Audit tracking: count samples at each stage
-    audit_info = {
+    audit_info.update({
         'n_labels_total': len(sample_ids),
         'n_features_rows': len(X),
         'n_joined': len(sample_ids),  # After joining features and labels
         'feature_names': feature_names,
         'n_sys_classes': n_sys_classes,
-    }
+    })
 
     raw_curves_dir = data_dir / "raw_curves"
     raw_curves_count = len(list(raw_curves_dir.glob("*.csv"))) if raw_curves_dir.exists() else 0
@@ -961,19 +1033,7 @@ def main():
     print("Saving audit information...")
     print("="*60)
     
-    eval_audit_path = output_dir / "eval_audit.json"
-    with open(eval_audit_path, 'w', encoding='utf-8') as f:
-        # Clean up non-serializable items
-        audit_serializable = {}
-        for k, v in audit_info.items():
-            if isinstance(v, (list, dict, str, int, float, bool, type(None))):
-                audit_serializable[k] = v
-            elif hasattr(v, 'tolist'):
-                audit_serializable[k] = v.tolist()
-            else:
-                audit_serializable[k] = str(v)
-        json.dump(audit_serializable, f, indent=2, ensure_ascii=False)
-    print(f"Saved evaluation audit to: {eval_audit_path}")
+    write_eval_audit(output_dir, audit_info)
     
     # Verify confusion matrix sum equals test size
     for result in all_results:
@@ -1045,6 +1105,51 @@ def main():
                     'support': int(support),
                 })
         print(f"Saved ours per-class metrics to: {per_class_path}")
+
+        # Save ours error cases for debugging
+        error_path = output_dir / "ours_error_cases.csv"
+        try:
+            from BRB.normal_anchor import compute_anchor_score, NormalAnchorConfig
+        except ImportError:
+            compute_anchor_score = None
+            NormalAnchorConfig = None
+        error_rows = []
+        sys_pred = ours_result.get('sys_pred')
+        sys_proba = ours_result.get('sys_proba')
+        if sys_pred is not None:
+            for idx, pred in enumerate(sys_pred):
+                true_label = y_sys_test[idx]
+                if pred == true_label:
+                    continue
+                sample_id = sample_ids[test_idx[idx]]
+                row = {
+                    "sample_id": sample_id,
+                    "true_label": SYS_LABEL_ORDER[true_label],
+                    "pred_label": SYS_LABEL_ORDER[pred],
+                }
+                if sys_proba is not None:
+                    probs = sys_proba[idx]
+                    pmax = float(np.max(probs))
+                    margin = float(np.sort(probs)[-1] - np.sort(probs)[-2]) if len(probs) > 1 else pmax
+                    row["pmax"] = pmax
+                    row["margin"] = margin
+                feature_dict = dict(zip(feature_names, X_test[idx]))
+                if compute_anchor_score is not None:
+                    anchor_result = compute_anchor_score(feature_dict, NormalAnchorConfig())
+                    row["anchor_score"] = anchor_result.get("anchor_score", 0.0)
+                    row["score_amp"] = anchor_result.get("score_amp", 0.0)
+                    row["score_freq"] = anchor_result.get("score_freq", 0.0)
+                    row["score_ref"] = anchor_result.get("score_ref", 0.0)
+                if "X14" in feature_dict:
+                    row["X14"] = feature_dict.get("X14", 0.0)
+                error_rows.append(row)
+        if error_rows:
+            with open(error_path, 'w', newline='', encoding='utf-8') as f:
+                fieldnames = sorted({k for row in error_rows for k in row.keys()})
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(error_rows)
+            print(f"Saved ours error cases to: {error_path}")
     
     # Save dataset class distribution
     dist_path = output_dir / "dataset_class_distribution.csv"
