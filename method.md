@@ -36,45 +36,43 @@
 
 ### 4.1 Ours（层次 BRB + 规则压缩 + 正常锚点）
 
-**核心思想**
-- 系统层：以 BRB 规则为核心，先做“正常锚点”判别，再进行幅度/频率/参考电平的软门控融合。系统层支持子 BRB 模式（sub_brb）进行多分支推理并输出概率。\n【F:BRB/normal_anchor.py†L1-L239】【F:BRB/aggregator.py†L737-L892】
-- 模块层：使用系统层结果作为先验，只激活与异常类型相关的模块组，从而减少规则数量并保持物理可解释性。\n【F:BRB/module_brb.py†L21-L241】
+**核心思想**\n- 系统层：以 BRB 规则为核心，先做“正常锚点”判别，再进行幅度/频率/参考电平的软门控融合。系统层支持子 BRB 模式（sub_brb）进行多分支推理并输出概率。\n【F:BRB/normal_anchor.py†L1-L239】【F:BRB/aggregator.py†L737-L892】\n- 模块层：使用系统层结果作为先验，只激活与异常类型相关的模块组，从而减少规则数量并保持物理可解释性。\n【F:BRB/module_brb.py†L21-L241】
 
-**特征与推理流程**
-1. 输入特征为系统级 X1–X22（主路径）、以及模块层特征流（用作模块推理）。\n【F:methods/ours_adapter.py†L27-L114】【F:features/feature_extraction.py†L292-L934】
-2. 系统层通过 `system_level_infer` 输出系统级概率。\n【F:methods/ours_adapter.py†L159-L188】
-3. 模块层调用 `module_level_infer_with_activation`，只激活相关模块组，输出模块概率。\n【F:methods/ours_adapter.py†L190-L219】【F:BRB/module_brb.py†L241-L360】
+**特征与推理流程**\n1. 输入特征为系统级 X1–X22（主路径），以及模块层特征流（用作模块推理）。\n【F:methods/ours_adapter.py†L27-L114】【F:features/feature_extraction.py†L292-L934】\n2. 系统层通过 `system_level_infer` 输出系统级概率（正常/幅度/频率/参考电平）。\n【F:methods/ours_adapter.py†L159-L188】\n3. 模块层调用 `module_level_infer_with_activation`，仅激活相关模块组，输出模块概率并归一化。\n【F:methods/ours_adapter.py†L190-L219】【F:BRB/module_brb.py†L241-L360】
 
-**补偿与校准**
-- 通过 `pipelines/calibrate_ours.py` 的网格搜索，得到 `best_params.json`/`calibration.json`，并由 `OursAdapter` 加载以覆盖 `SystemBRBConfig` 的 `alpha`、阈值与权重等参数。\n【F:pipelines/calibrate_ours.py†L682-L780】【F:methods/ours_adapter.py†L12-L92】
+**补偿与校准**\n- 通过 `pipelines/calibrate_ours.py` 的网格搜索，得到 `best_params.json`/`calibration.json`，并由 `OursAdapter` 加载以覆盖 `SystemBRBConfig` 的 `alpha`、阈值与权重等参数。\n【F:pipelines/calibrate_ours.py†L682-L780】【F:methods/ours_adapter.py†L12-L92】
 
-**主要参数/规则来源**
-- 系统层规则与软门控逻辑在 `BRB/aggregator.py` 与 `BRB/normal_anchor.py`，关键阈值如 `T_low/T_high`、`pmax_threshold`、`margin_threshold` 等均在该层实现并可通过校准覆盖。\n【F:BRB/aggregator.py†L777-L892】【F:BRB/normal_anchor.py†L39-L287】
-- 模块层规则与模块组定义在 `BRB/module_brb.py` 中，依据异常类型进行规则压缩。\n【F:BRB/module_brb.py†L21-L360】
+**主要参数/规则来源**\n- 系统层规则与软门控逻辑在 `BRB/aggregator.py` 与 `BRB/normal_anchor.py`，关键阈值如 `T_low/T_high`、`pmax_threshold`、`margin_threshold` 等均在该层实现并可通过校准覆盖。\n【F:BRB/aggregator.py†L777-L892】【F:BRB/normal_anchor.py†L39-L287】\n- 模块层规则与模块组定义在 `BRB/module_brb.py` 中，依据异常类型进行规则压缩。\n【F:BRB/module_brb.py†L21-L360】
 
 ### 4.2 BRB-MU（多源不确定性融合）
-- 将特征按语义分组为多个来源（幅度/频率/噪声/切换等），每个来源训练一个简单统计模型；通过估计 SNR/SVD 不确定度得到融合权重，再加权融合各来源预测。\n【F:methods/brb_mu_adapter.py†L9-L157】【F:methods/brb_mu_adapter.py†L160-L222】
 
-### 4.3 DBRB（深层 BRB 级联）
-- 使用多层特征分层（layer1/2/3）建立级联模型：先估计浅层输出，再把浅层输出拼接到后续层，逐层预测系统概率。\n【F:methods/dbrb_adapter.py†L29-L141】
+**核心思想**\n- 把特征按“幅度/频率/噪声/切换”等语义分组，针对每个来源训练一个简化统计模型；估计 SNR/SVD 不确定度并转为来源权重，实现多源融合。\n【F:methods/brb_mu_adapter.py†L9-L178】
 
-### 4.4 HCF（分层认知框架）
-- Level-a：Fisher 评分选择主/次特征；
-- Level-b：对各特征组进行 GMM 聚类并编码为 one-hot；
-- Level-c：拼接编码后用逻辑回归进行最终判别。\n【F:methods/hcf_adapter.py†L11-L176】
+**实现流程**\n1. 依据特征名的语义（amp/freq/noise/switch）分配到来源组。\n【F:methods/brb_mu_adapter.py†L98-L155】\n2. 每个来源拟合“类条件均值/方差”的高斯模型，得到来源内预测。\n【F:methods/brb_mu_adapter.py†L169-L222】\n3. 估计来源不确定度，权重归一化后融合来源概率。\n【F:methods/brb_mu_adapter.py†L56-L116】【F:methods/brb_mu_adapter.py†L124-L148】
+
+### 4.3 DBRB（深层 BRB 级联 / 分级注入）
+
+**核心思想**\n- 先用 XGBoost/GradientBoosting 对特征重要性排序，再按重要性划分三层特征池；每层输出的概率向量作为“隐变量”注入下一层，形成分级注入式 BRB。\\n【F:methods/dbrb_adapter.py†L10-L141】
+
+**实现流程（按源码逻辑）**\n1. **特征池与重要性排序**：使用 XGBoost（或回退到 GradientBoosting）训练初始分类器，读取 `feature_importances_` 排序；无依赖时回退到方差排序。\\n【F:methods/dbrb_adapter.py†L29-L63】\n2. **分层切分**：排序后划分 Layer1（最重要特征）、Layer2（次重要特征）、Layer3（剩余特征）。\\n【F:methods/dbrb_adapter.py†L66-L77】\n3. **分级注入**：\n   - Layer1：只使用 `layer1_features` 训练并输出 `z1`。\\n【F:methods/dbrb_adapter.py†L80-L83】\n   - Layer2：拼接 `layer2_features + z1` 训练并输出 `z2`。\\n【F:methods/dbrb_adapter.py†L85-L92】\n   - Layer3：拼接 `layer3_features + z2`，输出最终系统概率。\\n【F:methods/dbrb_adapter.py†L94-L141】\n4. **层内推理**：每层用“类条件均值/方差”的高斯似然推理，输出概率。\\n【F:methods/dbrb_adapter.py†L150-L191】\n\n> 注：该实现遵循“XGBoost重要性排序 + 分级注入”的思想，但层内推理为简化高斯模型，并非传统 BRB 规则库。\n\n### 4.4 HCF（分层认知框架）
+
+**核心思想**\n- Level-a：Fisher 评分挑选主/次特征；\n- Level-b：按特征来源分组做 GMM 聚类并编码；\n- Level-c：拼接编码后用逻辑回归输出系统结果。\\n【F:methods/hcf_adapter.py†L11-L176】
 
 ### 4.5 AIFD（自适应可解释 BRB）
-- 选取有限特征子集后进行归一化，初始化规则与属性权重；
-- 使用有限差分估计梯度并迭代更新规则权重，保持非负与归一化约束。\n【F:methods/aifd_adapter.py†L11-L126】【F:methods/aifd_adapter.py†L128-L204】
+
+**核心思想与流程**\n- 先选择少量特征并标准化；初始化属性权重与规则权重；使用有限差分估计损失梯度并迭代更新规则权重；每次更新强制非负并归一化，保持可解释性。\\n【F:methods/aifd_adapter.py†L11-L126】【F:methods/aifd_adapter.py†L128-L204】
 
 ### 4.6 BRB-P（规则分区 BRB）
-- 基于特征分区构造规则，并以 BRB 推理得到系统概率；规则权重在训练中学习。\n【F:methods/brb_p_adapter.py†L32-L96】
+
+**核心思想与流程**\n- 通过特征分区构造规则（区间/分段），以规则激活度进行推理输出系统概率；规则权重在训练中学习并用于推理。\\n【F:methods/brb_p_adapter.py†L32-L96】
 
 ### 4.7 A-IBRB（区间规则 BRB）
-- 为每个特征构造区间规则并生成区间推理，使用简化的区间规则学习与推断。\n【F:methods/a_ibrb_adapter.py†L33-L117】
+
+**核心思想与流程**\n- 对每个特征构建区间规则并进行区间匹配；规则的置信度由区间内样本统计估计，再进行简化推断。\\n【F:methods/a_ibrb_adapter.py†L33-L117】
 
 ### 4.8 Fast-BRB（快速规则合并）
-- 通过量化特征生成规则、合并相似规则并削减冗余规则，以减少规则数量与推理开销。\n【F:methods/fast_brb_adapter.py†L27-L179】
+
+**核心思想与流程**\n- 量化特征生成规则，合并相似规则并削减冗余规则，用少量规则近似全量规则推理以提升效率。\\n【F:methods/fast_brb_adapter.py†L27-L179】
 
 ## 5. 规则推导与参数说明（通用）
 
