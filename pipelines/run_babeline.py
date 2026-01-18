@@ -25,6 +25,7 @@ from baseline.config import (
     BASELINE_ARTIFACTS, BASELINE_META,
     NORMAL_FEATURE_STATS, SWITCH_CSV, SWITCH_JSON, PLOT_PATH,
     BASELINE_OFFSETS, BASELINE_RESIDUAL_STATS,
+    NORMAL_STATS_JSON, NORMAL_STATS_NPZ,
     OUTPUT_DIR, SINGLE_BAND_MODE, COVERAGE_MEAN_MIN, COVERAGE_MIN_MIN,
 )
 from baseline.viz import plot_rrs_envelope_switch
@@ -32,11 +33,31 @@ from features.extract import extract_system_features
 from pipelines.default_paths import PROJECT_ROOT, OUTPUT_DIR as DEFAULT_OUTPUT_DIR, SINGLE_BAND, DISABLE_PREAMP, SEED, build_run_snapshot
 
 
-
 def _resolve(repo_root: Path, p: Union[str, Path]) -> Path:
     """将相对路径锚定到仓库根目录"""
     p = Path(p)
     return p if p.is_absolute() else repo_root / p
+
+
+def _smooth_series(values: np.ndarray, window: int = 9) -> np.ndarray:
+    if window <= 1:
+        return values
+    if window % 2 == 0:
+        window += 1
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(values, kernel, mode="same")
+
+
+def _summarize(values: np.ndarray) -> dict:
+    if values.size == 0:
+        return {"mean": 0.0, "std": 0.0, "p05": 0.0, "p50": 0.0, "p95": 0.0}
+    return {
+        "mean": float(np.mean(values)),
+        "std": float(np.std(values)),
+        "p05": float(np.percentile(values, 5)),
+        "p50": float(np.percentile(values, 50)),
+        "p95": float(np.percentile(values, 95)),
+    }
 
 
 def main():
@@ -62,6 +83,8 @@ def main():
     plot_path = _resolve(repo_root, PLOT_PATH)
     offsets_csv = _resolve(repo_root, BASELINE_OFFSETS)
     residual_stats_path = _resolve(repo_root, BASELINE_RESIDUAL_STATS)
+    normal_stats_json_path = _resolve(repo_root, NORMAL_STATS_JSON)
+    normal_stats_npz_path = _resolve(repo_root, NORMAL_STATS_NPZ)
 
     # 1) 加载并对齐正常数据（仓库根下 normal_response_data）
     folder_path = repo_root / "normal_response_data"
@@ -318,6 +341,62 @@ def main():
         writer.writerow(["stat"] + keys)
         for stat_name, row_values in stats_rows.items():
             writer.writerow([stat_name] + row_values)
+
+    # 8) 正常统计摘要（用于仿真约束）
+    # 仅平滑 sigma（噪声幅度），不平滑 rrs
+    residuals = aligned_traces - rrs
+    mad = np.median(np.abs(residuals - np.median(residuals, axis=0)), axis=0)
+    sigma_i = 1.4826 * mad
+    sigma_smooth = _smooth_series(sigma_i, window=9)
+
+    # 整体 offset 统计（来自真实正常曲线）
+    offset_stats = _summarize(offsets)
+
+    # 低频到高频的慢变 tilt：对残差做一阶/二阶拟合
+    x = (frequency - frequency[0]) / (frequency[-1] - frequency[0] + 1e-12)
+    linear_slopes = []
+    quad_coeffs = []
+    for res in residuals:
+        coeffs = np.polyfit(x, res, deg=2)
+        quad_coeffs.append(coeffs[0])
+        linear_slopes.append(coeffs[1])
+    linear_slopes = np.array(linear_slopes, dtype=float)
+    quad_coeffs = np.array(quad_coeffs, dtype=float)
+
+    # 关键特征分布摘要（用于仿真约束）
+    key_features = [
+        "gain", "bias", "comp", "df", "viol_rate",
+        "step_score", "res_slope", "ripple_var",
+        "X11", "X12", "X13", "X16", "X17", "X18",
+    ]
+    feature_summary = {}
+    for key in key_features:
+        values_key = np.array([feat.get(key, 0.0) for feat in feats_list], dtype=float)
+        feature_summary[key] = _summarize(values_key)
+
+    normal_stats = {
+        "version": "v1",
+        "freq_start_hz": float(frequency[0]),
+        "freq_end_hz": float(frequency[-1]),
+        "sigma_window": 9,
+        "offset_stats": offset_stats,
+        "tilt_stats": {
+            "linear_slope": _summarize(linear_slopes),
+            "quadratic_coef": _summarize(quad_coeffs),
+        },
+        "feature_stats": feature_summary,
+        "arrays_path": str(normal_stats_npz_path.relative_to(repo_root)),
+    }
+    with open(normal_stats_json_path, "w", encoding="utf-8") as f:
+        json.dump(normal_stats, f, ensure_ascii=False, indent=2)
+    np.savez(
+        normal_stats_npz_path,
+        frequency=frequency,
+        rrs=rrs,
+        sigma_i=sigma_i,
+        sigma_smooth=sigma_smooth,
+    )
+    print(f"Normal stats saved: {normal_stats_json_path}")
 
     print("\n" + "="*60)
     print("基线包络与RRS已保存:", baseline_artifacts, baseline_meta)

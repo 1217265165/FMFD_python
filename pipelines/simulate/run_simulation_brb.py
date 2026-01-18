@@ -46,6 +46,8 @@ from baseline.config import (
     BASELINE_ARTIFACTS,
     BASELINE_META,
     BAND_RANGES,
+    NORMAL_STATS_JSON,
+    NORMAL_STATS_NPZ,
     OUTPUT_DIR,
     SWITCH_JSON,
 )
@@ -210,6 +212,9 @@ def _filter_kind_probs(kind_probs: Dict[str, float]) -> Dict[str, float]:
     filtered = {}
     for kind, prob in kind_probs.items():
         module = KIND_TO_MODULE.get(kind)
+        if kind in ("rl", "att") and module in DISABLED_MODULES and _has_enabled_ref_module():
+            filtered[kind] = prob
+            continue
         if module and module in DISABLED_MODULES:
             continue
         filtered[kind] = prob
@@ -222,6 +227,101 @@ def _choose_ref_module(rng: np.random.Generator) -> str:
     if not enabled:
         return "校准源"
     return rng.choice(enabled)
+
+
+def _has_enabled_ref_module() -> bool:
+    ref_modules = ["衰减器", "校准源", "存储器", "校准信号开关"]
+    return any(module not in DISABLED_MODULES for module in ref_modules)
+
+
+def _smooth_noise(values: np.ndarray, window: int = 9) -> np.ndarray:
+    if window <= 1:
+        return values
+    if window % 2 == 0:
+        window += 1
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(values, kernel, mode="same")
+
+
+def _load_normal_stats(repo_root: Path) -> dict:
+    stats_path = repo_root / NORMAL_STATS_JSON
+    arrays_path = repo_root / NORMAL_STATS_NPZ
+    if not stats_path.exists() or not arrays_path.exists():
+        return {}
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    arrays = np.load(arrays_path)
+    stats["frequency"] = arrays["frequency"]
+    stats["rrs"] = arrays["rrs"]
+    stats["sigma_smooth"] = arrays["sigma_smooth"]
+    return stats
+
+
+def _generate_normal_curve(
+    frequency: np.ndarray,
+    rrs: np.ndarray,
+    normal_stats: dict,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    # 核心原则：normal 样本必须像真实正常数据（噪声/漂移分布接近真实统计）
+    if not normal_stats:
+        noise = rng.normal(0, 0.05, size=len(rrs))
+        return rrs + noise
+
+    sigma = normal_stats.get("sigma_smooth")
+    if sigma is None or len(sigma) != len(rrs):
+        sigma = np.full_like(rrs, 0.05, dtype=float)
+
+    offset_stats = normal_stats.get("offset_stats", {})
+    tilt_stats = normal_stats.get("tilt_stats", {})
+    slope_stats = tilt_stats.get("linear_slope", {})
+    quad_stats = tilt_stats.get("quadratic_coef", {})
+
+    offset = rng.normal(offset_stats.get("mean", 0.0), max(offset_stats.get("std", 0.02), 1e-6))
+    slope = rng.normal(slope_stats.get("mean", 0.0), max(slope_stats.get("std", 0.02), 1e-6))
+    quad = rng.normal(quad_stats.get("mean", 0.0), max(quad_stats.get("std", 0.02), 1e-6))
+
+    x = (frequency - frequency[0]) / (frequency[-1] - frequency[0] + 1e-12)
+    drift_curve = offset + slope * (x - 0.5) + quad * (x - 0.5) ** 2
+
+    noise = rng.normal(0.0, sigma, size=len(rrs))
+    noise = _smooth_noise(noise, window=9)
+    curve = rrs + drift_curve + noise
+
+    # 约束 normal 样本：绝大多数频点落在 rrs ± 0.4 dB
+    for _ in range(3):
+        coverage = np.mean(np.abs(curve - rrs) <= 0.4)
+        if coverage >= 0.99:
+            break
+        drift_curve *= 0.7
+        noise *= 0.7
+        curve = rrs + drift_curve + noise
+
+    return curve
+
+
+def _apply_fault_constraints(
+    curve: np.ndarray,
+    rrs: np.ndarray,
+    fault_kind: str,
+    severity: str | None = None,
+) -> np.ndarray:
+    # 核心原则：非整体类故障应局部偏离，整体类故障受限于合理幅度范围
+    delta = curve - rrs
+    abs_delta = np.abs(delta)
+
+    if fault_kind in ("amp", "rl", "att"):
+        limit = 0.4 if severity == "severe" else 0.3
+        med = float(np.median(delta))
+        if abs(med) > limit:
+            curve = curve - (abs(med) - limit) * np.sign(med)
+        return curve
+
+    # 频率/模块故障：约束 80% 频点落在 ±0.4 dB 内
+    p80 = np.percentile(abs_delta, 80)
+    if p80 > 0.4 and p80 > 0:
+        scale = 0.4 / p80
+        curve = rrs + delta * scale
+    return curve
 
 
 def _pick_base_trace(rrs: np.ndarray, traces: np.ndarray | None, rng: np.random.Generator) -> np.ndarray:
@@ -237,9 +337,10 @@ def simulate_curve(
     rrs: np.ndarray,
     band_ranges: List[Tuple[float, float]],
     traces: np.ndarray | None,
+    normal_stats: dict,
     rng: np.random.Generator,
     target_class: str | None = None,
-) -> Tuple[np.ndarray, str, str]:
+) -> Tuple[np.ndarray, str, str, dict]:
     """Generate simulated curve with optional target fault class.
     
     Args:
@@ -315,10 +416,11 @@ def simulate_curve(
     label_mod = "none"
     fault_params = {}  # Track injection parameters
 
+    severity = rng.choice(["light", "mid", "severe"], p=[0.55, 0.35, 0.10])
     if fault_kind == "amp":
-        curve = inject_amplitude_miscal(curve, rng=rng)
+        curve = inject_amplitude_miscal(curve, rng=rng, severity=severity)
         label_sys, label_mod = "幅度失准", "校准源"
-        fault_params['type'] = 'amp_miscal'
+        fault_params.update({"type": "amp_miscal", "severity": severity})
     elif fault_kind == "freq":
         curve, freq_params = inject_freq_miscal(frequency, curve, rng=rng, return_params=True)
         label_sys, label_mod = "频率失准", "时钟振荡器"
@@ -327,10 +429,10 @@ def simulate_curve(
     elif fault_kind in ("rl", "att"):
         # Use single_band_mode=True for reflevel injection (no step injection)
         curve, ref_params = inject_reflevel_miscal(frequency, curve, band_ranges, rng=rng, 
-                                                    single_band_mode=True, return_params=True)
+                                                    single_band_mode=True, return_params=True, severity=severity)
         label_sys, label_mod = "参考电平失准", _choose_ref_module(rng)
         fault_params.update(ref_params)
-        fault_params['type'] = 'ref_miscal'
+        fault_params.update({"type": "ref_miscal", "severity": severity})
     # NOTE: preamp case is REMOVED - it's disabled in single-band mode
     elif fault_kind == "lpf":
         curve = inject_lpf_shift(frequency, curve, rng=rng)
@@ -369,6 +471,12 @@ def simulate_curve(
     else:
         fault_params['type'] = 'normal'
 
+    # 核心原则：normal 像正常、故障像真实故障，且不“离谱”
+    if fault_kind == "normal":
+        curve = _generate_normal_curve(frequency, rrs, normal_stats, rng)
+    else:
+        curve = _apply_fault_constraints(curve, rrs, fault_kind, severity=severity)
+
     return curve, label_sys, label_mod, fault_params
 
 
@@ -390,6 +498,7 @@ def run_simulation(args: argparse.Namespace):
         Path(args.baseline_meta),
         Path(args.switch_json),
     )
+    normal_stats = _load_normal_stats(repo_root)
     traces = None
     npz_data = np.load(_resolve(repo_root, Path(args.baseline_npz)), allow_pickle=True)
     if "traces" in npz_data:
@@ -429,7 +538,9 @@ def run_simulation(args: argparse.Namespace):
         for target_class in ['amp_error', 'freq_error', 'ref_error', 'normal']:
             for _ in range(class_counts[target_class]):
                 sample_id = f"sim_{idx:05d}"
-                curve, label_sys, label_mod, fault_params = simulate_curve(freq, rrs, band_ranges, traces, rng, target_class=target_class)
+                curve, label_sys, label_mod, fault_params = simulate_curve(
+                    freq, rrs, band_ranges, traces, normal_stats, rng, target_class=target_class
+                )
                 curves.append(curve)
                 sys_labels.append(label_sys)
                 mod_labels.append(label_mod)
@@ -484,7 +595,9 @@ def run_simulation(args: argparse.Namespace):
         
         for idx in range(args.n_samples):
             sample_id = f"sim_{idx:05d}"
-            curve, label_sys, label_mod, fault_params = simulate_curve(freq, rrs, band_ranges, traces, rng)
+            curve, label_sys, label_mod, fault_params = simulate_curve(
+                freq, rrs, band_ranges, traces, normal_stats, rng
+            )
             curves.append(curve)
             sys_labels.append(label_sys)
             mod_labels.append(label_mod)
