@@ -72,9 +72,9 @@ def _get_feature_value(features: Dict[str, float], key: str, default: float = 0.
         'X4': ['freq_scale_nonlinearity', 'df', 'frequency_nonlinearity'],
         'X8': ['lo_leakage', 'local_oscillator_leakage'],
         'X9': ['tuning_linearity_residual'],
-        'X14': ['band_residual_low', 'low_band_residual'],
+        'X14': ['band_residual_low', 'low_band_residual', 'band_offset_db_1'],
         'X15': ['band_residual_high_std', 'high_band_residual_std'],
-        'X16': ['corr_shift_bins', 'frequency_shift'],
+        'X16': ['corr_shift_bins', 'frequency_shift', 'freq_shift_score'],
         'X17': ['warp_scale', 'frequency_scale'],
         'X18': ['warp_bias', 'frequency_bias'],
     }

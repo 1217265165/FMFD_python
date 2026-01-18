@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 采集数据特征增强脚本（症状提取 / 聚类 / 模块元信息）
 --------------------------------------------------
@@ -26,12 +27,13 @@ from pathlib import Path
 from typing import Dict, Optional, Sequence, Union
 
 import numpy as np
-import pandas as pd
 from scipy.stats import skew, kurtosis
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
+
+from baseline.config import FREQ_START_HZ, FREQ_STEP_HZ
 
 warnings.simplefilter("ignore")
 
@@ -44,9 +46,9 @@ ISO_CONTAMINATION = 0.05
 
 # ---------- BRB 映射（症状 -> belief_vector），需与 brb_rules.yaml 的 modules_order 对齐 ----------
 RULES_SIMPLE = {
-    "幅度测量准确度": [0.12, 0.12, 0.06, 0.06, 0.06, 0.06, 0.00, 0.00, 0.03, 0.04, 0.05, 0.02, 0.03, 0.10, 0.10, 0.03, 0.06, 0.04, 0.02, 0.00, 0.00],
-    "频率读数准确度": [0.00, 0.00, 0.00, 0.05, 0.02, 0.05, 0.25, 0.25, 0.20, 0.08, 0.00, 0.00, 0.00, 0.00, 0.02, 0.02, 0.00, 0.00, 0.00, 0.00, 0.06],
-    "参考电平准确度": [0.20, 0.12, 0.03, 0.03, 0.02, 0.02, 0.00, 0.00, 0.00, 0.00, 0.08, 0.05, 0.08, 0.10, 0.10, 0.03, 0.05, 0.05, 0.02, 0.02, 0.00],
+    "幅度测量准确度": [0.12, 0.12, 0.06, 0.06, 0.06, 0.06, 0.00, 0.00, 0.03, 0.04, 0.05, 0.02, 0.03, 0.10, 0.10, 0.03, 0.06, 0.04, 0.02, 0.00],
+    "频率读数准确度": [0.00, 0.00, 0.00, 0.05, 0.02, 0.05, 0.25, 0.25, 0.20, 0.08, 0.00, 0.00, 0.00, 0.00, 0.02, 0.02, 0.00, 0.00, 0.00, 0.00],
+    "参考电平准确度": [0.20, 0.12, 0.03, 0.03, 0.02, 0.02, 0.00, 0.00, 0.00, 0.00, 0.08, 0.05, 0.08, 0.10, 0.10, 0.03, 0.05, 0.05, 0.02, 0.02],
 }
 MODULES_ORDER = [
     "衰减器", "前置放大器", "低频段前置低通滤波器", "低频段第一混频器",
@@ -54,7 +56,7 @@ MODULES_ORDER = [
     "时钟振荡器", "时钟合成与同步网络", "本振源（谐波发生器）", "本振混频组件",
     "校准源", "存储器", "校准信号开关",
     "中频放大器", "ADC", "数字RBW", "数字放大器", "数字检波器", "VBW滤波器",
-    "电源模块", "未定义/其他",
+    "电源模块",
 ]
 
 
@@ -170,6 +172,118 @@ def parse_trace_cell(cell):
     return None
 
 
+def _default_frequency_axis(n_points: int) -> np.ndarray:
+    stop_hz = FREQ_START_HZ + (n_points - 1) * FREQ_STEP_HZ
+    return np.linspace(FREQ_START_HZ, stop_hz, n_points)
+
+
+def _vendor_band_masks(frequency: np.ndarray) -> list:
+    bands = [
+        (10e6, 100e6),
+        (100e6, 3.25e9),
+        (3.25e9, 5.25e9),
+        (5.25e9, 8.2e9),
+    ]
+    masks = []
+    for idx, (start, end) in enumerate(bands):
+        if idx == 0:
+            masks.append((frequency >= start) & (frequency <= end))
+        else:
+            masks.append((frequency > start) & (frequency <= end))
+    return masks
+
+
+def compute_residual_robust_features(response_curve: np.ndarray, baseline_curve: np.ndarray) -> Dict[str, float]:
+    """Compute envelope-insensitive robust residual features."""
+    res = response_curve - baseline_curve
+    if res.size == 0:
+        return {
+            "global_offset_db": 0.0,
+            "shape_rmse": 0.0,
+            "ripple_hp": 0.0,
+            "tail_asym": 0.0,
+            "compress_ratio": 0.0,
+            "compress_ratio_high": 0.0,
+            "freq_shift_score": 0.0,
+            "offset_slope": 0.0,
+            "high_low_energy_ratio": 0.0,
+            "band_offset_db_1": 0.0,
+            "band_offset_db_2": 0.0,
+            "band_offset_db_3": 0.0,
+            "band_offset_db_4": 0.0,
+        }
+
+    median_res = np.median(res)
+    mad = np.median(np.abs(res - median_res)) + 1e-9
+    global_offset_db = float(median_res)
+    shape_rmse = float(np.sqrt(np.mean((res - median_res) ** 2)))
+    ripple_hp = float(np.std(np.diff(res))) if res.size > 1 else 0.0
+    p95 = float(np.percentile(res, 95))
+    p50 = float(np.percentile(res, 50))
+    p5 = float(np.percentile(res, 5))
+    tail_asym = (p95 - p50) - (p50 - p5)
+    p80 = float(np.percentile(res, 80))
+    compress_ratio = float(np.mean(res > p80))
+
+    r1 = (baseline_curve - np.mean(baseline_curve)) / (np.std(baseline_curve) + 1e-9)
+    r2 = (response_curve - np.mean(response_curve)) / (np.std(response_curve) + 1e-9)
+    corr = np.correlate(r2, r1, mode="full")
+    lags = np.arange(-len(r1) + 1, len(r1))
+    best_idx = int(np.argmax(corr))
+    best_lag = lags[best_idx]
+    corr_coeff = float(corr[best_idx] / (len(r1) + 1e-9))
+    lag_norm = abs(best_lag) / max(1, len(r1))
+    freq_shift_score = float(np.sqrt(lag_norm ** 2 + (1.0 - corr_coeff) ** 2))
+
+    frequency = _default_frequency_axis(len(res))
+    band_offsets = []
+    band_masks = _vendor_band_masks(frequency)
+    for mask in band_masks:
+        if np.any(mask):
+            band_offsets.append(float(np.median(res[mask])))
+        else:
+            band_offsets.append(0.0)
+
+    low_band_mask = band_masks[0] if band_masks else np.zeros_like(res, dtype=bool)
+    high_band_mask = band_masks[-1] if band_masks else np.zeros_like(res, dtype=bool)
+    if np.any(low_band_mask):
+        low_energy = float(np.mean(res[low_band_mask] ** 2))
+    else:
+        low_energy = 0.0
+    if np.any(high_band_mask):
+        high_res = res[high_band_mask]
+        high_p80 = float(np.percentile(high_res, 80))
+        compress_ratio_high = float(np.mean(high_res > high_p80))
+        high_energy = float(np.mean(high_res ** 2))
+    else:
+        compress_ratio_high = 0.0
+        high_energy = 0.0
+
+    high_low_energy_ratio = float(high_energy / (low_energy + 1e-9))
+
+    if res.size > 1:
+        coef = np.polyfit(frequency, res, 1)[0]
+        offset_slope = float(coef * 1e9)
+    else:
+        offset_slope = 0.0
+
+    return {
+        "global_offset_db": global_offset_db,
+        "shape_rmse": shape_rmse,
+        "ripple_hp": ripple_hp,
+        "tail_asym": float(tail_asym),
+        "compress_ratio": compress_ratio,
+        "compress_ratio_high": compress_ratio_high,
+        "freq_shift_score": freq_shift_score,
+        "offset_slope": offset_slope,
+        "high_low_energy_ratio": high_low_energy_ratio,
+        "band_offset_db_1": band_offsets[0],
+        "band_offset_db_2": band_offsets[1],
+        "band_offset_db_3": band_offsets[2],
+        "band_offset_db_4": band_offsets[3],
+    }
+
+
 # ---------------------------------------------------------------------------
 # 面向 BRB 推理的核心特征提取接口（对应小论文式 (1)-(2)）
 # ---------------------------------------------------------------------------
@@ -250,11 +364,15 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             band_means.append(np.mean(arr[start:end]))
     x10 = float(np.std(band_means)) if len(band_means) > 1 else 0.0
 
-    # X11-X15: 基于包络/残差的通用特征
+    # X11-X15: 基于包络/残差的通用特征（使用 offset 对齐后的残差）
+    offset_db = 0.0
+    arr_aligned = arr
     if baseline_curve is not None:
         baseline = np.asarray(baseline_curve, dtype=float)
         if baseline.shape == arr.shape:
-            envelope_residual = arr - baseline
+            offset_db = float(np.median(arr - baseline))
+            arr_aligned = arr - offset_db
+            envelope_residual = arr_aligned - baseline
         else:
             envelope_residual = residual
     else:
@@ -265,8 +383,8 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
         if upper.shape == arr.shape and lower.shape == arr.shape:
-            above = arr > upper
-            below = arr < lower
+            above = arr_aligned > upper
+            below = arr_aligned < lower
             x11 = float(np.mean(above | below))
         else:
             x11 = float(np.mean(np.abs(envelope_residual) > 3 * np.std(envelope_residual)))
@@ -277,8 +395,8 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
         if upper.shape == arr.shape and lower.shape == arr.shape:
-            above = np.maximum(arr - upper, 0)
-            below = np.maximum(lower - arr, 0)
+            above = np.maximum(arr_aligned - upper, 0)
+            below = np.maximum(lower - arr_aligned, 0)
             x12 = float(np.max(above + below))
         else:
             x12 = float(np.max(np.abs(envelope_residual)))
@@ -313,7 +431,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             # X16: Enhanced cross-correlation lag (in actual bins, not normalized)
             try:
                 # Full cross-correlation for better peak detection
-                arr_centered = arr - np.mean(arr)
+                arr_centered = arr_aligned - np.mean(arr_aligned)
                 baseline_centered = baseline - np.mean(baseline)
                 corr = np.correlate(arr_centered, baseline_centered, mode='full')
                 lag_idx = np.argmax(corr) - (len(arr) - 1)  # Actual lag in bins
@@ -331,7 +449,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                         x_new = x_axis * scale + shift
                         x_new = np.clip(x_new, 0, 1)
                         baseline_interp = np.interp(x_new, x_axis, baseline)
-                        error = np.sum((arr - baseline_interp) ** 2)
+                        error = np.sum((arr_aligned - baseline_interp) ** 2)
                         if error < min_error:
                             min_error = error
                             best_scale, best_shift = scale, shift
@@ -346,14 +464,14 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                 x_optimal = x_axis * best_scale + best_shift
                 x_optimal = np.clip(x_optimal, 0, 1)
                 baseline_aligned = np.interp(x_optimal, x_axis, baseline)
-                warp_residual = arr - baseline_aligned
+                warp_residual = arr_aligned - baseline_aligned
                 x23 = float(np.sum(warp_residual ** 2) / len(arr))  # MSE
             except Exception:
                 x23 = 0.0
             
             # X24: Phase/derivative slope difference
             try:
-                arr_diff = np.diff(arr)
+                arr_diff = np.diff(arr_aligned)
                 baseline_diff = np.diff(baseline)
                 if len(arr_diff) > 1:
                     # Correlation between derivatives
@@ -371,11 +489,11 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                     abs_lag = abs(optimal_lag)
                     if optimal_lag > 0:
                         # Signal shifted right relative to baseline
-                        arr_shifted = arr[abs_lag:]
+                        arr_shifted = arr_aligned[abs_lag:]
                         baseline_shifted = baseline[:-abs_lag]
                     else:
                         # Signal shifted left relative to baseline
-                        arr_shifted = arr[:-abs_lag]
+                        arr_shifted = arr_aligned[:-abs_lag]
                         baseline_shifted = baseline[abs_lag:]
                     
                     # Ensure same length before MSE calculation
@@ -385,7 +503,7 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
                     else:
                         x25 = 0.0
                 else:
-                    x25 = float(np.mean((arr - baseline) ** 2))
+                    x25 = float(np.mean((arr_aligned - baseline) ** 2))
             except Exception:
                 x25 = 0.0
 
@@ -624,6 +742,10 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
             except Exception:
                 x29, x30, x31, x32, x33, x34 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
+    robust_feats = {}
+    if baseline_curve is not None and len(baseline_curve) == len(arr):
+        robust_feats = compute_residual_robust_features(arr_aligned, np.asarray(baseline_curve, dtype=float))
+
     return {
         "X1": x1, "X2": x2, "X3": x3, "X4": x4, "X5": x5,
         "X6": x6, "X7": x7, "X8": x8, "X9": x9, "X10": x10,
@@ -634,6 +756,10 @@ def extract_system_features(response_curve, baseline_curve=None, envelope=None) 
         "X26": x26, "X27": x27, "X28": x28,  # New ref features
         "X29": x29, "X30": x30, "X31": x31,  # v8: Amp vs Ref features
         "X32": x32, "X33": x33, "X34": x34,  # v9: Enhanced spectrum analysis features
+        "offset_db": offset_db,
+        "viol_rate_aligned": x11,
+        "viol_energy_aligned": x13,
+        **robust_feats,
     }
 
 
@@ -685,11 +811,18 @@ def compute_dynamic_threshold_features(
     overrun_rate = 0.0
     overrun_max = 0.0
     overrun_mean = 0.0
+    offset_db = 0.0
+    arr_aligned = arr
+    if rrs is not None:
+        rrs_arr = np.asarray(rrs, dtype=float)
+        if rrs_arr.shape == arr.shape:
+            offset_db = float(np.median(arr - rrs_arr))
+            arr_aligned = arr - offset_db
     if envelope is not None and len(envelope) == 2:
         upper, lower = np.asarray(envelope[0], dtype=float), np.asarray(envelope[1], dtype=float)
-        if upper.shape == arr.shape and lower.shape == arr.shape:
-            above = np.maximum(arr - upper, 0)
-            below = np.maximum(lower - arr, 0)
+        if upper.shape == arr_aligned.shape and lower.shape == arr_aligned.shape:
+            above = np.maximum(arr_aligned - upper, 0)
+            below = np.maximum(lower - arr_aligned, 0)
             total_violation = above + below
             overrun_rate = float(np.mean(total_violation > 0))
             overrun_max = float(np.max(total_violation))
@@ -704,12 +837,22 @@ def compute_dynamic_threshold_features(
             step_std = float(np.std(step_abs))
     step_mean_abs = float(np.mean(step_abs)) if step_abs else 0.0
 
+    robust_feats = {}
+    if rrs is not None:
+        rrs_arr = np.asarray(rrs, dtype=float)
+        if rrs_arr.shape == arr.shape:
+            robust_feats = compute_residual_robust_features(arr_aligned, rrs_arr)
+
     return {
         "env_overrun_rate": overrun_rate,
         "env_overrun_max": overrun_max,
         "env_overrun_mean": overrun_mean,
         "switch_step_mean_abs": step_mean_abs,
         "switch_step_std": step_std,
+        "offset_db": offset_db,
+        "viol_rate_aligned": overrun_rate,
+        "viol_energy_aligned": overrun_mean,
+        **robust_feats,
     }
 
 
@@ -796,6 +939,7 @@ def extract_enhanced_features(df_raw: pd.DataFrame, prefix="run_enh",
                               iso_contamination=ISO_CONTAMINATION,
                               dbscan_eps=DBSCAN_EPS,
                               dbscan_min_samples=DBSCAN_MIN_SAMPLES):
+    import pandas as pd
     df = df_raw.copy()
 
     # 基础症状特征
@@ -1037,6 +1181,7 @@ def extract_enhanced_features(df_raw: pd.DataFrame, prefix="run_enh",
 
 # 兼容接口，供 main_pipeline 或外部调用
 def compute_feature_matrix(raw_input, prefix="run_enh", **kwargs):
+    import pandas as pd
     if isinstance(raw_input, str):
         raw_df = pd.read_csv(raw_input, encoding="utf-8")
     elif isinstance(raw_input, pd.DataFrame):
@@ -1047,6 +1192,7 @@ def compute_feature_matrix(raw_input, prefix="run_enh", **kwargs):
 
 
 def main():
+    import pandas as pd
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="采集的 measurement CSV 路径")
     parser.add_argument("--prefix", default="run_enh", help="输出文件名前缀")

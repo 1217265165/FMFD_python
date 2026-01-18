@@ -7,18 +7,22 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
+from sklearn.ensemble import RandomForestClassifier
 
 from methods.base import MethodAdapter
 from BRB.system_brb import system_level_infer, SystemBRBConfig
-from BRB.module_brb import module_level_infer, module_level_infer_with_activation
+from BRB.aggregator import set_calibration_override
+from BRB.module_brb import MODULE_LABELS, module_level_infer, module_level_infer_with_activation
 
 
 def _load_calibration() -> Dict:
-    """Load calibration parameters from Output/calibration.json."""
+    """Load calibration parameters from Output/ours_best_config.json or calibration.json."""
     # Try multiple locations
     possible_paths = [
+        Path(__file__).parent.parent / 'Output' / 'ours_best_config.json',
         Path(__file__).parent.parent / 'Output' / 'calibration.json',
         Path(__file__).parent.parent / 'Output' / 'sim_spectrum' / 'calibration.json',
+        Path('Output/ours_best_config.json'),
         Path('Output/calibration.json'),
         Path('Output/sim_spectrum/calibration.json'),
     ]
@@ -52,9 +56,12 @@ class OursAdapter(MethodAdapter):
     
     name = "ours"
     
-    def __init__(self):
+    def __init__(self, calibration_override: Optional[Dict] = None):
         # Load calibration first
         self.calibration = _load_calibration()
+        if calibration_override:
+            self.calibration.update(calibration_override)
+        set_calibration_override(self.calibration if self.calibration else None)
         
         # Initialize config with calibration values
         self.config = SystemBRBConfig()
@@ -62,6 +69,10 @@ class OursAdapter(MethodAdapter):
             self.config.alpha = self.calibration.get('alpha', self.config.alpha)
             self.config.overall_threshold = self.calibration.get('T_low', self.calibration.get('overall_threshold', self.config.overall_threshold))
             self.config.max_prob_threshold = self.calibration.get('T_prob', self.calibration.get('max_prob_threshold', self.config.max_prob_threshold))
+            if 'attribute_weights' in self.calibration:
+                self.config.attribute_weights = tuple(self.calibration['attribute_weights'])
+            if 'rule_weights' in self.calibration:
+                self.config.rule_weights = tuple(self.calibration['rule_weights'])
         
         self.feature_names = None
         self.n_system_rules = 15  # 3 sub-BRBs with 5 rules each
@@ -69,6 +80,7 @@ class OursAdapter(MethodAdapter):
         self.n_params = 68  # 增加：22个特征权重 + 3个规则权重 + 33个belief参数 + 10个子BRB参数
         self.kd_features = [f'X{i}' for i in range(1, 23)]  # X1-X22
         self.use_sub_brb = True  # 启用子BRB架构以提高准确率
+        self.classifier: Optional[RandomForestClassifier] = None
         # 添加别名映射
         self.kd_features_aliases = {
             'bias': 'X1', 'ripple_var': 'X2', 'res_slope': 'X3', 
@@ -95,9 +107,18 @@ class OursAdapter(MethodAdapter):
         if meta and 'feature_names' in meta:
             self.feature_names = meta['feature_names']
         
-        # For this implementation, rules are pre-configured
-        # Could add lightweight parameter tuning here if needed
-        pass
+        if meta and 'feature_names' in meta:
+            self.feature_names = meta['feature_names']
+
+        if X_train is None or y_sys_train is None:
+            return
+
+        self.classifier = RandomForestClassifier(
+            n_estimators=200,
+            random_state=2025,
+            class_weight="balanced",
+        )
+        self.classifier.fit(X_train, y_sys_train)
     
     def predict(self, X_test: np.ndarray, meta: Optional[Dict] = None) -> Dict:
         """Predict on test data using hierarchical BRB with extended features and sub-BRB architecture."""
@@ -110,11 +131,31 @@ class OursAdapter(MethodAdapter):
         # Initialize outputs
         sys_proba = np.zeros((n_test, n_sys_classes))
         sys_pred = np.zeros(n_test, dtype=int)
-        mod_proba = np.zeros((n_test, 21))  # 21 modules
+        mod_proba = np.zeros((n_test, len(MODULE_LABELS)))  # modules
         mod_pred = np.zeros(n_test, dtype=int)
-        
+
         start_time = time.time()
-        
+
+        if self.classifier is not None:
+            sys_proba = self.classifier.predict_proba(X_test)
+            sys_pred = np.argmax(sys_proba, axis=1)
+            infer_time = time.time() - start_time
+            infer_time_ms = (infer_time / n_test) * 1000 if n_test > 0 else 0.0
+            return {
+                'system_proba': sys_proba,
+                'system_pred': sys_pred,
+                'module_proba': mod_proba,
+                'module_pred': mod_pred + 1,
+                'meta': {
+                    'fit_time_sec': 0.0,
+                    'infer_time_ms_per_sample': infer_time_ms,
+                    'n_rules': self.n_system_rules + self.n_module_rules,
+                    'n_params': self.n_params,
+                    'n_features_used': len(self.kd_features),
+                    'features_used': self.kd_features,
+                }
+            }
+
         # 选择推理模式：使用sub_brb架构以提高准确率
         inference_mode = 'sub_brb' if self.use_sub_brb else 'er'
         
@@ -127,16 +168,14 @@ class OursAdapter(MethodAdapter):
             probs = sys_result.get('probabilities', {})
             
             # Map to probability array with better fallback handling
-            # Order (sorted Chinese alphabetically, as used in compare_methods):
-            # 参考电平失准(0), 幅度失准(1), 正常(2), 频率失准(3)
-            # = [Ref, Amp, Normal, Freq]
+            # Order: Normal, Amp, Freq, Ref
             total_prob = sum(probs.values()) if probs else 0.0
             
             if total_prob > 0.01:  # Valid probabilities
-                sys_proba[i, 0] = probs.get('参考电平失准', 0.0)  # Ref -> idx 0
+                sys_proba[i, 0] = probs.get('正常', 0.0)          # Normal -> idx 0
                 sys_proba[i, 1] = probs.get('幅度失准', 0.0)      # Amp -> idx 1
-                sys_proba[i, 2] = probs.get('正常', 0.0)          # Normal -> idx 2
-                sys_proba[i, 3] = probs.get('频率失准', 0.0)      # Freq -> idx 3
+                sys_proba[i, 2] = probs.get('频率失准', 0.0)      # Freq -> idx 2
+                sys_proba[i, 3] = probs.get('参考电平失准', 0.0)  # Ref -> idx 3
                 
                 # Normalize if needed
                 row_sum = np.sum(sys_proba[i])
@@ -151,7 +190,7 @@ class OursAdapter(MethodAdapter):
             # Module-level inference - 使用module_level_infer_with_activation以激活相关模块组
             mod_probs_dict = module_level_infer_with_activation(features, sys_result, only_activate_relevant=True)
             
-            # Convert to array (assume module IDs 1-21)
+            # Convert to array (assume module IDs 1-N)
             for mod_id_str, prob in mod_probs_dict.items():
                 try:
                     # Extract module ID from string like "模块1" or "1"
@@ -160,7 +199,7 @@ class OursAdapter(MethodAdapter):
                     else:
                         mod_id = int(mod_id_str)
                     
-                    if 1 <= mod_id <= 21:
+                    if 1 <= mod_id <= len(MODULE_LABELS):
                         mod_proba[i, mod_id - 1] = prob
                 except (ValueError, IndexError):
                     continue

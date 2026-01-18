@@ -1,0 +1,7 @@
+{
+  "project_root": "D:\\PycharmProjects\\FMFD-v4\\FMFD",
+  "single_band": true,
+  "disable_preamp": true,
+  "seed": 2025,
+  "output_dir": "D:\\PycharmProjects\\FMFD-v4\\FMFD\\Output\\compare_methods"
+}

@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from scipy.interpolate import interp1d
 
 # Single-band mode flag: When True, preamp is disabled and switch-point step injection is disabled
@@ -347,7 +346,14 @@ def inject_vbw_smoothing(amp, window=None, rng=None):
     rng = rng or np.random.default_rng()
     if window is None:
         window = int(max(50, min(len(amp) // 10, rng.integers(200, 800))))
-    return pd.Series(amp).rolling(window=window, min_periods=1, center=True).mean().values
+    if window < 3:
+        return amp
+    if window % 2 == 0:
+        window += 1
+    pad = window // 2
+    padded = np.pad(amp, (pad, pad), mode="edge")
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(padded, kernel, mode="valid")[:len(amp)]
 
 def inject_power_noise(amp, noise_std=None, rng=None):
     """电源噪声：全频随机噪声提升。"""

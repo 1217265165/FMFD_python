@@ -14,7 +14,6 @@ modules_order:
 - 参考时钟
 - 校准数据
 - 电源（各类输出）
-- 未定义/其他
 rules:
   自动链_1:
     _meta_edge_types:
