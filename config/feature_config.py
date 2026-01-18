@@ -201,7 +201,6 @@ MODULE_LABELS: List[str] = [
     "数字检波器",
     "VBW滤波器",
     "电源模块",
-    "未定义/其他",
 ]
 
 # 模块分组 - 按物理链路和功能相关性
@@ -222,7 +221,7 @@ MODULE_GROUPS: Dict[str, List[str]] = {
     ],
     # 通用模块
     'other_group': [
-        '电源模块', '未定义/其他'
+        '电源模块'
     ],
 }
 

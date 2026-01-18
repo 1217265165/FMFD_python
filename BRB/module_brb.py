@@ -1,7 +1,7 @@
 """
 Module-level BRB reasoning (对应小论文 3.2 分层推理与规则压缩章节)。
 
-本模块实现 21 个模块的压缩式 BRB 推理：利用系统级诊断结果
+本模块实现 20 个模块的压缩式 BRB 推理：利用系统级诊断结果
 作为虚拟先验属性 V（式 (3)），仅激活与异常类型相关的规则组，
 避免全组合爆炸。规则数≈45、参数≈38，显著少于传统设计。
 
@@ -15,6 +15,7 @@ from __future__ import annotations
 import statistics
 from typing import Dict, Iterable, List, Optional
 
+from pipelines.default_paths import DISABLE_PREAMP, SINGLE_BAND
 from .utils import BRBRule, SimpleBRB, normalize_feature
 
 
@@ -39,14 +40,53 @@ MODULE_LABELS: List[str] = [
     "数字检波器",
     "VBW滤波器",
     "电源模块",
-    "未定义/其他",
 ]
 
-# Single-band mode flag: When True, preamp is disabled
-SINGLE_BAND_MODE = True
+# Single-band mode flag: When True, high-band modules are disabled
+SINGLE_BAND_MODE = SINGLE_BAND
+AC_COUPLED = True
 
-# Disabled modules in single-band mode
-DISABLED_MODULES = ["前置放大器"] if SINGLE_BAND_MODE else []
+DISABLED_MODULES = []
+if SINGLE_BAND_MODE:
+    DISABLED_MODULES.extend(["高频段YTF滤波器", "高频段混频器"])
+if DISABLE_PREAMP:
+    DISABLED_MODULES.append("前置放大器")
+if AC_COUPLED:
+    # AC 耦合下隔直功能无意义，先禁用“隔直衰减器”（模块名沿用“衰减器”）
+    DISABLED_MODULES.append("衰减器")
+DISABLED_MODULES = list(dict.fromkeys(DISABLED_MODULES))
+
+
+def _filter_belief(belief: Dict[str, float]) -> Dict[str, float]:
+    if not DISABLED_MODULES:
+        return belief
+    return {k: v for k, v in belief.items() if k not in DISABLED_MODULES}
+
+
+def _sanitize_rules(rules: List[BRBRule]) -> List[BRBRule]:
+    sanitized: List[BRBRule] = []
+    for rule in rules:
+        belief = _filter_belief(rule.belief)
+        if not belief:
+            continue
+        if belief == rule.belief:
+            sanitized.append(rule)
+        else:
+            sanitized.append(BRBRule(weight=rule.weight, belief=belief))
+    return sanitized
+
+
+def _apply_disabled_modules(module_probs: Dict[str, float]) -> Dict[str, float]:
+    if not DISABLED_MODULES:
+        return module_probs
+    updated = dict(module_probs)
+    for name in DISABLED_MODULES:
+        if name in updated:
+            updated[name] = 0.0
+    total = sum(updated.values())
+    if total > 0:
+        updated = {k: v / total for k, v in updated.items()}
+    return updated
 
 # 模块分组 - 按物理链路和功能相关性
 # NOTE: 前置放大器 is DISABLED in single-band mode
@@ -67,7 +107,7 @@ MODULE_GROUPS = {
     ],
     # 通用模块
     'other_group': [
-        '电源模块', '未定义/其他'
+        '电源模块'
     ],
 }
 
@@ -181,7 +221,7 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
     Returns
     -------
     dict
-        21 个模块的概率分布，顺序与 ``MODULE_LABELS`` 对齐。
+        20 个模块的概率分布，顺序与 ``MODULE_LABELS`` 对齐。
         NOTE: 前置放大器 is set to 0 in single-band mode.
     """
 
@@ -206,7 +246,7 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
     rules = [
         BRBRule(
             weight=0.8 * ref_prior,
-            belief={"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16, "未定义/其他": 0.10},
+            belief={"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16},
         ),
         # Amplitude rules: 前置放大器 belief redistributed to other modules
         BRBRule(
@@ -220,22 +260,14 @@ def module_level_infer(features: Dict[str, float], sys_probs: Dict[str, float]) 
         BRBRule(weight=0.5 * freq_prior, belief={"高频段YTF滤波器": 0.60, "高频段混频器": 0.40}),
         BRBRule(weight=0.5 * freq_prior, belief={"低频段前置低通滤波器": 0.60, "低频段第一混频器": 0.40}),
         BRBRule(weight=0.4 * amp_prior, belief={"数字RBW": 0.30, "数字检波器": 0.35, "VBW滤波器": 0.25, "ADC": 0.10}),
-        BRBRule(weight=0.3, belief={"电源模块": 0.80, "未定义/其他": 0.20}),
-        BRBRule(weight=0.2, belief={"未定义/其他": 1.0}),
+        BRBRule(weight=0.3, belief={"电源模块": 1.0}),
     ]
 
+    rules = _sanitize_rules(rules)
     brb = SimpleBRB(MODULE_LABELS, rules)
     result = brb.infer([md])
-    
-    # Force preamp probability to 0 in single-band mode
-    if SINGLE_BAND_MODE and "前置放大器" in result:
-        result["前置放大器"] = 0.0
-        # Renormalize
-        total = sum(result.values())
-        if total > 0:
-            result = {k: v / total for k, v in result.items()}
-    
-    return result
+
+    return _apply_disabled_modules(result)
 
 
 def module_level_infer_with_activation(
@@ -281,7 +313,7 @@ def module_level_infer_with_activation(
     Returns
     -------
     dict
-        21个模块的概率分布。
+        20个模块的概率分布。
     """
     probs = sys_probs.get("probabilities", sys_probs)
     
@@ -292,8 +324,12 @@ def module_level_infer_with_activation(
     # 检查是否为正常状态
     normal_prob = probs.get("正常", 0.0)
     if normal_prob > 0.5:
-        # 正常状态，所有模块概率均匀分布且较低
-        return {label: 1.0 / len(MODULE_LABELS) for label in MODULE_LABELS}
+        # 正常状态，启用模块概率均匀分布，禁用模块为 0
+        enabled = [label for label in MODULE_LABELS if label not in DISABLED_MODULES]
+        if not enabled:
+            return {label: 0.0 for label in MODULE_LABELS}
+        base = {label: 1.0 / len(enabled) if label in enabled else 0.0 for label in MODULE_LABELS}
+        return _apply_disabled_modules(base)
     
     amp_prior = probs.get("幅度失准", 0.3)
     freq_prior = probs.get("频率失准", 0.3)
@@ -323,8 +359,14 @@ def module_level_infer_with_activation(
     
     if only_activate_relevant:
         # 仅激活相关模块组的规则
-        active_modules = set(MODULE_GROUPS.get(active_group, []))
-        active_modules.update(MODULE_GROUPS.get('other_group', []))  # 始终包含通用模块
+        active_modules = set(
+            module for module in MODULE_GROUPS.get(active_group, [])
+            if module not in DISABLED_MODULES
+        )
+        active_modules.update(
+            module for module in MODULE_GROUPS.get('other_group', [])
+            if module not in DISABLED_MODULES
+        )
         
         # 构建针对性的规则
         rules = _build_targeted_rules(anomaly_type, amp_prior, freq_prior, ref_prior)
@@ -333,7 +375,7 @@ def module_level_infer_with_activation(
         rules = [
             BRBRule(
                 weight=0.8 * ref_prior,
-                belief={"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16, "未定义/其他": 0.10},
+                belief={"衰减器": 0.60, "校准源": 0.08, "存储器": 0.06, "校准信号开关": 0.16},
             ),
             BRBRule(
                 weight=0.6 * amp_prior,
@@ -346,22 +388,14 @@ def module_level_infer_with_activation(
             BRBRule(weight=0.5 * freq_prior, belief={"高频段YTF滤波器": 0.60, "高频段混频器": 0.40}),
             BRBRule(weight=0.5 * freq_prior, belief={"低频段前置低通滤波器": 0.60, "低频段第一混频器": 0.40}),
             BRBRule(weight=0.4 * amp_prior, belief={"数字RBW": 0.30, "数字检波器": 0.35, "VBW滤波器": 0.25, "ADC": 0.10}),
-            BRBRule(weight=0.3, belief={"电源模块": 0.80, "未定义/其他": 0.20}),
-            BRBRule(weight=0.2, belief={"未定义/其他": 1.0}),
+            BRBRule(weight=0.3, belief={"电源模块": 1.0}),
         ]
-    
+
+    rules = _sanitize_rules(rules)
     brb = SimpleBRB(MODULE_LABELS, rules)
     result = brb.infer([md])
-    
-    # Force preamp probability to 0 in single-band mode
-    if SINGLE_BAND_MODE and "前置放大器" in result:
-        result["前置放大器"] = 0.0
-        # Renormalize
-        total = sum(result.values())
-        if total > 0:
-            result = {k: v / total for k, v in result.items()}
-    
-    return result
+
+    return _apply_disabled_modules(result)
 
 
 def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float, ref_prior: float) -> List[BRBRule]:
@@ -387,7 +421,7 @@ def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float
             ),
             BRBRule(
                 weight=0.4 * amp_prior,
-                belief={"衰减器": 0.60, "中频放大器": 0.25, "未定义/其他": 0.15},
+                belief={"衰减器": 0.60, "中频放大器": 0.25},
             ),
         ])
         
@@ -404,7 +438,7 @@ def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float
             ),
             BRBRule(
                 weight=0.5 * freq_prior,
-                belief={"低频段前置低通滤波器": 0.50, "低频段第一混频器": 0.35, "未定义/其他": 0.15},
+                belief={"低频段前置低通滤波器": 0.50, "低频段第一混频器": 0.35},
             ),
         ])
         
@@ -413,18 +447,17 @@ def _build_targeted_rules(anomaly_type: str, amp_prior: float, freq_prior: float
         rules.extend([
             BRBRule(
                 weight=0.8 * ref_prior,
-                belief={"衰减器": 0.45, "校准源": 0.20, "校准信号开关": 0.20, "存储器": 0.10, "未定义/其他": 0.05},
+                belief={"衰减器": 0.45, "校准源": 0.20, "校准信号开关": 0.20, "存储器": 0.10},
             ),
             BRBRule(
                 weight=0.5 * ref_prior,
-                belief={"校准源": 0.40, "存储器": 0.30, "校准信号开关": 0.20, "未定义/其他": 0.10},
+                belief={"校准源": 0.40, "存储器": 0.30, "校准信号开关": 0.20},
             ),
         ])
     
     # 添加通用规则（权重较低）
     rules.extend([
-        BRBRule(weight=0.2, belief={"电源模块": 0.80, "未定义/其他": 0.20}),
-        BRBRule(weight=0.1, belief={"未定义/其他": 1.0}),
+        BRBRule(weight=0.2, belief={"电源模块": 1.0}),
     ])
     
     return rules

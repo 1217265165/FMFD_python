@@ -21,5 +21,11 @@
     "half_width_max": 1.05,
     "width_smoothness_max": 0.03
   },
-  "passed": true
+  "passed": true,
+  "chosen_quantiles": {
+    "q_low": 0.015,
+    "q_high": 0.985,
+    "coverage_target": 0.97
+  },
+  "width_prior_alpha": 0.8
 }
