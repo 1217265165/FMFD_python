@@ -79,10 +79,10 @@ def _get_feature_value(features: Dict[str, float], key: str, default: float = 0.
         return float(features[key])
     # 尝试其他可能的键名
     alt_keys = {
-        'X1': ['amplitude_offset', 'bias'],
+        'X1': ['amplitude_offset', 'bias', 'global_offset_db'],
         'X2': ['inband_flatness', 'ripple_var'],
         'X5': ['scale_consistency', 'amp_scale_consistency'],
-        'X6': ['ripple_variance'],
+        'X6': ['ripple_variance', 'ripple_hp'],
         'X7': ['gain_nonlinearity', 'step_score'],
         'X10': ['band_amplitude_consistency'],
         'X11': ['env_overrun_rate', 'viol_rate'],

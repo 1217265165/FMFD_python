@@ -31,20 +31,27 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from baseline.baseline import compute_rrs_bounds
 from baseline.config import (
     BASELINE_ARTIFACTS,
     BASELINE_META,
     BAND_RANGES,
+    NORMAL_STATS_JSON,
+    NORMAL_STATS_NPZ,
     OUTPUT_DIR,
     SWITCH_JSON,
 )
-from BRB.module_brb import MODULE_LABELS, module_level_infer
+from BRB.module_brb import DISABLED_MODULES, MODULE_LABELS, module_level_infer
 from BRB.system_brb import system_level_infer
 from features.feature_extraction import (
     compute_dynamic_threshold_features,
@@ -64,6 +71,19 @@ from pipelines.simulate.faults import (
     inject_vbw_smoothing,
     inject_ytf_variation,
     SINGLE_BAND_MODE,
+)
+from pipelines.default_paths import (
+    PROJECT_ROOT,
+    OUTPUT_DIR,
+    BASELINE_NPZ,
+    BASELINE_META,
+    SIM_DIR,
+    SEED,
+    SINGLE_BAND,
+    DISABLE_PREAMP,
+    DEFAULT_N_SAMPLES,
+    DEFAULT_BALANCED,
+    build_run_snapshot,
 )
 
 
@@ -154,7 +174,7 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
         csv_path = raw_dir / f"{sample_id}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["freq_Hz", "amplitude_dBm"])
+            writer.writerow(["freq_hz", "spec_reading_dbm"])
             for freq, amp in zip(frequency, curve):
                 writer.writerow([freq, amp])
 
@@ -170,6 +190,140 @@ def _write_raw_csvs(base_dir: Path, frequency: np.ndarray, curves: List[np.ndarr
     _write_csv(base_dir / "raw_manifest.csv", manifest_rows)
 
 
+KIND_TO_MODULE = {
+    "amp": "校准源",
+    "freq": "时钟振荡器",
+    "rl": "衰减器",
+    "att": "衰减器",
+    "lpf": "低频段前置低通滤波器",
+    "mixer": "低频段第一混频器",
+    "ytf": "高频段YTF滤波器",
+    "clock": "时钟合成与同步网络",
+    "lo": "本振混频组件",
+    "adc": "ADC",
+    "vbw": "数字检波器",
+    "power": "电源模块",
+}
+
+
+def _filter_kind_probs(kind_probs: Dict[str, float]) -> Dict[str, float]:
+    if not DISABLED_MODULES:
+        return kind_probs
+    filtered = {}
+    for kind, prob in kind_probs.items():
+        module = KIND_TO_MODULE.get(kind)
+        if kind in ("rl", "att") and module in DISABLED_MODULES and _has_enabled_ref_module():
+            filtered[kind] = prob
+            continue
+        if module and module in DISABLED_MODULES:
+            continue
+        filtered[kind] = prob
+    return filtered or kind_probs
+
+
+def _choose_ref_module(rng: np.random.Generator) -> str:
+    ref_modules = ["衰减器", "校准源", "存储器", "校准信号开关"]
+    enabled = [module for module in ref_modules if module not in DISABLED_MODULES]
+    if not enabled:
+        return "校准源"
+    return rng.choice(enabled)
+
+
+def _has_enabled_ref_module() -> bool:
+    ref_modules = ["衰减器", "校准源", "存储器", "校准信号开关"]
+    return any(module not in DISABLED_MODULES for module in ref_modules)
+
+
+def _smooth_noise(values: np.ndarray, window: int = 9) -> np.ndarray:
+    if window <= 1:
+        return values
+    if window % 2 == 0:
+        window += 1
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(values, kernel, mode="same")
+
+
+def _load_normal_stats(repo_root: Path) -> dict:
+    stats_path = repo_root / NORMAL_STATS_JSON
+    arrays_path = repo_root / NORMAL_STATS_NPZ
+    if not stats_path.exists() or not arrays_path.exists():
+        return {}
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    arrays = np.load(arrays_path)
+    stats["frequency"] = arrays["frequency"]
+    stats["rrs"] = arrays["rrs"]
+    stats["sigma_smooth"] = arrays["sigma_smooth"]
+    return stats
+
+
+def _generate_normal_curve(
+    frequency: np.ndarray,
+    rrs: np.ndarray,
+    normal_stats: dict,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    # 核心原则：normal 样本必须像真实正常数据（噪声/漂移分布接近真实统计）
+    if not normal_stats:
+        noise = rng.normal(0, 0.05, size=len(rrs))
+        return rrs + noise
+
+    sigma = normal_stats.get("sigma_smooth")
+    if sigma is None or len(sigma) != len(rrs):
+        sigma = np.full_like(rrs, 0.05, dtype=float)
+
+    offset_stats = normal_stats.get("offset_stats", {})
+    tilt_stats = normal_stats.get("tilt_stats", {})
+    slope_stats = tilt_stats.get("linear_slope", {})
+    quad_stats = tilt_stats.get("quadratic_coef", {})
+
+    offset = rng.normal(offset_stats.get("mean", 0.0), max(offset_stats.get("std", 0.02), 1e-6))
+    slope = rng.normal(slope_stats.get("mean", 0.0), max(slope_stats.get("std", 0.02), 1e-6))
+    quad = rng.normal(quad_stats.get("mean", 0.0), max(quad_stats.get("std", 0.02), 1e-6))
+
+    x = (frequency - frequency[0]) / (frequency[-1] - frequency[0] + 1e-12)
+    drift_curve = offset + slope * (x - 0.5) + quad * (x - 0.5) ** 2
+
+    noise = rng.normal(0.0, sigma, size=len(rrs))
+    noise = _smooth_noise(noise, window=9)
+    curve = rrs + drift_curve + noise
+
+    # 约束 normal 样本：绝大多数频点落在 rrs ± 0.4 dB
+    for _ in range(3):
+        coverage = np.mean(np.abs(curve - rrs) <= 0.4)
+        if coverage >= 0.99:
+            break
+        drift_curve *= 0.7
+        noise *= 0.7
+        curve = rrs + drift_curve + noise
+
+    return curve
+
+
+def _apply_fault_constraints(
+    curve: np.ndarray,
+    rrs: np.ndarray,
+    fault_kind: str,
+    severity: str | None = None,
+) -> np.ndarray:
+    # 核心原则：非整体类故障应局部偏离，整体类故障受限于合理幅度范围
+    delta = curve - rrs
+    abs_delta = np.abs(delta)
+
+    if fault_kind in ("amp", "rl", "att"):
+        limit = 0.4 if severity == "severe" else 0.3
+        med = float(np.median(delta))
+        if abs(med) > limit:
+            curve = curve - (abs(med) - limit) * np.sign(med)
+        return curve
+
+    # 频率/模块故障：约束 80% 频点落在 ±0.4 dB 内
+    p80 = np.percentile(abs_delta, 80)
+    if p80 > 0.4 and p80 > 0:
+        scale = 0.4 / p80
+        curve = rrs + delta * scale
+    return curve
+
+
 def _pick_base_trace(rrs: np.ndarray, traces: np.ndarray | None, rng: np.random.Generator) -> np.ndarray:
     if traces is None or traces.size == 0:
         noise = rng.normal(0, 0.05, size=len(rrs))
@@ -183,9 +337,10 @@ def simulate_curve(
     rrs: np.ndarray,
     band_ranges: List[Tuple[float, float]],
     traces: np.ndarray | None,
+    normal_stats: dict,
     rng: np.random.Generator,
     target_class: str | None = None,
-) -> Tuple[np.ndarray, str, str]:
+) -> Tuple[np.ndarray, str, str, dict]:
     """Generate simulated curve with optional target fault class.
     
     Args:
@@ -251,6 +406,7 @@ def simulate_curve(
             "power": 0.06, "normal": 0.10,
         }
     
+    kind_probs = _filter_kind_probs(kind_probs)
     kinds = list(kind_probs.keys())
     probs = np.array(list(kind_probs.values()), dtype=float)
     probs = probs / probs.sum()
@@ -260,10 +416,11 @@ def simulate_curve(
     label_mod = "none"
     fault_params = {}  # Track injection parameters
 
+    severity = rng.choice(["light", "mid", "severe"], p=[0.55, 0.35, 0.10])
     if fault_kind == "amp":
-        curve = inject_amplitude_miscal(curve, rng=rng)
+        curve = inject_amplitude_miscal(curve, rng=rng, severity=severity)
         label_sys, label_mod = "幅度失准", "校准源"
-        fault_params['type'] = 'amp_miscal'
+        fault_params.update({"type": "amp_miscal", "severity": severity})
     elif fault_kind == "freq":
         curve, freq_params = inject_freq_miscal(frequency, curve, rng=rng, return_params=True)
         label_sys, label_mod = "频率失准", "时钟振荡器"
@@ -272,10 +429,10 @@ def simulate_curve(
     elif fault_kind in ("rl", "att"):
         # Use single_band_mode=True for reflevel injection (no step injection)
         curve, ref_params = inject_reflevel_miscal(frequency, curve, band_ranges, rng=rng, 
-                                                    single_band_mode=True, return_params=True)
-        label_sys, label_mod = "参考电平失准", "衰减器"
+                                                    single_band_mode=True, return_params=True, severity=severity)
+        label_sys, label_mod = "参考电平失准", _choose_ref_module(rng)
         fault_params.update(ref_params)
-        fault_params['type'] = 'ref_miscal'
+        fault_params.update({"type": "ref_miscal", "severity": severity})
     # NOTE: preamp case is REMOVED - it's disabled in single-band mode
     elif fault_kind == "lpf":
         curve = inject_lpf_shift(frequency, curve, rng=rng)
@@ -314,13 +471,26 @@ def simulate_curve(
     else:
         fault_params['type'] = 'normal'
 
+    # 核心原则：normal 像正常、故障像真实故障，且不“离谱”
+    if fault_kind == "normal":
+        curve = _generate_normal_curve(frequency, rrs, normal_stats, rng)
+    else:
+        curve = _apply_fault_constraints(curve, rrs, fault_kind, severity=severity)
+
     return curve, label_sys, label_mod, fault_params
 
 
 def run_simulation(args: argparse.Namespace):
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = PROJECT_ROOT
     out_dir = _resolve(repo_root, Path(args.out_dir))
     out_dir.mkdir(parents=True, exist_ok=True)
+    build_run_snapshot(out_dir)
+
+    print(f"[INFO] project_root={repo_root}")
+    print(f"[INFO] single_band={SINGLE_BAND}")
+    print(f"[INFO] disable_preamp={DISABLE_PREAMP}")
+    print(f"[INFO] seed={args.seed}")
+    print(f"[INFO] output_dir={out_dir}")
 
     freq, rrs, bounds, band_ranges, switch_feats = load_baseline(
         repo_root,
@@ -328,6 +498,7 @@ def run_simulation(args: argparse.Namespace):
         Path(args.baseline_meta),
         Path(args.switch_json),
     )
+    normal_stats = _load_normal_stats(repo_root)
     traces = None
     npz_data = np.load(_resolve(repo_root, Path(args.baseline_npz)), allow_pickle=True)
     if "traces" in npz_data:
@@ -367,7 +538,9 @@ def run_simulation(args: argparse.Namespace):
         for target_class in ['amp_error', 'freq_error', 'ref_error', 'normal']:
             for _ in range(class_counts[target_class]):
                 sample_id = f"sim_{idx:05d}"
-                curve, label_sys, label_mod, fault_params = simulate_curve(freq, rrs, band_ranges, traces, rng, target_class=target_class)
+                curve, label_sys, label_mod, fault_params = simulate_curve(
+                    freq, rrs, band_ranges, traces, normal_stats, rng, target_class=target_class
+                )
                 curves.append(curve)
                 sys_labels.append(label_sys)
                 mod_labels.append(label_mod)
@@ -406,7 +579,6 @@ def run_simulation(args: argparse.Namespace):
                         "sample_id": sample_id,
                         **sys_feats,
                         **dyn_feats,
-                        **{f"sys_{k}": v for k, v in sys_probs.items()},
                         **{f"mod_{k}": v for k, v in module_probs.items()},
                     }
                 )
@@ -423,7 +595,9 @@ def run_simulation(args: argparse.Namespace):
         
         for idx in range(args.n_samples):
             sample_id = f"sim_{idx:05d}"
-            curve, label_sys, label_mod, fault_params = simulate_curve(freq, rrs, band_ranges, traces, rng)
+            curve, label_sys, label_mod, fault_params = simulate_curve(
+                freq, rrs, band_ranges, traces, normal_stats, rng
+            )
             curves.append(curve)
             sys_labels.append(label_sys)
             mod_labels.append(label_mod)
@@ -462,7 +636,6 @@ def run_simulation(args: argparse.Namespace):
                     "sample_id": sample_id,
                     **sys_feats,
                     **dyn_feats,
-                    **{f"sys_{k}": v for k, v in sys_probs.items()},
                     **{f"mod_{k}": v for k, v in module_probs.items()},
                 }
             )
@@ -475,6 +648,23 @@ def run_simulation(args: argparse.Namespace):
     (out_dir / "labels.json").write_text(json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8")
     _write_curves(out_dir / "simulated_curves.csv", freq, curves)
     np.savez(out_dir / "simulated_curves.npz", frequency=freq, curves=np.array(curves))
+
+    # Validate output counts
+    raw_count = len(list((out_dir / "raw_curves").glob("*.csv")))
+    label_count = len(labels)
+    features_path = out_dir / "features_brb.csv"
+    features_count = 0
+    if features_path.exists():
+        with features_path.open("r", encoding="utf-8-sig") as f:
+            features_count = max(0, sum(1 for _ in f) - 1)
+
+    expected = args.n_samples
+    if raw_count != expected or label_count != expected or features_count != expected:
+        print(
+            "[ERROR] Output counts mismatch: "
+            f"raw_curves={raw_count}, labels={label_count}, features={features_count}, expected={expected}"
+        )
+        raise SystemExit(1)
     
     # Save fault params CSV for effect check
     if fault_params_list:
@@ -507,78 +697,73 @@ def run_simulation(args: argparse.Namespace):
 
 def _generate_effect_check(out_dir: Path, feature_rows: List[Dict], labels: dict):
     """Generate freq_ref_effect_check.csv to verify injection → feature correlation."""
-    import pandas as pd
-    
-    # Build dataframe with features and labels
-    df = pd.DataFrame(feature_rows)
-    df['system_class'] = df['sample_id'].apply(
-        lambda x: labels.get(x, {}).get('system_fault_class', 'normal') or 'normal'
-    )
-    
-    # Key freq features
     freq_features = ['X16', 'X17', 'X18', 'X23', 'X24', 'X25']
-    # Key ref features  
     ref_features = ['X3', 'X5', 'X26', 'X27', 'X28']
-    
-    # Compute statistics by class
+
     stats = []
     for cls in ['normal', 'amp_error', 'freq_error', 'ref_error']:
-        cls_df = df[df['system_class'] == cls]
-        if len(cls_df) == 0:
+        cls_rows = [
+            row for row in feature_rows
+            if labels.get(row.get('sample_id', ''), {}).get('system_fault_class', 'normal') == cls
+        ]
+        if not cls_rows:
             continue
-        
-        row = {'class': cls, 'n': len(cls_df)}
-        
-        # Freq features
-        for f in freq_features:
-            if f in cls_df.columns:
-                vals = cls_df[f].astype(float)
-                row[f'{f}_mean'] = vals.mean()
-                row[f'{f}_std'] = vals.std()
-                row[f'{f}_p90'] = vals.quantile(0.9) if len(vals) > 0 else 0
-        
-        # Ref features
-        for f in ref_features:
-            if f in cls_df.columns:
-                vals = cls_df[f].astype(float)
-                row[f'{f}_mean'] = vals.mean()
-                row[f'{f}_std'] = vals.std()
-                row[f'{f}_p90'] = vals.quantile(0.9) if len(vals) > 0 else 0
-        
-        stats.append(row)
-    
-    # Save effect check
+
+        row_stats = {'class': cls, 'n': len(cls_rows)}
+        for f in freq_features + ref_features:
+            vals = [float(r.get(f, 0.0)) for r in cls_rows if f in r]
+            if vals:
+                arr = np.array(vals, dtype=float)
+                row_stats[f'{f}_mean'] = float(np.mean(arr))
+                row_stats[f'{f}_std'] = float(np.std(arr))
+                row_stats[f'{f}_p90'] = float(np.percentile(arr, 90))
+        stats.append(row_stats)
+
     if stats:
-        effect_df = pd.DataFrame(stats)
-        effect_df.to_csv(out_dir / 'freq_ref_effect_check.csv', index=False, encoding='utf-8-sig')
-        print(f"Saved freq_ref_effect_check.csv")
+        output_path = out_dir / 'freq_ref_effect_check.csv'
+        keys = sorted({k for row in stats for k in row.keys()})
+        with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(stats)
+        print("Saved freq_ref_effect_check.csv")
         
-        # Print summary
+        stats_by_class = {row.get("class"): row for row in stats}
         print("\n=== Freq/Ref Feature Effect Check ===")
         print("Freq features (should be high for freq_error):")
         for f in ['X16', 'X23', 'X24']:
-            if f'{f}_mean' in effect_df.columns:
-                for _, row in effect_df.iterrows():
-                    print(f"  {row['class']:12s} {f}_mean={row.get(f'{f}_mean', 0):.4f}")
-        
+            for cls, row in stats_by_class.items():
+                key = f"{f}_mean"
+                if key in row:
+                    print(f"  {cls:12s} {f}_mean={row.get(key, 0):.4f}")
+
         print("\nRef features (should be high for ref_error):")
         for f in ['X26', 'X27', 'X28']:
-            if f'{f}_mean' in effect_df.columns:
-                for _, row in effect_df.iterrows():
-                    print(f"  {row['class']:12s} {f}_mean={row.get(f'{f}_mean', 0):.4f}")
+            for cls, row in stats_by_class.items():
+                key = f"{f}_mean"
+                if key in row:
+                    print(f"  {cls:12s} {f}_mean={row.get(key, 0):.4f}")
 
 
 def build_argparser():
     parser = argparse.ArgumentParser(description="仿真频响并执行 BRB 诊断")
-    parser.add_argument("--baseline_npz", default=BASELINE_ARTIFACTS)
+    parser.add_argument("--baseline_npz", default=BASELINE_NPZ)
     parser.add_argument("--baseline_meta", default=BASELINE_META)
     parser.add_argument("--switch_json", default=SWITCH_JSON)
-    parser.add_argument("--out_dir", default=f"{OUTPUT_DIR}/sim_spectrum")
-    parser.add_argument("--n_samples", type=int, default=400, 
-                       help="总样本数（默认400，建议4的倍数以便完美平衡）")
-    parser.add_argument("--seed", type=int, default=2024)
-    parser.add_argument("--balanced", action="store_true", default=True,
-                       help="生成系统级均衡的样本（每类相同数量，默认开启）")
+    parser.add_argument("--out_dir", default=SIM_DIR)
+    parser.add_argument(
+        "--n_samples",
+        type=int,
+        default=DEFAULT_N_SAMPLES,
+        help="总样本数（默认400，建议4的倍数以便完美平衡）",
+    )
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument(
+        "--balanced",
+        action="store_true",
+        default=DEFAULT_BALANCED,
+        help="生成系统级均衡的样本（每类相同数量，默认开启）",
+    )
     parser.add_argument("--realistic", dest="balanced", action="store_false",
                        help="使用真实概率分布（反映模块多样性：幅度58%%,频率20%%,参考14%%,正常8%%）")
     return parser
@@ -591,7 +776,7 @@ if __name__ == "__main__":
     # Change to repository root for relative paths to work
     # This enables Windows double-click execution
     script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parents[1]
+    repo_root = PROJECT_ROOT
     os.chdir(repo_root)
     
     # Build parser and run

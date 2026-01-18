@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from scipy.interpolate import interp1d
 
 # Single-band mode flag: When True, preamp is disabled and switch-point step injection is disabled
@@ -119,16 +118,11 @@ def inject_freq_miscal(frequency, amp, delta_f=None, rng=None, return_params=Fal
     step_hz = frequency[1] - frequency[0] if len(frequency) > 1 else 1e7
     
     if delta_f is None:
-        # Increased ppm range to produce >= 1 bin shift (10MHz)
-        # With 820 points and 8.19GHz bandwidth, 1 bin = 10MHz
-        # ppm = delta_f / bw, so for 1 bin: ppm = 10MHz / 8.19GHz ≈ 0.0012 (1200ppm)
-        # Previous: ±150ppm was too small to cause meaningful shift
-        # New: ±500-3000ppm to ensure >= 1 bin shift for detectability
-        ppm = rng.uniform(-3000e-6, 3000e-6)
-        # Ensure minimum absolute ppm for detectability
-        if abs(ppm) < 500e-6:
-            # If ppm is too small, set it to ±500ppm with random sign
-            ppm = rng.choice([-1, 1]) * 500e-6
+        # Constrained ppm range to keep frequency shift subtle and realistic
+        # Target range: ±100~600 ppm for single-band 10MHz stepping
+        ppm = rng.uniform(-600e-6, 600e-6)
+        if abs(ppm) < 100e-6:
+            ppm = rng.choice([-1, 1]) * 100e-6
         delta_f = ppm * bw
     else:
         ppm = delta_f / bw if bw > 0 else 0
@@ -347,7 +341,14 @@ def inject_vbw_smoothing(amp, window=None, rng=None):
     rng = rng or np.random.default_rng()
     if window is None:
         window = int(max(50, min(len(amp) // 10, rng.integers(200, 800))))
-    return pd.Series(amp).rolling(window=window, min_periods=1, center=True).mean().values
+    if window < 3:
+        return amp
+    if window % 2 == 0:
+        window += 1
+    pad = window // 2
+    padded = np.pad(amp, (pad, pad), mode="edge")
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(padded, kernel, mode="valid")[:len(amp)]
 
 def inject_power_noise(amp, noise_std=None, rng=None):
     """电源噪声：全频随机噪声提升。"""

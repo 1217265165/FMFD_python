@@ -259,17 +259,21 @@ def main():
         # 5.5 如果需要包含基线信息（用于前端绘图）
         if args.include_baseline:
             ds = args.downsample_baseline
+            offset_db = float(np.median(amp - rrs))
+            residual = (amp - offset_db) - rrs
             if ds > 1:
                 # 下采样
                 freq_ds = frequency[::ds].tolist()
                 rrs_ds = rrs[::ds].tolist()
                 upper_ds = bounds[0][::ds].tolist()
                 lower_ds = bounds[1][::ds].tolist()
+                residual_ds = residual[::ds].tolist()
             else:
                 freq_ds = frequency.tolist()
                 rrs_ds = rrs.tolist()
                 upper_ds = bounds[0].tolist()
                 lower_ds = bounds[1].tolist()
+                residual_ds = residual.tolist()
             
             # 计算基线整体电平中心（RRS 的中位数）
             center_level_db = float(np.median(rrs))
@@ -280,11 +284,27 @@ def main():
             spec_upper_db = spec_center_db + spec_tol_db  # -9.6
             spec_lower_db = spec_center_db - spec_tol_db  # -10.4
             
+            quantiles = meta.get("smooth_params", {}).get("quantiles", {})
             result["baseline"] = {
                 "frequency_hz": freq_ds,
-                "rrs_db": rrs_ds,
-                "upper_db": upper_ds,
-                "lower_db": lower_ds,
+                "rrs_dbm": rrs_ds,
+                "upper_dbm": upper_ds,
+                "lower_dbm": lower_ds,
+                "offset_db": offset_db,
+                "residual_db": residual_ds,
+                "coverage": {
+                    "point_coverage": float(1.0 - features.get("viol_rate_aligned", features.get("viol_rate", 0.0))),
+                    "viol_rate": float(features.get("viol_rate_aligned", features.get("viol_rate", 0.0))),
+                    "viol_energy": float(features.get("viol_energy_aligned", 0.0)),
+                },
+                "meta": {
+                    "q_lo": quantiles.get("q_low"),
+                    "q_hi": quantiles.get("q_high"),
+                    "clip_db": meta.get("clip_db", 0.4),
+                    "smoothing": {
+                        "width_smooth_sigma_hz": meta.get("smooth_params", {}).get("width_smooth_sigma_hz"),
+                    },
+                },
                 "center_level_db": center_level_db,
                 "spec_center_db": spec_center_db,
                 "spec_tol_db": spec_tol_db,
