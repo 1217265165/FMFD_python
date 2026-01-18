@@ -59,6 +59,46 @@ from pipelines.default_paths import (
 )
 
 
+def _hash_ids(ids: List[str]) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    for item in ids:
+        h.update(str(item).encode("utf-8"))
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def _stratified_split_ids(
+    sample_ids: List[str],
+    labels: List[int],
+    train_size: float,
+    val_size: float,
+    seed: int,
+) -> Tuple[List[str], List[str]]:
+    indices = np.arange(len(sample_ids))
+    train_indices: List[int] = []
+    val_indices: List[int] = []
+
+    for class_label in sorted(set(labels)):
+        class_indices = indices[np.array(labels) == class_label]
+        rng = np.random.RandomState(seed)
+        rng.shuffle(class_indices)
+        n_class = len(class_indices)
+        n_train = max(1, int(n_class * train_size))
+        n_val = max(1, int(n_class * val_size))
+        train_indices.extend(class_indices[:n_train])
+        val_indices.extend(class_indices[n_train:n_train + n_val])
+
+    rng = np.random.RandomState(seed)
+    rng.shuffle(train_indices)
+    rng.shuffle(val_indices)
+
+    train_ids = [sample_ids[i] for i in train_indices]
+    val_ids = [sample_ids[i] for i in val_indices]
+    return train_ids, val_ids
+
+
 def load_features_and_labels(data_dir: Path) -> Tuple[Dict[str, Dict], Dict[str, Dict]]:
     """Load features and labels from data directory.
     
@@ -715,6 +755,26 @@ def main():
         print(f"Error: {e}")
         print("Please run simulation first: python pipelines/simulate/run_simulation_brb.py")
         return 1
+
+    # Align samples and split (train/val only; test is excluded from calibration)
+    common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
+    if not common_ids:
+        print("Error: No common samples between features and labels")
+        return 1
+    label_values = [extract_system_label(labels_dict[sample_id]) for sample_id in common_ids]
+    train_ids, val_ids = _stratified_split_ids(
+        common_ids,
+        label_values,
+        train_size=0.6,
+        val_size=0.2,
+        seed=SEED,
+    )
+    train_val_ids = set(train_ids + val_ids)
+    features_dict = {k: v for k, v in features_dict.items() if k in train_val_ids}
+    labels_dict = {k: v for k, v in labels_dict.items() if k in train_val_ids}
+    print(f"[INFO] Calibration split: train={len(train_ids)}, val={len(val_ids)} (test excluded)")
+    print(f"[INFO] Train hash: {_hash_ids(train_ids)}")
+    print(f"[INFO] Val hash: {_hash_ids(val_ids)}")
     
     # Step 0: v8 - Generate feature_separation_amp_ref.csv for verification
     generate_feature_separation_amp_ref(features_dict, labels_dict, data_dir / 'feature_separation_amp_ref.csv')
@@ -740,6 +800,13 @@ def main():
     best_params['calibration_macro_f1'] = best_f1
     best_params['single_band_mode'] = True
     best_params['version'] = 'v8_X30_amp_ref_gate'
+    best_params['calibration_split'] = {
+        "train_count": len(train_ids),
+        "val_count": len(val_ids),
+        "train_hash": _hash_ids(train_ids),
+        "val_hash": _hash_ids(val_ids),
+        "note": "calibration uses train/val only; test excluded",
+    }
     
     # Save calibration
     calibration_path = output_dir / "calibration.json"
@@ -762,6 +829,7 @@ def main():
         "single_band": SINGLE_BAND,
         "disable_preamp": DISABLE_PREAMP,
         "seed": SEED,
+        "calibration_split": best_params["calibration_split"],
     }
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Saved calibration_report.json to: {report_path}")

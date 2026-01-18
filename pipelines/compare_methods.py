@@ -49,6 +49,7 @@ from pipelines.default_paths import (
     SPLIT,
     build_run_snapshot,
 )
+from tools.check_features_integrity import generate_report as generate_feature_integrity_report
 
 # Unified system label order (Normal, Amp, Freq, Ref)
 SYS_LABEL_ORDER = ['正常', '幅度失准', '频率失准', '参考电平失准']
@@ -273,7 +274,15 @@ def prepare_dataset(
     data_dir: Path,
     use_pool_features: bool = False,
     strict_leakage: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], List[str], List[str], List[str]]:
+) -> Tuple[
+    np.ndarray,
+    np.ndarray,
+    Optional[np.ndarray],
+    List[str],
+    List[str],
+    List[str],
+    List[str],
+]:
     """Load and prepare dataset with features and labels.
     
     Args:
@@ -315,12 +324,19 @@ def prepare_dataset(
                 features_dict[sample_id] = {**feats, **pool_feats}
     
     # Align samples (only use samples with both features and labels)
-    common_ids = sorted(set(features_dict.keys()) & set(labels_dict.keys()))
+    feature_ids = set(features_dict.keys())
+    label_ids = set(labels_dict.keys())
+    common_ids = sorted(feature_ids & label_ids)
+    missing_in_features = sorted(label_ids - feature_ids)
+    missing_in_labels = sorted(feature_ids - label_ids)
     
     if not common_ids:
         raise ValueError("No common samples found between features and labels")
     
     print(f"Found {len(common_ids)} samples with both features and labels")
+    if missing_in_features or missing_in_labels:
+        print(f"[WARN] Missing in features: {len(missing_in_features)}")
+        print(f"[WARN] Missing in labels: {len(missing_in_labels)}")
     
     # Build feature matrix and label vectors
     # Determine feature names from full union for consistent ordering
@@ -371,7 +387,16 @@ def prepare_dataset(
     if y_mod is not None:
         print(f"Module labels available: {np.sum(y_mod >= 0)} samples")
     
-    return X, y_sys, y_mod, feature_names, common_ids, leak_columns
+    return (
+        X,
+        y_sys,
+        y_mod,
+        feature_names,
+        common_ids,
+        leak_columns,
+        missing_in_features,
+        missing_in_labels,
+    )
 
 
 def write_eval_audit(output_dir: Path, audit_info: Dict[str, object]) -> None:
@@ -387,6 +412,59 @@ def write_eval_audit(output_dir: Path, audit_info: Dict[str, object]) -> None:
                 audit_serializable[k] = str(v)
         json.dump(audit_serializable, f, indent=2, ensure_ascii=False)
     print(f"Saved evaluation audit to: {eval_audit_path}")
+
+
+def _hash_ids(ids: List[str]) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    for item in ids:
+        h.update(str(item).encode("utf-8"))
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def _summarize_feature_by_class(
+    X: np.ndarray,
+    y_sys: np.ndarray,
+    feature_names: List[str],
+    labels: List[str],
+    output_path: Path,
+) -> None:
+    key_features = [
+        "gain",
+        "bias",
+        "comp",
+        "df",
+        "viol_rate",
+        "step_score",
+        "res_slope",
+        "ripple_var",
+        "X11",
+        "X12",
+        "X13",
+        "X16",
+        "X17",
+        "X18",
+    ]
+    name_to_idx = {name: idx for idx, name in enumerate(feature_names)}
+    summary = {}
+    for class_idx, label in enumerate(labels):
+        mask = y_sys == class_idx
+        if not np.any(mask):
+            continue
+        summary[label] = {}
+        for feat in key_features:
+            idx = name_to_idx.get(feat)
+            if idx is None:
+                continue
+            values = X[mask, idx]
+            summary[label][feat] = {
+                "mean": float(np.mean(values)),
+                "p50": float(np.percentile(values, 50)),
+                "p95": float(np.percentile(values, 95)),
+            }
+    output_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def stratified_split(X: np.ndarray, y: np.ndarray, 
@@ -856,7 +934,16 @@ def main():
         'disable_preamp': DISABLE_PREAMP,
     }
     try:
-        X, y_sys, y_mod, feature_names, sample_ids, leak_columns = prepare_dataset(
+        (
+            X,
+            y_sys,
+            y_mod,
+            feature_names,
+            sample_ids,
+            leak_columns,
+            missing_in_features,
+            missing_in_labels,
+        ) = prepare_dataset(
             data_dir,
             use_pool_features=True,
             strict_leakage=True,
@@ -879,6 +966,8 @@ def main():
         'n_joined': len(sample_ids),  # After joining features and labels
         'feature_names': feature_names,
         'n_sys_classes': n_sys_classes,
+        'missing_in_features': missing_in_features,
+        'missing_in_labels': missing_in_labels,
     })
 
     raw_curves_dir = data_dir / "raw_curves"
@@ -894,16 +983,36 @@ def main():
                 h.update(chunk)
         return h.hexdigest()
 
+    # Feature integrity report
+    features_path = data_dir / "features_brb.csv"
+    feature_report_path = output_dir / "feature_integrity_report.json"
+    if features_path.exists():
+        feature_report = generate_feature_integrity_report(features_path, feature_report_path)
+        print(f"[INFO] Feature integrity report saved: {feature_report_path}")
+    else:
+        feature_report = {}
+        print(f"[WARN] features_brb.csv not found at {features_path}")
+
+    # Dataset feature summary for sanity checks
+    dataset_feature_summary_path = output_dir / "dataset_feature_summary.json"
+    _summarize_feature_by_class(X, y_sys, feature_names, SYS_LABEL_ORDER, dataset_feature_summary_path)
+    print(f"[INFO] Dataset feature summary saved: {dataset_feature_summary_path}")
+
     repro_summary = {
         "data_dir": str(data_dir),
         "features_rows": len(X),
         "labels_count": len(sample_ids),
         "raw_curves_count": raw_curves_count,
+        "missing_in_features": missing_in_features[:50],
+        "missing_in_labels": missing_in_labels[:50],
+        "missing_in_features_count": len(missing_in_features),
+        "missing_in_labels_count": len(missing_in_labels),
         "label_distribution": {
             label: int(np.sum(y_sys == idx))
             for idx, label in enumerate(SYS_LABEL_ORDER)
         },
         "class_index_map": {str(idx): label for idx, label in enumerate(SYS_LABEL_ORDER)},
+        "feature_integrity_report": str(feature_report_path),
         "best_params": {
             "path": str(data_dir / "best_params.json"),
             "exists": (data_dir / "best_params.json").exists(),
@@ -931,6 +1040,9 @@ def main():
     print(f"Train set: {len(X_train)} samples")
     print(f"Val set: {len(X_val)} samples")
     print(f"Test set: {len(X_test)} samples")
+    print(f"Train hash: {_hash_ids([sample_ids[i] for i in train_idx])}")
+    print(f"Val hash: {_hash_ids([sample_ids[i] for i in val_idx])}")
+    print(f"Test hash: {_hash_ids([sample_ids[i] for i in test_idx])}")
     
     # Update audit info with split sizes
     audit_info['n_train'] = len(X_train)
@@ -942,6 +1054,15 @@ def main():
     audit_info['train_sample_ids'] = [sample_ids[i] for i in train_idx]
     audit_info['val_sample_ids'] = [sample_ids[i] for i in val_idx]
     audit_info['test_sample_ids'] = [sample_ids[i] for i in test_idx]
+    repro_summary["splits"] = {
+        "train_count": len(train_idx),
+        "val_count": len(val_idx),
+        "test_count": len(test_idx),
+        "train_hash": _hash_ids(audit_info["train_sample_ids"]),
+        "val_hash": _hash_ids(audit_info["val_sample_ids"]),
+        "test_hash": _hash_ids(audit_info["test_sample_ids"]),
+    }
+    repro_path.write_text(json.dumps(repro_summary, ensure_ascii=False, indent=2), encoding="utf-8")
     
     # Import methods (will be implemented)
     print("\n" + "="*60)

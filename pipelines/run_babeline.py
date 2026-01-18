@@ -94,6 +94,7 @@ def main():
     print(f"Frequency range: {frequency[0]:.2e} Hz to {frequency[-1]:.2e} Hz")
 
     # 2) 使用单一权威包络算法：RRS pointwise median + quantile envelope（先对齐 offset）
+    # 说明：RRS 默认不平滑（最多允许极轻度平滑，但默认关闭）
     print("\n[Baseline] Using quantile envelope with offset alignment")
     rrs, bounds, coverage_info = compute_rrs_bounds(
         frequency,

@@ -305,7 +305,10 @@ def _apply_fault_constraints(
     fault_kind: str,
     severity: str | None = None,
 ) -> np.ndarray:
-    # 核心原则：非整体类故障应局部偏离，整体类故障受限于合理幅度范围
+    # 核心原则：
+    # 1) Normal 样本统计特性要与真实正常数据一致（噪声/漂移/特征分布）。
+    # 2) 非整体类故障应局部偏离，整体类故障受限于合理幅度范围。
+    # 3) amp/ref 允许整段偏移，但不应轻易超出 ±0.4 dB（severe 才允许到 0.4）。
     delta = curve - rrs
     abs_delta = np.abs(delta)
 
@@ -324,6 +327,35 @@ def _apply_fault_constraints(
     return curve
 
 
+def _constrain_by_feature_stats(
+    curve: np.ndarray,
+    rrs: np.ndarray,
+    bounds: Tuple[np.ndarray, np.ndarray],
+    normal_stats: dict,
+) -> np.ndarray:
+    # 基于真实正常特征分布进行轻度约束，避免特征极端离群
+    feature_stats = normal_stats.get("feature_stats", {})
+    if not feature_stats:
+        return curve
+    sys_feats = extract_system_features(curve, baseline_curve=rrs, envelope=bounds)
+    delta = curve - rrs
+    scale = 1.0
+    for key, stats in feature_stats.items():
+        if key not in sys_feats:
+            continue
+        val = sys_feats.get(key, 0.0)
+        p95 = stats.get("p95", None)
+        p05 = stats.get("p05", None)
+        std = stats.get("std", 0.0)
+        if p95 is not None and val > p95 + 2 * std:
+            scale = min(scale, 0.85)
+        if p05 is not None and val < p05 - 2 * std:
+            scale = min(scale, 0.85)
+    if scale < 1.0:
+        curve = rrs + delta * scale
+    return curve
+
+
 def _pick_base_trace(rrs: np.ndarray, traces: np.ndarray | None, rng: np.random.Generator) -> np.ndarray:
     if traces is None or traces.size == 0:
         noise = rng.normal(0, 0.05, size=len(rrs))
@@ -338,6 +370,7 @@ def simulate_curve(
     band_ranges: List[Tuple[float, float]],
     traces: np.ndarray | None,
     normal_stats: dict,
+    bounds: Tuple[np.ndarray, np.ndarray],
     rng: np.random.Generator,
     target_class: str | None = None,
 ) -> Tuple[np.ndarray, str, str, dict]:
@@ -471,11 +504,15 @@ def simulate_curve(
     else:
         fault_params['type'] = 'normal'
 
-    # 核心原则：normal 像正常、故障像真实故障，且不“离谱”
+    # 核心原则：
+    # - Normal 样本统计特性接近真实正常数据
+    # - 非整体类故障主要在物理相关频段偏离
+    # - 整体类故障受限于合理幅度范围（±0.4 dB 仅允许 severe）
     if fault_kind == "normal":
         curve = _generate_normal_curve(frequency, rrs, normal_stats, rng)
     else:
         curve = _apply_fault_constraints(curve, rrs, fault_kind, severity=severity)
+        curve = _constrain_by_feature_stats(curve, rrs, bounds, normal_stats)
 
     return curve, label_sys, label_mod, fault_params
 
@@ -539,7 +576,7 @@ def run_simulation(args: argparse.Namespace):
             for _ in range(class_counts[target_class]):
                 sample_id = f"sim_{idx:05d}"
                 curve, label_sys, label_mod, fault_params = simulate_curve(
-                    freq, rrs, band_ranges, traces, normal_stats, rng, target_class=target_class
+                    freq, rrs, band_ranges, traces, normal_stats, bounds, rng, target_class=target_class
                 )
                 curves.append(curve)
                 sys_labels.append(label_sys)
@@ -596,7 +633,7 @@ def run_simulation(args: argparse.Namespace):
         for idx in range(args.n_samples):
             sample_id = f"sim_{idx:05d}"
             curve, label_sys, label_mod, fault_params = simulate_curve(
-                freq, rrs, band_ranges, traces, normal_stats, rng
+                freq, rrs, band_ranges, traces, normal_stats, bounds, rng
             )
             curves.append(curve)
             sys_labels.append(label_sys)
