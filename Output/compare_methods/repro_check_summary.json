@@ -1,0 +1,26 @@
+{
+  "data_dir": "D:\\PycharmProjects\\FMFD-v4\\FMFD\\Output\\sim_spectrum",
+  "features_rows": 400,
+  "labels_count": 400,
+  "raw_curves_count": 400,
+  "label_distribution": {
+    "正常": 100,
+    "幅度失准": 100,
+    "频率失准": 100,
+    "参考电平失准": 100
+  },
+  "class_index_map": {
+    "0": "正常",
+    "1": "幅度失准",
+    "2": "频率失准",
+    "3": "参考电平失准"
+  },
+  "best_params": {
+    "path": "D:\\PycharmProjects\\FMFD-v4\\FMFD\\Output\\sim_spectrum\\best_params.json",
+    "exists": true,
+    "sha256": "30cf6957389b03d566acd3930bd637dee9d65727f2027e373f382b1301fea480"
+  },
+  "single_band": true,
+  "disable_preamp": true,
+  "seed": 2025
+}

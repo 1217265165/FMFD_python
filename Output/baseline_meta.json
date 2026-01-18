@@ -9,9 +9,9 @@
     3.5
   ],
   "single_band_mode": true,
-  "envelope_version": "v7",
-  "coverage_mean": 0.9994092987804878,
-  "coverage_min": 0.9621951219512195,
+  "envelope_version": "quantile_v1",
+  "coverage_mean": 0.9988567073170731,
+  "coverage_min": 0.9378048780487804,
   "k_final": null,
   "n_traces": 64,
   "n_valid_traces": 64,
@@ -19,28 +19,30 @@
   "freq_start_hz": 10000000.0,
   "freq_end_hz": 8200000000.0,
   "freq_step_hz": 10000000.0,
-  "center_level_db": -9.9375,
+  "center_level_db": -9.930000000000001,
   "spec_center_db": -10.0,
   "spec_tol_db": 0.4,
   "spec_upper_db": -9.6,
   "spec_lower_db": -10.4,
-  "width_min": 0.3999999999999986,
-  "width_median": 0.3999999999999986,
-  "width_max": 0.3999999999999986,
-  "width_smoothness": 0.0,
-  "half_width_max": 0.19999999999999998,
-  "half_width_p50": 0.19999999999999998,
+  "width_min": 0.16359839128329057,
+  "width_median": 0.19640568703251837,
+  "width_max": 0.275082740399867,
+  "width_smoothness": 0.00025653070517643714,
+  "half_width_max": 0.1375413701999335,
+  "half_width_p50": 0.09820284351625919,
   "offset_stats": {
-    "mean": -0.012343750000000167,
-    "std": 0.042938625804018124,
-    "p50": 0.0,
-    "p95": 0.07000000000000028
+    "p95_abs": 0.0792500000000002,
+    "median_abs": 0.019999999999999574
   },
   "rrs_mae": 0.0,
   "dropped_trace_ids": [],
   "smooth_params": {
-    "smooth_sigma_hz": 800000000.0,
-    "extra_clip_max": 0.25,
-    "quantile": 0.97
-  }
+    "width_smooth_sigma_hz": 200000000.0,
+    "quantiles": {
+      "q_low": 0.0020000000000000018,
+      "q_high": 0.998,
+      "coverage_target": 0.996
+    }
+  },
+  "clip_db": 0.4
 }
